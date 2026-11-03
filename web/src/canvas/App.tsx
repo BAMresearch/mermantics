@@ -21,9 +21,12 @@ import { check, loadOntology, supers } from "./checker.js";
 import { ArrowDetails, BoxDetails, Overview, type GlobalFinding } from "./Details.js";
 import { FloatingEdge } from "./FloatingEdge.js";
 import { layout } from "./layout.js";
-import { fromMermaid, makeId, toMermaid, type Arrow, type ArrowData, type Box, type BoxData, type Problem } from "./model.js";
+import { emptyUseCase, fromMermaid, makeId, toMermaid, type Arrow, type ArrowData, type Box, type BoxData, type Problem,
+         type UseCase } from "./model.js";
 import { EXTRA_SHAPES, KIND_BY_ANCESTOR, SHAPES, shapeOf, type Shape, type ShapeKind } from "./palette.js";
 import { RelationMenu, type Choice } from "./RelationMenu.js";
+import { toMarkdown } from "./usecase.js";
+import { UseCasePanel } from "./UseCasePanel.js";
 
 const EXAMPLES = [
   { name: "process-chain.mmd", title: "Process chain: machining, heat treatment, tensile test", text: processExample },
@@ -83,14 +86,20 @@ export function App() {
     { status: "Not checked yet", findings: [], passed: [] });
   const [pending, setPending] = useState<PendingArrow | null>(null);
   const [notice, setNotice] = useState("");
+  const [useCase, setUseCase] = useState<UseCase>(emptyUseCase);
+  const [tab, setTab] = useState<"model" | "usecase">("model");
+  const [workshop, setWorkshop] = useState(false);
+  const [focused, setFocused] = useState<string | null>(null); // competency question shown on the canvas
   const wrapper = useRef<HTMLDivElement>(null);
   const pointer = useRef({ x: 0, y: 0 });
   const fileInput = useRef<HTMLInputElement>(null);
   const flow = useReactFlow<Box, Arrow>();
   const boxesRef = useRef(boxes);
   const arrowsRef = useRef(arrows);
+  const useCaseRef = useRef(useCase);
   boxesRef.current = boxes;
   arrowsRef.current = arrows;
+  useCaseRef.current = useCase;
 
   // ---- loading --------------------------------------------------------------------------
 
@@ -100,6 +109,8 @@ export function App() {
     if (!imported.positioned) placed = await layout(placed, imported.arrows);
     setBoxes(placed);
     setArrows(imported.arrows);
+    setUseCase(imported.useCase);
+    setFocused(null);
     setDocName(name);
     setNotice(imported.warnings.length ? `Some lines could not be read: ${imported.warnings.join("; ")}` : "");
     requestAnimationFrame(() => flow.fitView({ padding: 0.15, duration: 300 }));
@@ -127,7 +138,7 @@ export function App() {
     const timer = setTimeout(async () => {
       const snapBoxes = boxesRef.current;
       const snapArrows = arrowsRef.current;
-      const text = toMermaid(snapBoxes, snapArrows);
+      const text = toMermaid(snapBoxes, snapArrows, useCaseRef.current);
       store(text);
       try {
         const checked = await check(text);
@@ -162,12 +173,12 @@ export function App() {
     return () => clearTimeout(timer);
   }, [key, ready, setArrows, setBoxes]);
 
-  // Positions are saved too, a little later, when only a box moved.
+  // Positions and use case notes are saved too, a little later, as they change.
   useEffect(() => {
     if (!ready) return;
-    const timer = setTimeout(() => store(toMermaid(boxesRef.current, arrowsRef.current)), 800);
+    const timer = setTimeout(() => store(toMermaid(boxesRef.current, arrowsRef.current, useCaseRef.current)), 800);
     return () => clearTimeout(timer);
-  }, [boxes, ready]);
+  }, [boxes, useCase, ready]);
 
   // ---- adding boxes ---------------------------------------------------------------------
 
@@ -279,7 +290,7 @@ export function App() {
 
   const shownArrows = useMemo(() => arrows.map((a) => {
     const d = a.data!;
-    const level = worst(d.problems);
+    const level = workshop ? null : worst(d.problems);
     const color = level === "error" ? "#dc2626" : level === "warning" ? "#d97706" : d.kind === "inherit" ? "#475569" : "#64748b";
     return {
       ...a,
@@ -292,17 +303,52 @@ export function App() {
       markerEnd: { type: MarkerType.ArrowClosed, color, width: 18, height: 18 },
       style: { stroke: color, strokeWidth: a.selected ? 2.5 : 1.6, strokeDasharray: d.kind === "inherit" ? undefined : "6 4" },
     };
-  }), [arrows]);
+  }), [arrows, workshop]);
+
+  // ---- boxes as drawn: question tags, and dimming for the question shown ------------------
+
+  const shownBoxes = useMemo(() => {
+    const tags = new Map<string, string[]>();
+    useCase.questions.forEach((q, i) => q.boxes.forEach((b) => tags.set(b, [...(tags.get(b) ?? []), `Q${i + 1}`])));
+    const focus = useCase.questions.find((q) => q.id === focused);
+    const lit = new Set(focus?.boxes ?? []);
+    return boxes.map((b) => ({
+      ...b,
+      className: focus ? (lit.has(b.id) ? "lit" : "dimmed") : undefined,
+      data: { ...b.data, tags: tags.get(b.id) ?? [] },
+    }));
+  }, [boxes, useCase.questions, focused]);
+
+  const showQuestion = useCallback((id: string | null) => {
+    setFocused(id);
+    const q = useCaseRef.current.questions.find((x) => x.id === id);
+    if (q?.boxes.length) flow.fitView({ nodes: q.boxes.map((b) => ({ id: b })), duration: 300, padding: 0.3, maxZoom: 1.2 });
+  }, [flow]);
+
+  const toggleLink = useCallback((questionId: string, boxId: string, on: boolean) => {
+    setUseCase((u) => ({ ...u, questions: u.questions.map((q) => (q.id !== questionId ? q
+      : { ...q, boxes: on ? [...q.boxes.filter((b) => b !== boxId), boxId] : q.boxes.filter((b) => b !== boxId) })) }));
+  }, []);
 
   // ---- files ----------------------------------------------------------------------------
 
-  const download = () => {
-    const blob = new Blob([toMermaid(boxes, arrows)], { type: "text/plain" });
+  const save = (text: string, name: string) => {
+    const blob = new Blob([text], { type: "text/plain" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = docName.endsWith(".mmd") ? docName : `${docName}.mmd`;
+    a.download = name;
     a.click();
     URL.revokeObjectURL(a.href);
+  };
+
+  const download = () => {
+    save(toMermaid(boxes, arrows, useCase), docName.endsWith(".mmd") ? docName : `${docName}.mmd`);
+  };
+
+  const exportUseCase = () => {
+    const md = toMarkdown(useCase, boxes, toMermaid(boxes, arrows, useCase), checkState.status);
+    const base = (useCase.title || docName.replace(/\.mmd$/, "")).replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-|-$/g, "") || "use-case";
+    save(md, `${base}.md`);
   };
 
   const tidy = async () => {
@@ -313,7 +359,7 @@ export function App() {
   const base = import.meta.env.BASE_URL;
 
   return (
-    <div className="app" onPointerMove={(e) => { pointer.current = { x: e.clientX, y: e.clientY }; }}>
+    <div className={`app${workshop ? " workshop" : ""}`} onPointerMove={(e) => { pointer.current = { x: e.clientX, y: e.clientY }; }}>
       <header className="bar">
         <img className="logo" src={logo} alt="mermantics" />
         <div className="bar-group">
@@ -324,7 +370,7 @@ export function App() {
             <option value="">Examples...</option>
             {EXAMPLES.map((ex) => <option key={ex.name} value={ex.name}>{ex.title}</option>)}
           </select>
-          <button type="button" onClick={() => { setBoxes([]); setArrows([]); setDocName("model.mmd"); }}>New</button>
+          <button type="button" onClick={() => { setBoxes([]); setArrows([]); setUseCase(emptyUseCase()); setFocused(null); setDocName("model.mmd"); }}>New</button>
           <button type="button" onClick={() => fileInput.current?.click()}>Open...</button>
           <button type="button" onClick={download}>Download .mmd</button>
           <input ref={fileInput} type="file" accept=".mmd,.md,.txt" hidden onChange={async (e) => {
@@ -335,6 +381,14 @@ export function App() {
         </div>
         <div className="bar-group">
           <button type="button" onClick={() => void tidy()}>Tidy up</button>
+          <button type="button" className={workshop ? "toggle on" : "toggle"} aria-pressed={workshop}
+                  title="A calmer view for workshops: hides the check results while you draw with domain experts"
+                  onClick={() => setWorkshop((w) => !w)}>
+            Workshop view
+          </button>
+          <button type="button" onClick={exportUseCase} title="The use case, its questions and the diagram as one Markdown file">
+            Export use case
+          </button>
         </div>
         <div className="bar-spacer" />
         <span className="onto">Checked against <b>{ontoStatus}</b></span>
@@ -365,11 +419,11 @@ export function App() {
 
         <main className="canvas" ref={wrapper} onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }} onDrop={onDrop}>
           <ReactFlow<Box, Arrow>
-            nodes={boxes} edges={shownArrows} nodeTypes={nodeTypes} edgeTypes={edgeTypes}
+            nodes={shownBoxes} edges={shownArrows} nodeTypes={nodeTypes} edgeTypes={edgeTypes}
             onNodesChange={onBoxesChange} onEdgesChange={onArrowsChange}
             onConnect={onConnect} onConnectEnd={onConnectEnd} isValidConnection={isValidConnection}
             connectionMode={ConnectionMode.Loose} connectionRadius={40}
-            deleteKeyCode={["Backspace", "Delete"]} onPaneClick={() => setPending(null)}
+            deleteKeyCode={["Backspace", "Delete"]} onPaneClick={() => setPending(null)} multiSelectionKeyCode={["Shift", "Meta", "Control"]}
             minZoom={0.2} fitView>
             <Background gap={20} color="#e2e8f0" />
             <Controls showInteractive={false} />
@@ -394,8 +448,24 @@ export function App() {
         </main>
 
         <aside className="details">
+          <div className="tabs" role="tablist">
+            <button type="button" role="tab" aria-selected={tab === "model"} className={tab === "model" ? "on" : ""}
+                    onClick={() => setTab("model")}>Model</button>
+            <button type="button" role="tab" aria-selected={tab === "usecase"} className={tab === "usecase" ? "on" : ""}
+                    onClick={() => setTab("usecase")}>
+              Use case{useCase.questions.length ? ` · ${useCase.questions.length} Q` : ""}
+            </button>
+          </div>
+          {tab === "usecase" ? (
+            <UseCasePanel useCase={useCase} onChange={setUseCase} boxes={boxes}
+                          selectedBoxes={boxes.filter((b) => b.selected).map((b) => b.id)}
+                          focused={focused} onFocus={showQuestion} />
+          ) : (<>
           {selectedBox ? (
             <BoxDetails box={selectedBox} onChange={(p) => patchBox(selectedBox.id, p)}
+                        questions={useCase.questions.map((q, i) => ({ id: q.id, label: `Q${i + 1}`, text: q.text,
+                                                                      linked: q.boxes.includes(selectedBox.id) }))}
+                        onToggleQuestion={(qid, on) => toggleLink(qid, selectedBox.id, on)}
                         onDelete={() => flow.deleteElements({ nodes: [{ id: selectedBox.id }] })} />
           ) : selectedArrow ? (
             <ArrowDetails arrow={selectedArrow} srcName={nameOf(selectedArrow.source)} dstName={nameOf(selectedArrow.target)}
@@ -405,6 +475,7 @@ export function App() {
           ) : (
             <Overview status={checkState.status} findings={checkState.findings} passed={checkState.passed} onSelect={select} />
           )}
+</>)}
         </aside>
       </div>
     </div>

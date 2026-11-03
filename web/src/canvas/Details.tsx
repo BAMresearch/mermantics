@@ -39,10 +39,19 @@ function useTerm(id: string): Term | null {
   return term;
 }
 
-export function BoxDetails({ box, onChange, onDelete }: {
+export interface QuestionLink {
+  id: string;
+  label: string; // "Q1"
+  text: string;
+  linked: boolean;
+}
+
+export function BoxDetails({ box, onChange, onDelete, questions = [], onToggleQuestion }: {
   box: Box;
   onChange: (patch: Partial<BoxData>) => void;
   onDelete: () => void;
+  questions?: QuestionLink[];
+  onToggleQuestion?: (questionId: string, on: boolean) => void;
 }) {
   const d = box.data;
   const term = useTerm(d.classId);
@@ -92,6 +101,22 @@ export function BoxDetails({ box, onChange, onDelete }: {
                   onChange={(e) => onChange({ lines: e.target.value.split("\n") })} />
         {d.kind === "vocab" && <p className="muted">Write each option as a short code, then its ID and label from the ontology.</p>}
       </section>
+
+      {questions.length > 0 && d.kind !== "note" && (
+        <section className="panel-section">
+          <h3>Needed by these competency questions</h3>
+          <ul className="question-links">
+            {questions.map((q) => (
+              <li key={q.id}>
+                <label>
+                  <input type="checkbox" checked={q.linked} onChange={(e) => onToggleQuestion?.(q.id, e.target.checked)} />
+                  <b>{q.label}</b> {q.text || <em>empty question</em>}
+                </label>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <Problems problems={d.problems} />
 
