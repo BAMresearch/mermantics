@@ -126,3 +126,45 @@ test("coverage and the Markdown export", () => {
   expect(md).toContain("2 of 3 competency questions are linked to the model.");
   expect(md).toContain("```mermaid\nflowchart TB");
 });
+
+// ---- own relations ---------------------------------------------------------------------------
+
+const OWN = `flowchart TB
+    HT["<b>Heat treatment</b><br>PMD_0000779 heat treatment"]:::local
+    F["<b>Furnace</b><br>PMD_0000780 heat treatment device"]:::local
+    TP["<b>Test piece</b><br>PMD_0020193 tensile testpiece"]:::local
+    HT -. "heated in<br>RO_0000057 has participant" .-> F
+    HT -. "heats" .-> TP
+    HT -. "has specified input<br>OBI_0000293" .-> TP
+`;
+
+test("own relations are read and written back", () => {
+  const { boxes, arrows } = fromMermaid(OWN);
+  expect(arrows.map((a) => a.data)).toEqual([
+    { kind: "relation", name: "has participant", curie: "RO_0000057", words: "heated in", own: true, problems: [] },
+    { kind: "relation", name: "heats", curie: "", words: "heats", own: true, problems: [] },
+    { kind: "relation", name: "has specified input", curie: "OBI_0000293", words: "uses as input", own: false, problems: [] },
+  ]);
+  const text = toMermaid(boxes, arrows);
+  expect(text).toContain('HT -. "heated in<br>RO_0000057 has participant" .-> F');
+  expect(text).toContain('HT -. "heats" .-> TP');
+  expect(text).toContain('HT -. "has specified input<br>OBI_0000293" .-> TP');
+  expect(fromMermaid(text).arrows.map((a) => a.data)).toEqual(arrows.map((a) => a.data));
+});
+
+describe.skipIf(!PMDCO_ENABLED)("own relations on PMDco", () => {
+  let onto: Ontology;
+  beforeAll(() => {
+    onto = loadOntology(PMDCO_FILE, "pmdco-full.ttl");
+  });
+
+  test("an own relation is checked as the relation it is a kind of, without label complaints", () => {
+    const { boxes, arrows } = fromMermaid(OWN);
+    const turned = arrows.map((a, i) => (i === 0 ? { ...a, source: "F", target: "HT" } : a)); // wrong way round
+    const result = checks.run(mermaid.parse(toMermaid(boxes, turned)), onto, defaultConfig(), null);
+    const bad = result.findings.filter((f) => f.level !== "ok");
+    expect(bad.filter((f) => f.check === "labels")).toEqual([]);
+    expect(bad.filter((f) => f.check === "domain-range").map((f) => f.edgeIndex)).toEqual([0, 0]);
+    expect(bad.filter((f) => f.check === "ids").map((f) => f.message)).toEqual(["arrow has no ontology ID, not checked (heats)"]);
+  });
+});

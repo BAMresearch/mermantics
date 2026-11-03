@@ -26,7 +26,7 @@ import { emptyUseCase, fromMermaid, makeId, toMermaid, type Arrow, type ArrowDat
 import { EXTRA_SHAPES, KIND_BY_ANCESTOR, SHAPES, shapeOf, type Shape, type ShapeKind } from "./palette.js";
 import { BUILT_IN, checkUses, instantiate, loadMine, parsePattern, patternFromSelection, readUses, saveMine, slug,
          type Pattern, type PatternUse } from "./patterns.js";
-import { RelationMenu, type Choice } from "./RelationMenu.js";
+import { loadOwnRelations, RelationMenu, saveOwnRelations, type Choice, type OwnRelation } from "./RelationMenu.js";
 import { toMarkdown } from "./usecase.js";
 import { UseCasePanel } from "./UseCasePanel.js";
 
@@ -111,6 +111,21 @@ export function App() {
   const [focused, setFocused] = useState<string | null>(null); // competency question shown on the canvas
   const [patternUses, setPatternUses] = useState<PatternUse[]>([]);
   const [myPatterns, setMyPatterns] = useState<Pattern[]>(loadMine);
+  const [ownRelations, setOwnRelations] = useState<OwnRelation[]>(loadOwnRelations);
+  const rememberRelation = useCallback((r: OwnRelation) => {
+    setOwnRelations((list) => {
+      const next = [...list.filter((x) => !(x.words === r.words && x.curie === r.curie)), r];
+      saveOwnRelations(next);
+      return next;
+    });
+  }, []);
+  const forgetRelation = useCallback((r: OwnRelation) => {
+    setOwnRelations((list) => {
+      const next = list.filter((x) => !(x.words === r.words && x.curie === r.curie));
+      saveOwnRelations(next);
+      return next;
+    });
+  }, []);
   const patternInput = useRef<HTMLInputElement>(null);
   const wrapper = useRef<HTMLDivElement>(null);
   const pointer = useRef({ x: 0, y: 0 });
@@ -556,6 +571,7 @@ export function App() {
             <RelationMenu x={pending.x} y={pending.y} srcName={nameOf(pending.source)} dstName={nameOf(pending.target)}
                           srcClasses={pending.srcClasses} dstClasses={pending.dstClasses}
                           toVocab={boxes.find((b) => b.id === pending.target)?.data.kind === "vocab"}
+                          own={ownRelations} onRemember={rememberRelation}
                           onChoose={choose} onCancel={() => setPending(null)} />
           )}
         </main>
@@ -595,7 +611,8 @@ export function App() {
             <Overview status={checkState.status} findings={checkState.findings} passed={checkState.passed} onSelect={select}
                       uses={patternUses.map((u) => ({ id: u.id, title: u.title, version: u.version, boxes: u.parts.length,
                                                       problems: checkState.perUse[u.id] ?? 0 }))}
-                      onForget={(id) => setPatternUses((us) => us.filter((u) => u.id !== id))} />
+                      onForget={(id) => setPatternUses((us) => us.filter((u) => u.id !== id))}
+                      ownRelations={ownRelations} onForgetRelation={forgetRelation} />
           )}
 </>)}
         </aside>
