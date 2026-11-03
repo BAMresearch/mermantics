@@ -4,6 +4,7 @@ import type { Term } from "../core/terms.js";
 import { lookup } from "./checker.js";
 import type { Arrow, ArrowData, Box, BoxData, Problem } from "./model.js";
 import { SHAPES, shapeOf, type ShapeKind } from "./palette.js";
+import type { OwnRelation } from "./RelationMenu.js";
 import { TermSearch } from "./TermSearch.js";
 
 export interface GlobalFinding extends Problem {
@@ -146,7 +147,29 @@ export function ArrowDetails({ arrow, srcName, dstName, onChange, onReconnect, o
     <div className="panel">
       <div className="panel-kind"><span className="dot" />Arrow</div>
       <p className="sentence"><b>{srcName}</b> {d.words} <b>{dstName}</b></p>
-      {d.kind === "relation" && (
+      {d.kind === "relation" && d.own && (
+        <section className="panel-section">
+          <h3>Your own relation</h3>
+          <label className="field">
+            Name
+            <input value={d.words} onChange={(e) => onChange(d.curie ? { words: e.target.value } : { words: e.target.value, name: e.target.value })} />
+          </label>
+          {d.curie ? (
+            <div className="class-card">
+              <div className="muted-inline">A more specific kind of</div>
+              <div className="class-label">{term?.label ?? d.name}</div>
+              <div className="class-id">{d.curie}</div>
+              {term?.definition && <p className="class-def">{term.definition}</p>}
+              <p className="muted-inline">So it is checked like this relation: it must fit the same kinds of boxes.</p>
+            </div>
+          ) : (
+            <p className="muted-inline">Not linked to the ontology, so this arrow is not checked.
+              Choose another relation to make it a more specific kind of an ontology relation.</p>
+          )}
+          <button type="button" className="link" onClick={onReconnect}>Choose another relation...</button>
+        </section>
+      )}
+      {d.kind === "relation" && !d.own && (
         <section className="panel-section">
           <h3>Relation in the ontology</h3>
           {d.curie ? (
@@ -173,13 +196,15 @@ export function ArrowDetails({ arrow, srcName, dstName, onChange, onReconnect, o
   );
 }
 
-export function Overview({ status, findings, passed, onSelect, uses = [], onForget }: {
+export function Overview({ status, findings, passed, onSelect, uses = [], onForget, ownRelations = [], onForgetRelation }: {
   status: string;
   findings: GlobalFinding[];
   passed: string[];
   onSelect: (target: GlobalFinding["target"]) => void;
   uses?: { id: string; title: string; version: string; boxes: number; problems: number }[];
   onForget?: (useId: string) => void;
+  ownRelations?: OwnRelation[];
+  onForgetRelation?: (r: OwnRelation) => void;
 }) {
   return (
     <div className="panel">
@@ -208,6 +233,21 @@ export function Overview({ status, findings, passed, onSelect, uses = [], onForg
                 <span className="use-title">{u.title}{u.version ? ` ${u.version}` : ""}</span>
                 <button type="button" className="link" title="Keep the boxes, but stop checking them against this pattern"
                         onClick={() => onForget?.(u.id)}>Stop checking</button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+      {ownRelations.length > 0 && (
+        <section className="panel-section">
+          <h3>My relations</h3>
+          <ul className="uses">
+            {ownRelations.map((r) => (
+              <li key={`${r.words}|${r.curie}`}>
+                <span className="use-title"><b>{r.words}</b>
+                  <span className="menu-id"> {r.curie ? `a kind of ${r.name} (${r.curie})` : "not linked to the ontology"}</span></span>
+                <button type="button" className="link" title="Remove it from the menu; arrows that use it stay"
+                        onClick={() => onForgetRelation?.(r)}>Remove</button>
               </li>
             ))}
           </ul>

@@ -31,9 +31,12 @@ export interface BoxData extends Record<string, unknown> {
 
 export interface ArrowData extends Record<string, unknown> {
   kind: "relation" | "inherit";
-  name: string; // the relation as written in Mermaid (the ontology label, or a local name)
+  name: string; // the ontology's label for `curie` (for an own relation without a parent: its name)
   curie: string; // property ID, "" for none
   words: string; // what the canvas shows on the arrow
+  // An own relation: a name the user made up. With a curie it is a more specific kind of that
+  // ontology relation and checked as one; without, it is not linked to the ontology.
+  own: boolean;
   problems: Problem[];
 }
 
@@ -162,7 +165,10 @@ export function toMermaid(boxes: Box[], arrows: Arrow[], useCase: UseCase = empt
       // Parent --> Child (the checker's default). On the canvas the arrow goes child -> parent.
       out.push(`    ${a.target} --> ${a.source}`);
     } else {
-      const label = edit.writeArrowLabel({ name: d.name, curie: d.curie, lines: [] });
+      // Own relation: "heated in<br>RO_0000057 has participant", like a box: name, then ID and label.
+      const label = d.own
+        ? [d.words, d.curie ? `${d.curie} ${d.name}`.trim() : ""].filter((x) => x).map((x) => edit.escapeText(x)).join("<br>")
+        : edit.writeArrowLabel({ name: d.name, curie: d.curie, lines: [] });
       out.push(`    ${a.source} -. "${label}" .-> ${a.target}`);
     }
   }
@@ -214,11 +220,19 @@ function readBox(raw: string, css: Set<string>): Pick<BoxData, "name" | "kind" |
   return { name, kind, classId, classLabel, lines, css: [...css] };
 }
 
-function readArrow(raw: string): { name: string; curie: string } {
+function readArrow(raw: string): { name: string; curie: string; words: string; own: boolean } {
   const segs = labels.segments(raw).filter((s) => s);
   const curie = labels.findCuries(raw)[0] ?? "";
+  if (!curie) {
+    const name = segs[0] ?? "";
+    return { name, curie, words: name, own: true };
+  }
+  // "heated in" / "RO_0000057 has participant": an own name, then the ID with the ontology label.
+  const withId = segs.find((s) => s.startsWith(`${curie} `));
+  const other = segs.find((s) => !s.includes(curie));
+  if (withId && other) return { name: withId.slice(curie.length).trim(), curie, words: other, own: true };
   const name = segs.find((s) => s !== curie) ?? "";
-  return { name, curie };
+  return { name, curie, words: wordsFor(curie, name || curie), own: false };
 }
 
 export function fromMermaid(text: string): Imported {
@@ -260,11 +274,10 @@ export function fromMermaid(text: string): Imported {
   const arrows: Arrow[] = diagram.edges.map((e, i) => {
     if (e.kind === "inherit") {
       return { id: `a${i}`, source: e.dst, target: e.src,
-               data: { kind: "inherit", name: "", curie: "", words: "is a kind of", problems: [] } };
+               data: { kind: "inherit", name: "", curie: "", words: "is a kind of", own: false, problems: [] } };
     }
-    const { name, curie } = readArrow(e.label);
-    return { id: `a${i}`, source: e.src, target: e.dst,
-             data: { kind: "relation", name, curie, words: curie ? wordsFor(curie, name || curie) : name, problems: [] } };
+    const { name, curie, words, own } = readArrow(e.label);
+    return { id: `a${i}`, source: e.src, target: e.dst, data: { kind: "relation", name, curie, words, own, problems: [] } };
   });
   return { boxes, arrows, positioned: boxes.every((b) => pos[b.id] !== undefined), useCase, patternUses, warnings };
 }
