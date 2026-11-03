@@ -1,0 +1,26 @@
+flowchart TB
+
+%% A small process chain aligned to PMDco: machining a bar into a test piece,
+%% heat treating it and testing it. Dotted arrows: relations with the property ID.
+
+    Machining["<b>Machining</b><br>PMD_0000822 machining geometrically defined"]:::local
+    HeatTreatment["<b>Heat treatment</b><br>PMD_0000779 heat treatment"]:::local
+    TensileTest["<b>Tensile test</b><br>PMD_0000974 tensile testing process"]:::local
+
+    Bar["<b>Bar</b><br>PMD_0000000 material<br><br>alloy, batch number"]:::local
+    TestPiece["<b>Test piece</b><br>PMD_0020193 tensile testpiece<br><br>gauge length"]:::local
+    Furnace["<b>Furnace</b><br>PMD_0000780 heat treatment device"]:::local
+    TestingMachine["<b>Testing machine</b><br>PMD_0000973 tensile testing machine"]:::local
+    Curve["<b>Stress-strain curve</b><br>IAO_0000027 data entity<br><br>strain, stress"]:::local
+
+    Machining -. "has specified input<br>OBI_0000293" .-> Bar
+    Machining -. "has specified output<br>OBI_0000299" .-> TestPiece
+    Machining -. "precedes<br>BFO_0000063" .-> HeatTreatment
+    HeatTreatment -. "has specified input<br>OBI_0000293" .-> TestPiece
+    HeatTreatment -. "has participant<br>RO_0000057" .-> Furnace
+    HeatTreatment -. "precedes<br>BFO_0000063" .-> TensileTest
+    TensileTest -. "has specified input<br>OBI_0000293" .-> TestPiece
+    TensileTest -. "has participant<br>RO_0000057" .-> TestingMachine
+    TensileTest -. "has specified output<br>OBI_0000299" .-> Curve
+
+    classDef local fill:#dbeafe,stroke:#1d4ed8,stroke-width:2px,color:#0f172a

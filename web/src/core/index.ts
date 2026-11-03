@@ -5,6 +5,7 @@ export * as edit from "./edit.js";
 export * as labels from "./labels.js";
 export * as mermaid from "./mermaid.js";
 export * as owlgen from "./owlgen.js";
+export * as relations from "./relations.js";
 export * as report from "./report.js";
 export * as terms from "./terms.js";
 export * from "./model.js";

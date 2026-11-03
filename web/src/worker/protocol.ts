@@ -1,6 +1,7 @@
 /** Messages between the page and the checker worker. Types only, so the page does not pull in the core. */
 
 import type { Result } from "../core/checks.js";
+import type { RelationFit } from "../core/relations.js";
 import type { SearchResult, Term } from "../core/terms.js";
 
 export type Request =
@@ -11,7 +12,12 @@ export type Request =
   // Search the loaded ontology's terms by label words or ID (for the form editor).
   | { type: "search"; id: number; query: string; kinds?: string[]; limit?: number }
   // Look up terms by ID; null for IDs the ontology does not have.
-  | { type: "terms"; id: number; ids: string[] };
+  | { type: "terms"; id: number; ids: string[] }
+  // Relations that fit an arrow between boxes of these classes (IDs, including parents').
+  // `only` limits the answer to these property IDs; null tries every object property.
+  | { type: "relations"; id: number; src: string[]; dst: string[]; only: string[] | null }
+  // IDs of the named superclasses of each class (the class included), [] for unknown IDs.
+  | { type: "supers"; id: number; ids: string[] };
 
 export interface OntologyInfo {
   name: string; // what the reports show as the ontology file
@@ -39,4 +45,6 @@ export type Response =
   | { type: "checked"; id: number; checked: Checked }
   | { type: "found"; id: number; result: SearchResult }
   | { type: "terms"; id: number; terms: (Term | null)[] }
+  | { type: "relations"; id: number; relations: RelationFit[] }
+  | { type: "supers"; id: number; supers: string[][] }
   | { type: "error"; id: number; request: Request["type"]; message: string };
