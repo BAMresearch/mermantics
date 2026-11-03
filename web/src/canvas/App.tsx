@@ -18,12 +18,14 @@ import processExample from "../../examples/process-example.mmd?raw";
 import simulation from "../../examples/simulation-example.mmd?raw";
 import { BoxNode, worst } from "./BoxNode.js";
 import { check, loadOntology, supers } from "./checker.js";
-import { ArrowDetails, BoxDetails, Overview, type GlobalFinding } from "./Details.js";
+import { ArrowDetails, BoxDetails, Overview, SelectionPanel, type GlobalFinding } from "./Details.js";
 import { FloatingEdge } from "./FloatingEdge.js";
 import { layout } from "./layout.js";
 import { emptyUseCase, fromMermaid, makeId, toMermaid, type Arrow, type ArrowData, type Box, type BoxData, type Problem,
          type UseCase } from "./model.js";
 import { EXTRA_SHAPES, KIND_BY_ANCESTOR, SHAPES, shapeOf, type Shape, type ShapeKind } from "./palette.js";
+import { BUILT_IN, checkUses, instantiate, loadMine, parsePattern, patternFromSelection, readUses, saveMine, slug,
+         type Pattern, type PatternUse } from "./patterns.js";
 import { RelationMenu, type Choice } from "./RelationMenu.js";
 import { toMarkdown } from "./usecase.js";
 import { UseCasePanel } from "./UseCasePanel.js";
@@ -66,6 +68,22 @@ function structureKey(boxes: Box[], arrows: Arrow[]): string {
   ]);
 }
 
+/** Class IDs of a box and of the boxes it is a kind of. */
+function classIdsOf(boxes: Box[], arrows: Arrow[], id: string): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const stack = [id];
+  while (stack.length) {
+    const cur = stack.pop()!;
+    if (seen.has(cur)) continue;
+    seen.add(cur);
+    const b = boxes.find((x) => x.id === cur);
+    if (b?.data.classId) out.push(b.data.classId);
+    for (const a of arrows) if (a.data?.kind === "inherit" && a.source === cur) stack.push(a.target);
+  }
+  return out;
+}
+
 interface PendingArrow {
   source: string;
   target: string;
@@ -82,14 +100,18 @@ export function App() {
   const [docName, setDocName] = useState("model.mmd");
   const [ontoStatus, setOntoStatus] = useState("Loading PMDco 3.1.1...");
   const [ready, setReady] = useState(false);
-  const [checkState, setCheckState] = useState<{ status: string; findings: GlobalFinding[]; passed: string[] }>(
-    { status: "Not checked yet", findings: [], passed: [] });
+  const [checkState, setCheckState] = useState<{ status: string; findings: GlobalFinding[]; passed: string[];
+                                                  perUse: Record<string, number> }>(
+    { status: "Not checked yet", findings: [], passed: [], perUse: {} });
   const [pending, setPending] = useState<PendingArrow | null>(null);
   const [notice, setNotice] = useState("");
   const [useCase, setUseCase] = useState<UseCase>(emptyUseCase);
   const [tab, setTab] = useState<"model" | "usecase">("model");
   const [workshop, setWorkshop] = useState(false);
   const [focused, setFocused] = useState<string | null>(null); // competency question shown on the canvas
+  const [patternUses, setPatternUses] = useState<PatternUse[]>([]);
+  const [myPatterns, setMyPatterns] = useState<Pattern[]>(loadMine);
+  const patternInput = useRef<HTMLInputElement>(null);
   const wrapper = useRef<HTMLDivElement>(null);
   const pointer = useRef({ x: 0, y: 0 });
   const fileInput = useRef<HTMLInputElement>(null);
@@ -100,6 +122,8 @@ export function App() {
   boxesRef.current = boxes;
   arrowsRef.current = arrows;
   useCaseRef.current = useCase;
+  const usesRef = useRef(patternUses);
+  usesRef.current = patternUses;
 
   // ---- loading --------------------------------------------------------------------------
 
@@ -110,6 +134,7 @@ export function App() {
     setBoxes(placed);
     setArrows(imported.arrows);
     setUseCase(imported.useCase);
+    setPatternUses(readUses(imported.patternUses));
     setFocused(null);
     setDocName(name);
     setNotice(imported.warnings.length ? `Some lines could not be read: ${imported.warnings.join("; ")}` : "");
@@ -128,7 +153,7 @@ export function App() {
 
   // ---- checking -------------------------------------------------------------------------
 
-  const key = useMemo(() => structureKey(boxes, arrows), [boxes, arrows]);
+  const key = useMemo(() => structureKey(boxes, arrows) + JSON.stringify(patternUses), [boxes, arrows, patternUses]);
   const run = useRef(0);
 
   useEffect(() => {
@@ -138,7 +163,8 @@ export function App() {
     const timer = setTimeout(async () => {
       const snapBoxes = boxesRef.current;
       const snapArrows = arrowsRef.current;
-      const text = toMermaid(snapBoxes, snapArrows, useCaseRef.current);
+      const snapUses = usesRef.current;
+      const text = toMermaid(snapBoxes, snapArrows, useCaseRef.current, snapUses);
       store(text);
       try {
         const checked = await check(text);
@@ -158,6 +184,22 @@ export function App() {
           else if (arrowId) byArrow.set(arrowId, [...(byArrow.get(arrowId) ?? []), p]);
           findings.push({ ...p, target: f.nodeId ? { box: f.nodeId } : arrowId ? { arrow: arrowId } : undefined });
         }
+        // Do the boxes still follow the patterns they came from?
+        const perUse: Record<string, number> = {};
+        if (snapUses.length) {
+          const ids = new Map(snapBoxes.map((b) => [b.id, classIdsOf(snapBoxes, snapArrows, b.id)]));
+          const unique = [...new Set([...ids.values()].flat())];
+          const found = await supers(unique);
+          if (mine !== run.current) return;
+          const supersOf = new Map(unique.map((c, i) => [c, found[i] ?? []]));
+          const classes = (box: string) => new Set((ids.get(box) ?? []).flatMap((c) => supersOf.get(c) ?? [c]));
+          for (const f of checkUses(snapUses, snapBoxes, snapArrows, classes)) {
+            perUse[f.use] = (perUse[f.use] ?? 0) + 1;
+            const p: Problem = { level: f.level, message: f.message, details: f.details };
+            if (f.box) byBox.set(f.box, [...(byBox.get(f.box) ?? []), p]);
+            findings.push({ ...p, target: f.box ? { box: f.box } : undefined });
+          }
+        }
         setBoxes((bs) => bs.map((b) => ({ ...b, data: { ...b.data, problems: byBox.get(b.id) ?? [] } })));
         setArrows((as) => as.map((a) => ({ ...a, data: { ...a.data!, problems: byArrow.get(a.id) ?? [] } })));
         const counts = (["error", "warning", "note"] as const)
@@ -165,9 +207,9 @@ export function App() {
         const status = counts.length
           ? counts.map(([l, n]) => `${n} ${l}${n === 1 ? "" : "s"}`).join(", ")
           : snapBoxes.length ? "No problems found" : "Empty";
-        setCheckState({ status, findings, passed });
+        setCheckState({ status, findings, passed, perUse });
       } catch (e) {
-        if (mine === run.current) setCheckState({ status: `The check failed: ${(e as Error).message}`, findings: [], passed: [] });
+        if (mine === run.current) setCheckState({ status: `The check failed: ${(e as Error).message}`, findings: [], passed: [], perUse: {} });
       }
     }, 300);
     return () => clearTimeout(timer);
@@ -176,9 +218,9 @@ export function App() {
   // Positions and use case notes are saved too, a little later, as they change.
   useEffect(() => {
     if (!ready) return;
-    const timer = setTimeout(() => store(toMermaid(boxesRef.current, arrowsRef.current, useCaseRef.current)), 800);
+    const timer = setTimeout(() => store(toMermaid(boxesRef.current, arrowsRef.current, useCaseRef.current, usesRef.current)), 800);
     return () => clearTimeout(timer);
-  }, [boxes, useCase, ready]);
+  }, [boxes, useCase, patternUses, ready]);
 
   // ---- adding boxes ---------------------------------------------------------------------
 
@@ -192,30 +234,58 @@ export function App() {
     setArrows((as) => as.map((a) => ({ ...a, selected: false })));
   }, [flow, setArrows, setBoxes]);
 
+  const allPatterns = useMemo(() => [...BUILT_IN, ...myPatterns], [myPatterns]);
+
+  const insertPattern = useCallback(async (pattern: Pattern, at?: { x: number; y: number }) => {
+    // Clicked (not dropped): place it to the right of the model, so it does not cover any box.
+    const rect = wrapper.current!.getBoundingClientRect();
+    const current = boxesRef.current;
+    const where = at ?? (current.length
+      ? { x: Math.max(...current.map((b) => b.position.x + (b.measured?.width ?? 220))) + 120,
+          y: Math.min(...current.map((b) => b.position.y)) }
+      : flow.screenToFlowPosition({ x: rect.left + rect.width / 2 - 260, y: rect.top + rect.height / 2 - 160 }));
+    const taken = new Set(boxesRef.current.map((b) => b.id));
+    const useIds = new Set(usesRef.current.map((u) => u.id));
+    let n = useIds.size + 1;
+    while (useIds.has(`u${n}`)) n++;
+    const inserted = instantiate(pattern, taken, { x: 0, y: 0 }, `u${n}`);
+    let placed = await classify(inserted.boxes);
+    if (!inserted.positioned) placed = await layout(placed, inserted.arrows);
+    const minX = Math.min(...placed.map((b) => b.position.x));
+    const minY = Math.min(...placed.map((b) => b.position.y));
+    placed = placed.map((b) => ({ ...b, selected: true, position: { x: where.x + b.position.x - minX, y: where.y + b.position.y - minY } }));
+    setBoxes((bs) => [...bs.map((b) => ({ ...b, selected: false })), ...placed]);
+    setArrows((as) => [...as.map((a) => ({ ...a, selected: false })), ...inserted.arrows]);
+    setPatternUses((us) => [...us, inserted.use]);
+    if (!at) setTimeout(() => flow.fitView({ padding: 0.12, duration: 300 }), 50);
+  }, [flow, setArrows, setBoxes]);
+
   const onDrop = useCallback((e: DragEvent) => {
     e.preventDefault();
+    const at = flow.screenToFlowPosition({ x: e.clientX - 110, y: e.clientY - 30 });
+    const patternId = e.dataTransfer.getData("application/mermantics-pattern");
+    const pattern = allPatterns.find((p) => p.id === patternId);
+    if (pattern) {
+      void insertPattern(pattern, at);
+      return;
+    }
     const kind = e.dataTransfer.getData("application/mermantics-shape") as ShapeKind;
     if (!kind) return;
-    addBox(shapeOf(kind), flow.screenToFlowPosition({ x: e.clientX - 110, y: e.clientY - 30 }));
-  }, [addBox, flow]);
+    addBox(shapeOf(kind), at);
+  }, [addBox, allPatterns, flow, insertPattern]);
+
+  const keepPattern = useCallback((pattern: Pattern) => {
+    setMyPatterns((ps) => {
+      const next = [...ps.filter((p) => p.id !== pattern.id), pattern];
+      saveMine(next);
+      return next;
+    });
+  }, []);
 
   // ---- arrows ---------------------------------------------------------------------------
 
   /** Class IDs of a box and of the boxes it is a kind of. */
-  const classesOf = useCallback((id: string): string[] => {
-    const out: string[] = [];
-    const seen = new Set<string>();
-    const stack = [id];
-    while (stack.length) {
-      const cur = stack.pop()!;
-      if (seen.has(cur)) continue;
-      seen.add(cur);
-      const b = boxesRef.current.find((x) => x.id === cur);
-      if (b?.data.classId) out.push(b.data.classId);
-      for (const a of arrowsRef.current) if (a.data?.kind === "inherit" && a.source === cur) stack.push(a.target);
-    }
-    return out;
-  }, []);
+  const classesOf = useCallback((id: string): string[] => classIdsOf(boxesRef.current, arrowsRef.current, id), []);
 
   const menuAt = useCallback((source: string, target: string, replace?: string) => {
     const rect = wrapper.current!.getBoundingClientRect();
@@ -258,8 +328,19 @@ export function App() {
 
   // ---- selection and editing ------------------------------------------------------------
 
-  const selectedBox = boxes.find((b) => b.selected);
-  const selectedArrow = selectedBox ? undefined : arrows.find((a) => a.selected);
+  const selectedBoxes = boxes.filter((b) => b.selected);
+  const selectedBox = selectedBoxes.length === 1 ? selectedBoxes[0] : undefined;
+  const selectedArrow = selectedBoxes.length ? undefined : arrows.find((a) => a.selected);
+  const selectionIds = new Set(selectedBoxes.map((b) => b.id));
+  const selectionArrows = arrows.filter((a) => selectionIds.has(a.source) && selectionIds.has(a.target)).length;
+  const selectionQuestions = useCase.questions
+    .filter((q) => q.boxes.length && q.text.trim() && q.boxes.every((b) => selectionIds.has(b))).map((q) => q.text.trim());
+
+  const patternText = (meta: { title: string; description: string; version: string; questions: string[] }) =>
+    patternFromSelection(selectedBoxes, arrows, {
+      ...meta, id: slug(meta.title),
+      source: `Made with mermantics${useCase.title ? ` from the use case '${useCase.title}'` : ""}.`,
+    });
   const nameOf = (id: string) => boxes.find((b) => b.id === id)?.data.name ?? id;
 
   const patchBox = useCallback((id: string, patch: Partial<BoxData>) => {
@@ -342,7 +423,7 @@ export function App() {
   };
 
   const download = () => {
-    save(toMermaid(boxes, arrows, useCase), docName.endsWith(".mmd") ? docName : `${docName}.mmd`);
+    save(toMermaid(boxes, arrows, useCase, patternUses), docName.endsWith(".mmd") ? docName : `${docName}.mmd`);
   };
 
   const exportUseCase = () => {
@@ -370,7 +451,7 @@ export function App() {
             <option value="">Examples...</option>
             {EXAMPLES.map((ex) => <option key={ex.name} value={ex.name}>{ex.title}</option>)}
           </select>
-          <button type="button" onClick={() => { setBoxes([]); setArrows([]); setUseCase(emptyUseCase()); setFocused(null); setDocName("model.mmd"); }}>New</button>
+          <button type="button" onClick={() => { setBoxes([]); setArrows([]); setUseCase(emptyUseCase()); setPatternUses([]); setFocused(null); setDocName("model.mmd"); }}>New</button>
           <button type="button" onClick={() => fileInput.current?.click()}>Open...</button>
           <button type="button" onClick={download}>Download .mmd</button>
           <input ref={fileInput} type="file" accept=".mmd,.md,.txt" hidden onChange={async (e) => {
@@ -406,6 +487,38 @@ export function App() {
               <span className="shape-text"><b>{s.title}</b><small>{s.hint}</small></span>
             </button>
           ))}
+          <h2>Patterns</h2>
+          {allPatterns.map((p) => (
+            <div key={`${p.builtIn ? "b" : "m"}-${p.id}`} className="pattern-item">
+              <button type="button" className="shape pattern" draggable title={p.description}
+                      onDragStart={(e) => { e.dataTransfer.setData("application/mermantics-pattern", p.id); e.dataTransfer.effectAllowed = "copy"; }}
+                      onClick={() => void insertPattern(p)}>
+                <span className="pattern-icon" aria-hidden="true"><i /><i /><i /></span>
+                <span className="shape-text"><b>{p.title}</b><small>{p.builtIn ? "from PMDco" : "my pattern"}{p.version ? ` · ${p.version}` : ""}</small></span>
+              </button>
+              {!p.builtIn && (
+                <span className="pattern-actions">
+                  <button type="button" className="link" onClick={() => save(p.text, `${p.id}.mmd`)}>Download</button>
+                  <button type="button" className="link danger-link" onClick={() => setMyPatterns((ps) => {
+                    const next = ps.filter((x) => x.id !== p.id);
+                    saveMine(next);
+                    return next;
+                  })}>Remove</button>
+                </span>
+              )}
+            </div>
+          ))}
+          <button type="button" className="link small-link" onClick={() => patternInput.current?.click()}>Open a pattern file...</button>
+          <input ref={patternInput} type="file" accept=".mmd,.md,.txt" hidden onChange={async (e) => {
+            const file = e.target.files?.[0];
+            e.target.value = "";
+            if (!file) return;
+            const pattern = parsePattern(await file.text());
+            if (pattern) keepPattern(pattern);
+            else setNotice(`${file.name} is not a pattern file: it has no pattern name. Use "Open..." at the top to open it as a model.`);
+          }} />
+          <p className="palette-hint">Select several boxes to save them as your own pattern.</p>
+
           <h2>More</h2>
           {EXTRA_SHAPES.map((s) => (
             <button type="button" key={s.kind} className={`shape kind-${s.kind}`} draggable
@@ -461,11 +574,17 @@ export function App() {
                           selectedBoxes={boxes.filter((b) => b.selected).map((b) => b.id)}
                           focused={focused} onFocus={showQuestion} />
           ) : (<>
-          {selectedBox ? (
+          {selectedBoxes.length > 1 ? (
+            <SelectionPanel count={selectedBoxes.length} arrows={selectionArrows} questions={selectionQuestions}
+                            onSave={(meta) => { const p = parsePattern(patternText(meta)); if (p) keepPattern(p); }}
+                            onDownload={(meta) => save(patternText(meta), `${slug(meta.title)}.mmd`)} />
+          ) : selectedBox ? (
             <BoxDetails box={selectedBox} onChange={(p) => patchBox(selectedBox.id, p)}
                         questions={useCase.questions.map((q, i) => ({ id: q.id, label: `Q${i + 1}`, text: q.text,
                                                                       linked: q.boxes.includes(selectedBox.id) }))}
                         onToggleQuestion={(qid, on) => toggleLink(qid, selectedBox.id, on)}
+                        parts={patternUses.flatMap((u) => u.parts.filter((p) => p.box === selectedBox.id)
+                          .map((p) => ({ pattern: u.title, part: p.name })))}
                         onDelete={() => flow.deleteElements({ nodes: [{ id: selectedBox.id }] })} />
           ) : selectedArrow ? (
             <ArrowDetails arrow={selectedArrow} srcName={nameOf(selectedArrow.source)} dstName={nameOf(selectedArrow.target)}
@@ -473,7 +592,10 @@ export function App() {
                           onReconnect={() => menuAt(selectedArrow.source, selectedArrow.target, selectedArrow.id)}
                           onDelete={() => flow.deleteElements({ edges: [{ id: selectedArrow.id }] })} />
           ) : (
-            <Overview status={checkState.status} findings={checkState.findings} passed={checkState.passed} onSelect={select} />
+            <Overview status={checkState.status} findings={checkState.findings} passed={checkState.passed} onSelect={select}
+                      uses={patternUses.map((u) => ({ id: u.id, title: u.title, version: u.version, boxes: u.parts.length,
+                                                      problems: checkState.perUse[u.id] ?? 0 }))}
+                      onForget={(id) => setPatternUses((us) => us.filter((u) => u.id !== id))} />
           )}
 </>)}
         </aside>

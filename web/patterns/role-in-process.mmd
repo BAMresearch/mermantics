@@ -1,0 +1,15 @@
+flowchart TB
+
+%% Role in a process: A sample has a role (here: being the thing that is evaluated) that comes into play when it takes part in a measurement.
+
+    Measurement["<b>Measurement</b><br>OBI_0000070 assay"]:::local
+    Sample["<b>Sample</b><br>PMD_0000000 material"]:::local
+    Role["<b>Evaluant role</b><br>OBI_0000067 evaluant role"]:::local
+
+    Measurement -. "has specified input<br>OBI_0000293" .-> Sample
+    Sample -. "has role<br>RO_0000087" .-> Role
+    Measurement -. "realizes<br>BFO_0000055" .-> Role
+
+    classDef local fill:#dbeafe,stroke:#1d4ed8,stroke-width:2px,color:#0f172a
+
+%% mermantics-pattern {"id":"pmdco-role-in-process","title":"Role in a process","version":"0.1.0","description":"A sample has a role (here: being the thing that is evaluated) that comes into play when it takes part in a measurement.","source":"Based on the PMDco pattern 'realizable entity (role)' (https://github.com/materialdigital/core-ontology/tree/main/patterns, CC BY 4.0), simplified for mermantics.","questions":["In which role did this sample take part in the process?"]}
