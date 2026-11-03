@@ -26,6 +26,7 @@ export interface BoxData extends Record<string, unknown> {
   lines: string[]; // extra text lines (fields, comments); for a vocabulary: "CODE: ID label"
   css: string[]; // Mermaid style classes, kept on import and export
   problems: Problem[];
+  tags?: string[]; // only for drawing: the competency questions that use this box ("Q1")
 }
 
 export interface ArrowData extends Record<string, unknown> {
@@ -37,9 +38,74 @@ export interface ArrowData extends Record<string, unknown> {
 }
 
 export type Box = FlowNode<BoxData, "box">;
+
+// ---- use case (workshop) -------------------------------------------------------------------
+
+export type Priority = "must" | "should" | "could" | "";
+
+/** "As a <role>, I want <want>, so that <benefit>." */
+export interface Story {
+  id: string;
+  role: string;
+  want: string;
+  benefit: string;
+  priority: Priority;
+}
+
+/** A question the data model should be able to answer, and the boxes it needs. */
+export interface Question {
+  id: string;
+  text: string;
+  boxes: string[]; // box ids
+}
+
+/** Something to clarify after the workshop. */
+export interface OpenPoint {
+  id: string;
+  text: string;
+  done: boolean;
+}
+
+export interface UseCase {
+  title: string;
+  description: string;
+  stories: Story[];
+  questions: Question[];
+  openPoints: OpenPoint[];
+}
+
+export function emptyUseCase(): UseCase {
+  return { title: "", description: "", stories: [], questions: [], openPoints: [] };
+}
+
+export function isEmptyUseCase(u: UseCase): boolean {
+  return !u.title && !u.description && !u.stories.length && !u.questions.length && !u.openPoints.length;
+}
+
+/** A use case read from JSON, with anything missing or of the wrong type left out. */
+function readUseCase(raw: unknown): UseCase {
+  const o = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const str = (v: unknown) => (typeof v === "string" ? v : "");
+  const list = (v: unknown) => (Array.isArray(v) ? v.filter((x) => x && typeof x === "object") as Record<string, unknown>[] : []);
+  const priorities = ["must", "should", "could"];
+  return {
+    title: str(o.title),
+    description: str(o.description),
+    stories: list(o.stories).map((x, i) => ({
+      id: str(x.id) || `s${i + 1}`, role: str(x.role), want: str(x.want), benefit: str(x.benefit),
+      priority: (priorities.includes(str(x.priority)) ? str(x.priority) : "") as Priority,
+    })),
+    questions: list(o.questions).map((x, i) => ({
+      id: str(x.id) || `q${i + 1}`, text: str(x.text),
+      boxes: Array.isArray(x.boxes) ? x.boxes.filter((b): b is string => typeof b === "string") : [],
+    })),
+    openPoints: list(o.openPoints).map((x, i) => ({ id: str(x.id) || `p${i + 1}`, text: str(x.text), done: x.done === true })),
+  };
+}
 export type Arrow = FlowEdge<ArrowData>;
 
 const LAYOUT_PREFIX = "%% mermantics-layout ";
+const USE_CASE_PREFIX = "%% mermantics-usecase ";
 
 const CLASS_DEFS = [
   "classDef base fill:#e5e7eb,stroke:#6b7280,stroke-width:2px,color:#111827",
@@ -84,7 +150,7 @@ function styleClass(d: BoxData): string {
 }
 
 /** Mermaid text for the canvas. Arrows are written in canvas order, so finding `edgeIndex` = arrow index. */
-export function toMermaid(boxes: Box[], arrows: Arrow[], direction = "TB"): string {
+export function toMermaid(boxes: Box[], arrows: Arrow[], useCase: UseCase = emptyUseCase(), direction = "TB"): string {
   const out = [`flowchart ${direction}`, ""];
   for (const b of boxes) out.push(`    ${b.id}["${boxLabel(b.data)}"]:::${styleClass(b.data)}`);
   out.push("");
@@ -101,7 +167,14 @@ export function toMermaid(boxes: Box[], arrows: Arrow[], direction = "TB"): stri
   out.push("", ...CLASS_DEFS.map((c) => `    ${c}`), "");
   const pos: Record<string, [number, number]> = {};
   for (const b of boxes) pos[b.id] = [Math.round(b.position.x), Math.round(b.position.y)];
-  out.push(LAYOUT_PREFIX + JSON.stringify(pos), "");
+  out.push(LAYOUT_PREFIX + JSON.stringify(pos));
+  if (!isEmptyUseCase(useCase)) {
+    // Links to boxes that no longer exist are dropped.
+    const ids = new Set(boxes.map((b) => b.id));
+    const kept = { ...useCase, questions: useCase.questions.map((q) => ({ ...q, boxes: q.boxes.filter((b) => ids.has(b)) })) };
+    out.push(USE_CASE_PREFIX + JSON.stringify(kept));
+  }
+  out.push("");
   return out.join("\n");
 }
 
@@ -111,6 +184,7 @@ export interface Imported {
   boxes: Box[];
   arrows: Arrow[];
   positioned: boolean; // true if every box had a stored position
+  useCase: UseCase;
   warnings: string[];
 }
 
@@ -147,8 +221,16 @@ export function fromMermaid(text: string): Imported {
   const diagram = mermaid.parse(text);
   const warnings = diagram.findings.map((f) => `${f.where ? `${f.where}: ` : ""}${f.message}`);
   let pos: Record<string, [number, number]> = {};
+  let useCase = emptyUseCase();
   for (const line of text.split(/\r?\n/)) {
     const t = line.trim();
+    if (t.startsWith(USE_CASE_PREFIX.trim())) {
+      try {
+        useCase = readUseCase(JSON.parse(t.slice(USE_CASE_PREFIX.trim().length)));
+      } catch {
+        warnings.push("the use case notes in this file could not be read");
+      }
+    }
     if (t.startsWith(LAYOUT_PREFIX.trim())) {
       try {
         pos = JSON.parse(t.slice(LAYOUT_PREFIX.trim().length));
@@ -172,5 +254,5 @@ export function fromMermaid(text: string): Imported {
     return { id: `a${i}`, source: e.src, target: e.dst,
              data: { kind: "relation", name, curie, words: curie ? wordsFor(curie, name || curie) : name, problems: [] } };
   });
-  return { boxes, arrows, positioned: boxes.every((b) => pos[b.id] !== undefined), warnings };
+  return { boxes, arrows, positioned: boxes.every((b) => pos[b.id] !== undefined), useCase, warnings };
 }

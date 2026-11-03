@@ -38,6 +38,9 @@ function BoxNodeView({ data, selected }: NodeProps<Box>) {
           {data.lines.length > 6 && <li className="more">+{data.lines.length - 6} more</li>}
         </ul>
       )}
+      {data.tags && data.tags.length > 0 && (
+        <div className="box-tags">{data.tags.map((t) => <span key={t}>{t}</span>)}</div>
+      )}
       {level && (
         <div className={`badge ${level}`} title={data.problems.map((p) => p.message).join("\n\n")}>
           {level === "note" ? "i" : shown}

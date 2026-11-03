@@ -169,3 +169,54 @@ button, input, select, textarea { font: inherit; color: inherit; }
 
 .react-flow__edge-textbg { stroke: var(--line); }
 .react-flow__attribution { font-size: 10px; }
+
+/* ---- use case workshop ---- */
+.bar .toggle.on { background: #eff6ff; border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.details { display: flex; flex-direction: column; }
+.tabs { display: flex; gap: 4px; padding: 10px 12px 0; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--panel); z-index: 2; }
+.tabs button { border: 0; background: none; padding: 8px 12px; border-bottom: 2px solid transparent; cursor: pointer; color: var(--muted); font-weight: 600; }
+.tabs button.on { color: var(--text); border-bottom-color: var(--accent); }
+.usecase .hint { margin: -4px 0 0; font-size: 12.5px; color: var(--muted); }
+.coverage { font-size: 13px; padding: 8px 10px; border-radius: 8px; background: #f0fdf4; border: 1px solid #bbf7d0; }
+.coverage.partial { background: #fffbeb; border-color: #fde68a; }
+.card { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; background: #fff; }
+.card.focused { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
+.card-head { display: flex; align-items: center; gap: 8px; }
+.card-head .num { font-weight: 700; font-size: 12px; color: var(--muted); min-width: 22px; }
+.card-head .x, .point .x { margin-left: auto; border: 0; background: none; color: var(--muted); font-size: 18px; line-height: 1; cursor: pointer; padding: 0 4px; }
+.card-head .x:hover, .point .x:hover { color: var(--error); }
+.card textarea, .card .inline input, .point input:not([type]) { border: 1px solid var(--line); border-radius: 6px; padding: 5px 7px; font-size: 13.5px; width: 100%; }
+.card .inline { display: grid; grid-template-columns: 58px 1fr; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); }
+.prio { border: 1px solid var(--line); border-radius: 6px; padding: 2px 4px; font-size: 12px; background: #fff; }
+.prio-must { border-color: #fecaca; color: #b91c1c; }
+.prio-should { border-color: #fde68a; color: #b45309; }
+.prio-could { border-color: #bfdbfe; color: #1d4ed8; }
+.show { border: 1px solid var(--line); background: #fff; border-radius: 6px; padding: 2px 8px; font-size: 12px; cursor: pointer; }
+.show.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.show:disabled { opacity: 0.45; cursor: default; }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.chip { display: inline-flex; align-items: center; gap: 2px; background: #eff6ff; border: 1px solid #bfdbfe; color: #1e3a8a; border-radius: 999px; padding: 1px 4px 1px 9px; font-size: 12px; }
+.chip button { border: 0; background: none; color: #64748b; cursor: pointer; font-size: 14px; line-height: 1; padding: 0 3px; }
+.unlinked { font-size: 12px; color: #b45309; font-style: italic; }
+.card .link:disabled { color: var(--muted); cursor: default; text-decoration: none; }
+.card .link { padding: 0; font-size: 12.5px; }
+.add { border: 1px dashed #cbd5e1; background: #fff; border-radius: 8px; padding: 7px; color: var(--accent); cursor: pointer; font-weight: 500; }
+.add:hover { background: #f8fafc; border-color: var(--accent); }
+.point { display: flex; align-items: center; gap: 8px; }
+.point input.done { text-decoration: line-through; color: var(--muted); }
+.question-links { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.question-links label { display: flex; gap: 6px; align-items: baseline; cursor: pointer; line-height: 1.35; }
+.box-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 7px; }
+.box-tags span { font-size: 10.5px; font-weight: 700; color: #1d4ed8; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 4px; padding: 0 5px; }
+.react-flow__node.dimmed { opacity: 0.25; transition: opacity 0.15s; }
+.react-flow__node.lit .box { box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 35%, transparent); }
+
+/* Workshop view: no check results while drawing with domain experts. */
+.app.workshop .badge, .app.workshop .status { display: none; }
+.app.workshop .box.has-error, .app.workshop .box.has-warning { border-color: #cbd5e1; }
+.app.workshop .box.selected { border-color: var(--kc); }
+.app.workshop .box { font-size: 15px; }
+.app.workshop .box-name { font-size: 17px; }
+.bar { white-space: nowrap; }
+.bar-group { flex-shrink: 0; }
+.onto { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
