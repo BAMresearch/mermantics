@@ -1,0 +1,18 @@
+flowchart TB
+
+%% Process with inputs and outputs: A planned process that uses something and produces something, following a plan that is written down in a specification.
+
+    Process["<b>Process</b><br>COB_0000035 completely executed planned process"]:::local
+    Input["<b>Input</b><br>BFO_0000030 object"]:::local
+    Output["<b>Output</b><br>BFO_0000030 object"]:::local
+    Plan["<b>Plan</b><br>OBI_0000260 plan"]:::local
+    PlanSpecification["<b>Plan specification</b><br>IAO_0000104 plan specification"]:::local
+
+    Process -. "has specified input<br>OBI_0000293" .-> Input
+    Process -. "has specified output<br>OBI_0000299" .-> Output
+    Process -. "realizes<br>BFO_0000055" .-> Plan
+    Plan -. "concretizes<br>RO_0000059" .-> PlanSpecification
+
+    classDef local fill:#dbeafe,stroke:#1d4ed8,stroke-width:2px,color:#0f172a
+
+%% mermantics-pattern {"id":"pmdco-process-inputs-outputs","title":"Process with inputs and outputs","version":"0.1.0","description":"A planned process that uses something and produces something, following a plan that is written down in a specification.","source":"Based on the PMDco pattern 'input and output of processes' (https://github.com/materialdigital/core-ontology/tree/main/patterns, CC BY 4.0), simplified for mermantics.","questions":["What went into this process, and what came out of it?","Which written plan or standard did the process follow?"]}

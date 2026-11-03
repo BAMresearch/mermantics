@@ -220,3 +220,28 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .bar { white-space: nowrap; }
 .bar-group { flex-shrink: 0; }
 .onto { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+
+/* ---- patterns ---- */
+.pattern-item { margin-bottom: 6px; }
+.shape.pattern { margin-bottom: 0; border-style: dashed; border-color: #cbd5e1; background: #fbfdff; }
+.shape.pattern:hover { border-color: var(--accent); }
+.pattern-icon { display: grid; grid-template-columns: 6px 6px; grid-template-rows: 6px 6px; gap: 2px; margin-top: 4px; flex: none; }
+.pattern-icon i { display: block; border-radius: 2px; background: var(--accent); opacity: 0.8; }
+.pattern-icon i:nth-child(2) { background: var(--k-material); }
+.pattern-icon i:nth-child(3) { background: var(--k-data); grid-column: span 2; width: 14px; }
+.pattern-actions { display: flex; gap: 2px; padding: 2px 4px 0; }
+.pattern-actions .link { font-size: 12px; padding: 2px 4px; }
+.danger-link { color: var(--error) !important; }
+.small-link { font-size: 12.5px; padding: 2px 4px 6px; }
+.palette-hint { font-size: 12px; color: var(--muted); margin: 2px 4px 0; line-height: 1.35; }
+.part-note { font-size: 12.5px; background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 8px; padding: 6px 9px; color: #334155; }
+.uses { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.uses li { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.uses .use-title { flex: 1; min-width: 0; }
+.uses .link { font-size: 12px; padding: 0; }
+.pill.ok { background: #16a34a; }
+.row { display: flex; gap: 8px; }
+.secondary { border: 1px solid var(--line); background: #fff; border-radius: 8px; padding: 7px 12px; cursor: pointer; }
+.secondary:disabled { opacity: 0.5; }
+.ok-note { font-size: 12.5px; color: #15803d; margin: 0; }
+.panel .hint { margin: -2px 0 0; font-size: 12.5px; color: var(--muted); line-height: 1.4; }

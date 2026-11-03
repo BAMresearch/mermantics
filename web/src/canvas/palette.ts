@@ -51,6 +51,8 @@ export const KIND_BY_ANCESTOR: [string, ShapeKind][] = [
   ["BFO_0000015", "process"],
   ["IAO_0000010", "software"],
   ["IAO_0000104", "plan"],
+  ["IAO_0000033", "plan"], // directive information entity: methods, standards, settings
+  ["OBI_0000260", "plan"],
   ["IAO_0000027", "data"],
   ["IAO_0000030", "data"],
   ["PMD_0000602", "device"],

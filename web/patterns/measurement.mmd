@@ -1,0 +1,26 @@
+flowchart TB
+
+%% Measurement of a property: A measurement (assay) of a property of a sample, with a result that has a value and a unit, done according to a written method.
+
+    Measurement["<b>Measurement</b><br>OBI_0000070 assay"]:::local
+    Sample["<b>Sample</b><br>PMD_0000000 material"]:::local
+    Property["<b>Property</b><br>BFO_0000019 quality"]:::local
+    Result["<b>Result</b><br>IAO_0000109 measurement datum"]:::local
+    Value["<b>Value</b><br>OBI_0001931 scalar value specification<br><br>numeric value, unit"]:::local
+    Plan["<b>Plan</b><br>OBI_0000260 plan"]:::local
+    Method["<b>Method or standard</b><br>IAO_0000033 directive information entity"]:::local
+
+    Measurement -. "has specified input<br>OBI_0000293" .-> Sample
+    Measurement -. "has specified output<br>OBI_0000299" .-> Result
+    Measurement -. "assay measures characteristic<br>RO_0009006" .-> Property
+    Sample -. "has characteristic<br>RO_0000053" .-> Property
+    Result -. "has value specification<br>OBI_0001938" .-> Value
+    Value -. "specifies value of<br>OBI_0001927" .-> Property
+    Result -. "is quality measurement of<br>IAO_0000221" .-> Property
+    Result -. "is about<br>IAO_0000136" .-> Sample
+    Measurement -. "realizes<br>BFO_0000055" .-> Plan
+    Plan -. "concretizes<br>RO_0000059" .-> Method
+
+    classDef local fill:#dbeafe,stroke:#1d4ed8,stroke-width:2px,color:#0f172a
+
+%% mermantics-pattern {"id":"pmdco-measurement","title":"Measurement of a property","version":"0.1.0","description":"A measurement (assay) of a property of a sample, with a result that has a value and a unit, done according to a written method.","source":"Based on the PMDco pattern 'measurement' (https://github.com/materialdigital/core-ontology/tree/main/patterns, CC BY 4.0), simplified for mermantics.","questions":["What is the measured value of this property, and in which unit?","Which sample was measured, and with which method or standard?"]}

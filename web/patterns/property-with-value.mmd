@@ -1,0 +1,14 @@
+flowchart TB
+
+%% Property with a value: A property (quality) of an object, for example its mass, with a value and a unit.
+
+    Thing["<b>Object</b><br>BFO_0000030 object"]:::local
+    Property["<b>Property</b><br>BFO_0000019 quality"]:::local
+    Value["<b>Value</b><br>OBI_0001931 scalar value specification<br><br>numeric value, unit"]:::local
+
+    Property -. "quality of<br>RO_0000080" .-> Thing
+    Value -. "specifies value of<br>OBI_0001927" .-> Property
+
+    classDef local fill:#dbeafe,stroke:#1d4ed8,stroke-width:2px,color:#0f172a
+
+%% mermantics-pattern {"id":"pmdco-property-with-value","title":"Property with a value","version":"0.1.0","description":"A property (quality) of an object, for example its mass, with a value and a unit.","source":"Based on the PMDco pattern 'material property (quality)' (https://github.com/materialdigital/core-ontology/tree/main/patterns, CC BY 4.0), simplified for mermantics.","questions":["What is the value of this property of the object, and in which unit?"]}

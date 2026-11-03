@@ -46,12 +46,13 @@ export interface QuestionLink {
   linked: boolean;
 }
 
-export function BoxDetails({ box, onChange, onDelete, questions = [], onToggleQuestion }: {
+export function BoxDetails({ box, onChange, onDelete, questions = [], onToggleQuestion, parts = [] }: {
   box: Box;
   onChange: (patch: Partial<BoxData>) => void;
   onDelete: () => void;
   questions?: QuestionLink[];
   onToggleQuestion?: (questionId: string, on: boolean) => void;
+  parts?: { pattern: string; part: string }[]; // the pattern parts this box plays
 }) {
   const d = box.data;
   const term = useTerm(d.classId);
@@ -63,6 +64,9 @@ export function BoxDetails({ box, onChange, onDelete, questions = [], onToggleQu
   return (
     <div className="panel">
       <div className={`panel-kind kind-${d.kind}`}><span className="dot" />{shape.title}</div>
+      {parts.map((p, i) => (
+        <div key={i} className="part-note">Part of the pattern <b>{p.pattern}</b>, as <b>{p.part}</b></div>
+      ))}
       <label className="field">
         Name
         <input value={d.name} onChange={(e) => onChange({ name: e.target.value })} />
@@ -169,11 +173,13 @@ export function ArrowDetails({ arrow, srcName, dstName, onChange, onReconnect, o
   );
 }
 
-export function Overview({ status, findings, passed, onSelect }: {
+export function Overview({ status, findings, passed, onSelect, uses = [], onForget }: {
   status: string;
   findings: GlobalFinding[];
   passed: string[];
   onSelect: (target: GlobalFinding["target"]) => void;
+  uses?: { id: string; title: string; version: string; boxes: number; problems: number }[];
+  onForget?: (useId: string) => void;
 }) {
   return (
     <div className="panel">
@@ -187,6 +193,21 @@ export function Overview({ status, findings, passed, onSelect }: {
               <li key={i} className={`${f.level}${f.target ? " clickable" : ""}`} onClick={() => f.target && onSelect(f.target)}>
                 <span className={`pill ${f.level}`}>{f.level}</span>
                 <span>{f.message}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+      {uses.length > 0 && (
+        <section className="panel-section">
+          <h3>Patterns in this model</h3>
+          <ul className="uses">
+            {uses.map((u) => (
+              <li key={u.id}>
+                <span className={`pill ${u.problems ? "warning" : "ok"}`}>{u.problems ? `${u.problems} to fix` : "follows it"}</span>
+                <span className="use-title">{u.title}{u.version ? ` ${u.version}` : ""}</span>
+                <button type="button" className="link" title="Keep the boxes, but stop checking them against this pattern"
+                        onClick={() => onForget?.(u.id)}>Stop checking</button>
               </li>
             ))}
           </ul>
@@ -206,6 +227,56 @@ export function Overview({ status, findings, passed, onSelect }: {
           <li>Click a box or arrow to edit it. Delete or Backspace removes it.</li>
           <li>Everything is checked against PMDco while you draw, in your browser.</li>
         </ul>
+      </section>
+    </div>
+  );
+}
+
+export function SelectionPanel({ count, arrows, questions, onSave, onDownload }: {
+  count: number;
+  arrows: number;
+  questions: string[]; // competency questions whose boxes are all selected
+  onSave: (meta: { title: string; description: string; version: string; questions: string[] }) => void;
+  onDownload: (meta: { title: string; description: string; version: string; questions: string[] }) => void;
+}) {
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [version, setVersion] = useState("0.1.0");
+  const [qs, setQs] = useState(questions.join("\n"));
+  const [saved, setSaved] = useState("");
+  useEffect(() => setQs(questions.join("\n")), [questions.join("\n")]); // eslint-disable-line react-hooks/exhaustive-deps
+  const meta = () => ({ title: title.trim(), description: description.trim(), version: version.trim(),
+                        questions: qs.split("\n").map((q) => q.trim()).filter((q) => q) });
+  return (
+    <div className="panel">
+      <div className="panel-kind"><span className="dot" />Selection</div>
+      <p className="sentence">{count} boxes and {arrows} arrow{arrows === 1 ? "" : "s"} between them are selected.</p>
+      <section className="panel-section">
+        <h3>Save as a pattern</h3>
+        <p className="hint">A pattern is a reusable piece of a model. It appears under "My patterns" on the left, and you can download it as a file to share it.</p>
+        <label className="field">
+          Name
+          <input value={title} placeholder="e.g. Heat treatment with furnace" onChange={(e) => { setTitle(e.target.value); setSaved(""); }} />
+        </label>
+        <label className="field">
+          What is it for?
+          <textarea rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />
+        </label>
+        <label className="field">
+          Questions it answers (one per line)
+          <textarea rows={3} value={qs} onChange={(e) => setQs(e.target.value)} />
+        </label>
+        <label className="field">
+          Version
+          <input value={version} onChange={(e) => setVersion(e.target.value)} />
+        </label>
+        <div className="row">
+          <button type="button" className="primary" disabled={!title.trim()} onClick={() => { onSave(meta()); setSaved(title.trim()); }}>
+            Save to my patterns
+          </button>
+          <button type="button" className="secondary" disabled={!title.trim()} onClick={() => onDownload(meta())}>Download file</button>
+        </div>
+        {saved && <p className="ok-note">Saved "{saved}" to My patterns.</p>}
       </section>
     </div>
   );

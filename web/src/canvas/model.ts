@@ -106,6 +106,7 @@ export type Arrow = FlowEdge<ArrowData>;
 
 const LAYOUT_PREFIX = "%% mermantics-layout ";
 const USE_CASE_PREFIX = "%% mermantics-usecase ";
+const PATTERN_USES_PREFIX = "%% mermantics-pattern-uses ";
 
 const CLASS_DEFS = [
   "classDef base fill:#e5e7eb,stroke:#6b7280,stroke-width:2px,color:#111827",
@@ -150,7 +151,8 @@ function styleClass(d: BoxData): string {
 }
 
 /** Mermaid text for the canvas. Arrows are written in canvas order, so finding `edgeIndex` = arrow index. */
-export function toMermaid(boxes: Box[], arrows: Arrow[], useCase: UseCase = emptyUseCase(), direction = "TB"): string {
+export function toMermaid(boxes: Box[], arrows: Arrow[], useCase: UseCase = emptyUseCase(), patternUses: unknown[] = [],
+                          direction = "TB"): string {
   const out = [`flowchart ${direction}`, ""];
   for (const b of boxes) out.push(`    ${b.id}["${boxLabel(b.data)}"]:::${styleClass(b.data)}`);
   out.push("");
@@ -174,6 +176,7 @@ export function toMermaid(boxes: Box[], arrows: Arrow[], useCase: UseCase = empt
     const kept = { ...useCase, questions: useCase.questions.map((q) => ({ ...q, boxes: q.boxes.filter((b) => ids.has(b)) })) };
     out.push(USE_CASE_PREFIX + JSON.stringify(kept));
   }
+  if (patternUses.length) out.push(PATTERN_USES_PREFIX + JSON.stringify(patternUses));
   out.push("");
   return out.join("\n");
 }
@@ -185,6 +188,7 @@ export interface Imported {
   arrows: Arrow[];
   positioned: boolean; // true if every box had a stored position
   useCase: UseCase;
+  patternUses: unknown; // read with patterns.readUses
   warnings: string[];
 }
 
@@ -222,8 +226,16 @@ export function fromMermaid(text: string): Imported {
   const warnings = diagram.findings.map((f) => `${f.where ? `${f.where}: ` : ""}${f.message}`);
   let pos: Record<string, [number, number]> = {};
   let useCase = emptyUseCase();
+  let patternUses: unknown = [];
   for (const line of text.split(/\r?\n/)) {
     const t = line.trim();
+    if (t.startsWith(PATTERN_USES_PREFIX)) {
+      try {
+        patternUses = JSON.parse(t.slice(PATTERN_USES_PREFIX.length));
+      } catch {
+        warnings.push("the list of patterns used in this file could not be read");
+      }
+    }
     if (t.startsWith(USE_CASE_PREFIX.trim())) {
       try {
         useCase = readUseCase(JSON.parse(t.slice(USE_CASE_PREFIX.trim().length)));
@@ -254,5 +266,5 @@ export function fromMermaid(text: string): Imported {
     return { id: `a${i}`, source: e.src, target: e.dst,
              data: { kind: "relation", name, curie, words: curie ? wordsFor(curie, name || curie) : name, problems: [] } };
   });
-  return { boxes, arrows, positioned: boxes.every((b) => pos[b.id] !== undefined), useCase, warnings };
+  return { boxes, arrows, positioned: boxes.every((b) => pos[b.id] !== undefined), useCase, patternUses, warnings };
 }
