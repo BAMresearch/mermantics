@@ -7,7 +7,8 @@
 
 import { DataFactory } from "n3";
 
-import { checks, DEFAULT_PREFIXES, defaultConfig, mermaid, Ontology, report, terms } from "../core/index.js";
+import { checks, DEFAULT_PREFIXES, defaultConfig, mermaid, Ontology, relations, report, terms } from "../core/index.js";
+import { labels as labelUtil } from "../core/index.js";
 import { OWL, RDF } from "../core/ontology.js";
 import type { OntologyInfo, Request, Response } from "./protocol.js";
 
@@ -66,6 +67,13 @@ function check(request: Extract<Request, { type: "check" }>) {
   };
 }
 
+function supersOf(id: string): string[] {
+  if (onto === null) return [];
+  const iri = DataFactory.namedNode(labelUtil.curieToIri(id, DEFAULT_PREFIXES));
+  if (!onto.exists(iri)) return [];
+  return [...onto.superclasses(iri)].map((s) => terms.curieOf(s, DEFAULT_PREFIXES)).filter((s): s is string => !!s);
+}
+
 async function handle(request: Request) {
   try {
     switch (request.type) {
@@ -84,6 +92,14 @@ async function handle(request: Request) {
       case "terms":
         post({ type: "terms", id: request.id, terms: request.ids.map((id) => index?.get(id) ?? null) });
         break;
+      case "relations":
+        post({ type: "relations", id: request.id,
+              relations: onto ? relations.fittingRelations(onto, DEFAULT_PREFIXES, request.src, request.dst,
+                                                          request.only) : [] });
+        break;
+      case "supers":
+        post({ type: "supers", id: request.id, supers: request.ids.map((id) => supersOf(id)) });
+        break;
     }
   } catch (exc) {
     post({ type: "error", id: request.id, request: request.type, message: (exc as Error).message });
@@ -92,6 +108,7 @@ async function handle(request: Request) {
 
 self.onmessage = (event: MessageEvent<Request>) => {
   const request = event.data;
-  if (request.type === "search" || request.type === "terms") void handle(request);
+  if (request.type === "search" || request.type === "terms" || request.type === "relations"
+      || request.type === "supers") void handle(request);
   else queue = queue.then(() => handle(request));
 };

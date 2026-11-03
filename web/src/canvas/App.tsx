@@ -1,0 +1,412 @@
+/**
+ * The canvas editor: draw boxes and arrows, and the checker runs in the background.
+ *
+ * React Flow holds the boxes and arrows. After each change to what the diagram says (not
+ * when a box is only moved), the canvas is written as Mermaid and checked in the worker;
+ * the findings come back with box ids and arrow indexes and are shown on the canvas.
+ */
+
+import {
+  Background, ConnectionMode, Controls, MarkerType, MiniMap, ReactFlow, useEdgesState, useNodesState, useReactFlow,
+  type Connection, type EdgeTypes, type IsValidConnection, type NodeTypes, type OnConnectEnd,
+} from "@xyflow/react";
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
+
+import logo from "../../../assets/mermantics-logo.svg";
+import brokenC from "../../examples/broken-wrong-relation.mmd?raw";
+import processExample from "../../examples/process-example.mmd?raw";
+import simulation from "../../examples/simulation-example.mmd?raw";
+import { BoxNode, worst } from "./BoxNode.js";
+import { check, loadOntology, supers } from "./checker.js";
+import { ArrowDetails, BoxDetails, Overview, type GlobalFinding } from "./Details.js";
+import { FloatingEdge } from "./FloatingEdge.js";
+import { layout } from "./layout.js";
+import { fromMermaid, makeId, toMermaid, type Arrow, type ArrowData, type Box, type BoxData, type Problem } from "./model.js";
+import { EXTRA_SHAPES, KIND_BY_ANCESTOR, SHAPES, shapeOf, type Shape, type ShapeKind } from "./palette.js";
+import { RelationMenu, type Choice } from "./RelationMenu.js";
+
+const EXAMPLES = [
+  { name: "process-chain.mmd", title: "Process chain: machining, heat treatment, tensile test", text: processExample },
+  { name: "simulation.mmd", title: "Simulation data model", text: simulation },
+  { name: "wrong-relation.mmd", title: "A model with a mistake", text: brokenC },
+];
+const STORAGE_KEY = "mermantics-canvas";
+const nodeTypes: NodeTypes = { box: BoxNode };
+const edgeTypes: EdgeTypes = { floating: FloatingEdge };
+
+function store(text: string) {
+  try { localStorage.setItem(STORAGE_KEY, text); } catch { /* storage can be off */ }
+}
+function stored(): string | null {
+  try { return localStorage.getItem(STORAGE_KEY); } catch { return null; }
+}
+
+/** Shapes for imported boxes, from their classes' superclasses. */
+async function classify(boxes: Box[]): Promise<Box[]> {
+  const open = boxes.filter((b) => b.data.kind === "other" && b.data.classId);
+  if (!open.length) return boxes;
+  const all = await supers(open.map((b) => b.data.classId));
+  const kinds = new Map<string, ShapeKind>();
+  open.forEach((b, i) => {
+    const ancestors = new Set(all[i]);
+    const hit = KIND_BY_ANCESTOR.find(([id]) => ancestors.has(id));
+    if (hit) kinds.set(b.id, hit[1]);
+  });
+  return boxes.map((b) => (kinds.has(b.id) ? { ...b, data: { ...b.data, kind: kinds.get(b.id)! } } : b));
+}
+
+/** The structure that the checks see; moving a box does not change it. */
+function structureKey(boxes: Box[], arrows: Arrow[]): string {
+  return JSON.stringify([
+    boxes.map((b) => [b.id, b.data.name, b.data.kind, b.data.classId, b.data.classLabel, b.data.lines, b.data.css]),
+    arrows.map((a) => [a.id, a.source, a.target, a.data?.kind, a.data?.name, a.data?.curie]),
+  ]);
+}
+
+interface PendingArrow {
+  source: string;
+  target: string;
+  x: number;
+  y: number;
+  replace?: string; // id of an arrow whose relation is being changed
+  srcClasses: string[];
+  dstClasses: string[];
+}
+
+export function App() {
+  const [boxes, setBoxes, onBoxesChange] = useNodesState<Box>([]);
+  const [arrows, setArrows, onArrowsChange] = useEdgesState<Arrow>([]);
+  const [docName, setDocName] = useState("model.mmd");
+  const [ontoStatus, setOntoStatus] = useState("Loading PMDco 3.1.1...");
+  const [ready, setReady] = useState(false);
+  const [checkState, setCheckState] = useState<{ status: string; findings: GlobalFinding[]; passed: string[] }>(
+    { status: "Not checked yet", findings: [], passed: [] });
+  const [pending, setPending] = useState<PendingArrow | null>(null);
+  const [notice, setNotice] = useState("");
+  const wrapper = useRef<HTMLDivElement>(null);
+  const pointer = useRef({ x: 0, y: 0 });
+  const fileInput = useRef<HTMLInputElement>(null);
+  const flow = useReactFlow<Box, Arrow>();
+  const boxesRef = useRef(boxes);
+  const arrowsRef = useRef(arrows);
+  boxesRef.current = boxes;
+  arrowsRef.current = arrows;
+
+  // ---- loading --------------------------------------------------------------------------
+
+  const open = useCallback(async (text: string, name: string) => {
+    const imported = fromMermaid(text);
+    let placed = await classify(imported.boxes);
+    if (!imported.positioned) placed = await layout(placed, imported.arrows);
+    setBoxes(placed);
+    setArrows(imported.arrows);
+    setDocName(name);
+    setNotice(imported.warnings.length ? `Some lines could not be read: ${imported.warnings.join("; ")}` : "");
+    requestAnimationFrame(() => flow.fitView({ padding: 0.15, duration: 300 }));
+  }, [flow, setArrows, setBoxes]);
+
+  useEffect(() => {
+    loadOntology().then((info) => {
+      setOntoStatus(`${info.title}`);
+      setReady(true);
+      const saved = stored();
+      const example = EXAMPLES[0]!;
+      void open(saved ?? example.text, saved ? "model.mmd" : example.name);
+    }).catch((e: Error) => setOntoStatus(`Could not load the ontology: ${e.message}`));
+  }, [open]);
+
+  // ---- checking -------------------------------------------------------------------------
+
+  const key = useMemo(() => structureKey(boxes, arrows), [boxes, arrows]);
+  const run = useRef(0);
+
+  useEffect(() => {
+    if (!ready) return;
+    const mine = ++run.current;
+    setCheckState((s) => ({ ...s, status: "Checking..." }));
+    const timer = setTimeout(async () => {
+      const snapBoxes = boxesRef.current;
+      const snapArrows = arrowsRef.current;
+      const text = toMermaid(snapBoxes, snapArrows);
+      store(text);
+      try {
+        const checked = await check(text);
+        if (mine !== run.current) return;
+        const byBox = new Map<string, Problem[]>();
+        const byArrow = new Map<string, Problem[]>();
+        const findings: GlobalFinding[] = [];
+        const passed: string[] = [];
+        for (const f of checked.result.findings) {
+          if (f.level === "ok") {
+            passed.push(f.message);
+            continue;
+          }
+          const p: Problem = { level: f.level, message: f.message, details: f.details };
+          const arrowId = f.edgeIndex !== undefined ? snapArrows[f.edgeIndex]?.id : undefined;
+          if (f.nodeId) byBox.set(f.nodeId, [...(byBox.get(f.nodeId) ?? []), p]);
+          else if (arrowId) byArrow.set(arrowId, [...(byArrow.get(arrowId) ?? []), p]);
+          findings.push({ ...p, target: f.nodeId ? { box: f.nodeId } : arrowId ? { arrow: arrowId } : undefined });
+        }
+        setBoxes((bs) => bs.map((b) => ({ ...b, data: { ...b.data, problems: byBox.get(b.id) ?? [] } })));
+        setArrows((as) => as.map((a) => ({ ...a, data: { ...a.data!, problems: byArrow.get(a.id) ?? [] } })));
+        const counts = (["error", "warning", "note"] as const)
+          .map((l) => [l, findings.filter((f) => f.level === l).length] as const).filter(([, n]) => n);
+        const status = counts.length
+          ? counts.map(([l, n]) => `${n} ${l}${n === 1 ? "" : "s"}`).join(", ")
+          : snapBoxes.length ? "No problems found" : "Empty";
+        setCheckState({ status, findings, passed });
+      } catch (e) {
+        if (mine === run.current) setCheckState({ status: `The check failed: ${(e as Error).message}`, findings: [], passed: [] });
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [key, ready, setArrows, setBoxes]);
+
+  // Positions are saved too, a little later, when only a box moved.
+  useEffect(() => {
+    if (!ready) return;
+    const timer = setTimeout(() => store(toMermaid(boxesRef.current, arrowsRef.current)), 800);
+    return () => clearTimeout(timer);
+  }, [boxes, ready]);
+
+  // ---- adding boxes ---------------------------------------------------------------------
+
+  const addBox = useCallback((shape: Shape, at?: { x: number; y: number }) => {
+    const rect = wrapper.current!.getBoundingClientRect();
+    const position = at ?? flow.screenToFlowPosition({ x: rect.left + rect.width / 2 - 110, y: rect.top + rect.height / 2 - 40 });
+    const id = makeId(shape.title, new Set(boxesRef.current.map((b) => b.id)));
+    const data: BoxData = { name: shape.kind === "note" ? "Note" : shape.title, kind: shape.kind, classId: shape.classId,
+                            classLabel: shape.classLabel, lines: [], css: [], problems: [] };
+    setBoxes((bs) => [...bs.map((b) => ({ ...b, selected: false })), { id, type: "box", position, data, selected: true }]);
+    setArrows((as) => as.map((a) => ({ ...a, selected: false })));
+  }, [flow, setArrows, setBoxes]);
+
+  const onDrop = useCallback((e: DragEvent) => {
+    e.preventDefault();
+    const kind = e.dataTransfer.getData("application/mermantics-shape") as ShapeKind;
+    if (!kind) return;
+    addBox(shapeOf(kind), flow.screenToFlowPosition({ x: e.clientX - 110, y: e.clientY - 30 }));
+  }, [addBox, flow]);
+
+  // ---- arrows ---------------------------------------------------------------------------
+
+  /** Class IDs of a box and of the boxes it is a kind of. */
+  const classesOf = useCallback((id: string): string[] => {
+    const out: string[] = [];
+    const seen = new Set<string>();
+    const stack = [id];
+    while (stack.length) {
+      const cur = stack.pop()!;
+      if (seen.has(cur)) continue;
+      seen.add(cur);
+      const b = boxesRef.current.find((x) => x.id === cur);
+      if (b?.data.classId) out.push(b.data.classId);
+      for (const a of arrowsRef.current) if (a.data?.kind === "inherit" && a.source === cur) stack.push(a.target);
+    }
+    return out;
+  }, []);
+
+  const menuAt = useCallback((source: string, target: string, replace?: string) => {
+    const rect = wrapper.current!.getBoundingClientRect();
+    const x = Math.min(Math.max(pointer.current.x - rect.left, 8), rect.width - 340);
+    const y = Math.min(Math.max(pointer.current.y - rect.top, 8), rect.height - 360);
+    setPending({ source, target, x, y, replace, srcClasses: classesOf(source), dstClasses: classesOf(target) });
+  }, [classesOf]);
+
+  const isValidConnection: IsValidConnection<Arrow> = useCallback((c) => {
+    if (c.source === c.target) return false;
+    const ends = [c.source, c.target].map((id) => boxesRef.current.find((b) => b.id === id));
+    return ends.every((b) => b && b.data.kind !== "note") && ends[0]!.data.kind !== "vocab";
+  }, []);
+
+  const onConnect = useCallback((c: Connection) => menuAt(c.source, c.target), [menuAt]);
+
+  // Dropping the arrow anywhere on a box connects it, not only on one of its dots.
+  const onConnectEnd: OnConnectEnd = useCallback((event, state) => {
+    const point = "changedTouches" in event ? event.changedTouches[0] : event;
+    if (!point) return;
+    pointer.current = { x: point.clientX, y: point.clientY };
+    if (state.isValid || !state.fromNode) return;
+    const under = document.elementFromPoint(point.clientX, point.clientY)?.closest(".react-flow__node");
+    const to = under?.getAttribute("data-id");
+    const from = state.fromNode.id;
+    if (to && isValidConnection({ source: from, target: to, sourceHandle: null, targetHandle: null })) menuAt(from, to);
+  }, [isValidConnection, menuAt]);
+
+
+  const choose = useCallback((choice: Choice) => {
+    if (!pending) return;
+    const data: ArrowData = { ...choice, problems: [] };
+    if (pending.replace) {
+      setArrows((as) => as.map((a) => (a.id === pending.replace ? { ...a, data } : a)));
+    } else {
+      setArrows((as) => [...as, { id: `a${Date.now().toString(36)}`, source: pending.source, target: pending.target, data }]);
+    }
+    setPending(null);
+  }, [pending, setArrows]);
+
+  // ---- selection and editing ------------------------------------------------------------
+
+  const selectedBox = boxes.find((b) => b.selected);
+  const selectedArrow = selectedBox ? undefined : arrows.find((a) => a.selected);
+  const nameOf = (id: string) => boxes.find((b) => b.id === id)?.data.name ?? id;
+
+  const patchBox = useCallback((id: string, patch: Partial<BoxData>) => {
+    setBoxes((bs) => bs.map((b) => (b.id === id ? { ...b, data: { ...b.data, ...patch } } : b)));
+    // A box that is "something else" gets a shape once its class is known.
+    if (patch.classId) {
+      void supers([patch.classId]).then(([anc]) => {
+        const hit = KIND_BY_ANCESTOR.find(([cid]) => (anc ?? []).includes(cid));
+        if (!hit) return;
+        setBoxes((bs) => bs.map((b) => (b.id === id && b.data.kind === "other" ? { ...b, data: { ...b.data, kind: hit[1] } } : b)));
+      });
+    }
+  }, [setBoxes]);
+
+  const patchArrow = useCallback((id: string, patch: Partial<ArrowData>) => {
+    setArrows((as) => as.map((a) => (a.id === id ? { ...a, data: { ...a.data!, ...patch } } : a)));
+  }, [setArrows]);
+
+  const select = useCallback((target: GlobalFinding["target"]) => {
+    if (!target) return;
+    setBoxes((bs) => bs.map((b) => ({ ...b, selected: b.id === target.box })));
+    setArrows((as) => as.map((a) => ({ ...a, selected: a.id === target.arrow })));
+    const focus = target.box ?? arrowsRef.current.find((a) => a.id === target.arrow)?.source;
+    if (focus) flow.fitView({ nodes: [{ id: focus }], duration: 300, maxZoom: 1.1 });
+  }, [flow, setArrows, setBoxes]);
+
+  // ---- arrows as drawn ------------------------------------------------------------------
+
+  const shownArrows = useMemo(() => arrows.map((a) => {
+    const d = a.data!;
+    const level = worst(d.problems);
+    const color = level === "error" ? "#dc2626" : level === "warning" ? "#d97706" : d.kind === "inherit" ? "#475569" : "#64748b";
+    return {
+      ...a,
+      type: "floating",
+      label: d.words,
+      labelBgPadding: [6, 3] as [number, number],
+      labelBgBorderRadius: 6,
+      labelStyle: { fontSize: 12, fill: level ? color : "#334155", fontWeight: 500 },
+      labelBgStyle: { fill: "#ffffff", fillOpacity: 0.95 },
+      markerEnd: { type: MarkerType.ArrowClosed, color, width: 18, height: 18 },
+      style: { stroke: color, strokeWidth: a.selected ? 2.5 : 1.6, strokeDasharray: d.kind === "inherit" ? undefined : "6 4" },
+    };
+  }), [arrows]);
+
+  // ---- files ----------------------------------------------------------------------------
+
+  const download = () => {
+    const blob = new Blob([toMermaid(boxes, arrows)], { type: "text/plain" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = docName.endsWith(".mmd") ? docName : `${docName}.mmd`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
+  const tidy = async () => {
+    setBoxes(await layout(boxesRef.current, arrowsRef.current));
+    requestAnimationFrame(() => flow.fitView({ padding: 0.15, duration: 300 }));
+  };
+
+  const base = import.meta.env.BASE_URL;
+
+  return (
+    <div className="app" onPointerMove={(e) => { pointer.current = { x: e.clientX, y: e.clientY }; }}>
+      <header className="bar">
+        <img className="logo" src={logo} alt="mermantics" />
+        <div className="bar-group">
+          <select value="" onChange={(e) => {
+            const ex = EXAMPLES.find((x) => x.name === e.target.value);
+            if (ex) void open(ex.text, ex.name);
+          }}>
+            <option value="">Examples...</option>
+            {EXAMPLES.map((ex) => <option key={ex.name} value={ex.name}>{ex.title}</option>)}
+          </select>
+          <button type="button" onClick={() => { setBoxes([]); setArrows([]); setDocName("model.mmd"); }}>New</button>
+          <button type="button" onClick={() => fileInput.current?.click()}>Open...</button>
+          <button type="button" onClick={download}>Download .mmd</button>
+          <input ref={fileInput} type="file" accept=".mmd,.md,.txt" hidden onChange={async (e) => {
+            const file = e.target.files?.[0];
+            if (file) await open(await file.text(), file.name);
+            e.target.value = "";
+          }} />
+        </div>
+        <div className="bar-group">
+          <button type="button" onClick={() => void tidy()}>Tidy up</button>
+        </div>
+        <div className="bar-spacer" />
+        <span className="onto">Checked against <b>{ontoStatus}</b></span>
+        <a className="classic" href={`${base}index.html`}>Text editor</a>
+      </header>
+
+      <div className="body">
+        <aside className="palette">
+          <h2>Add to the model</h2>
+          {SHAPES.map((s) => (
+            <button type="button" key={s.kind} className={`shape kind-${s.kind}`} draggable
+                    onDragStart={(e) => { e.dataTransfer.setData("application/mermantics-shape", s.kind); e.dataTransfer.effectAllowed = "move"; }}
+                    onClick={() => addBox(s)}>
+              <span className="dot" />
+              <span className="shape-text"><b>{s.title}</b><small>{s.hint}</small></span>
+            </button>
+          ))}
+          <h2>More</h2>
+          {EXTRA_SHAPES.map((s) => (
+            <button type="button" key={s.kind} className={`shape kind-${s.kind}`} draggable
+                    onDragStart={(e) => e.dataTransfer.setData("application/mermantics-shape", s.kind)}
+                    onClick={() => addBox(s)}>
+              <span className="dot" />
+              <span className="shape-text"><b>{s.title}</b><small>{s.hint}</small></span>
+            </button>
+          ))}
+        </aside>
+
+        <main className="canvas" ref={wrapper} onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }} onDrop={onDrop}>
+          <ReactFlow<Box, Arrow>
+            nodes={boxes} edges={shownArrows} nodeTypes={nodeTypes} edgeTypes={edgeTypes}
+            onNodesChange={onBoxesChange} onEdgesChange={onArrowsChange}
+            onConnect={onConnect} onConnectEnd={onConnectEnd} isValidConnection={isValidConnection}
+            connectionMode={ConnectionMode.Loose} connectionRadius={40}
+            deleteKeyCode={["Backspace", "Delete"]} onPaneClick={() => setPending(null)}
+            minZoom={0.2} fitView>
+            <Background gap={20} color="#e2e8f0" />
+            <Controls showInteractive={false} />
+            <MiniMap pannable zoomable style={{ width: 150, height: 100 }} nodeColor={(n) => getComputedStyle(document.documentElement)
+              .getPropertyValue(`--k-${(n.data as BoxData).kind}`) || "#94a3b8"} />
+          </ReactFlow>
+          {boxes.length === 0 && ready && (
+            <div className="empty">Drag a shape from the left to start, or open an example.</div>
+          )}
+          <button type="button" className={`status ${checkState.findings.some((f) => f.level === "error") ? "bad"
+            : checkState.findings.some((f) => f.level === "warning") ? "warn" : "good"}`}
+                  onClick={() => { setBoxes((bs) => bs.map((b) => ({ ...b, selected: false }))); setArrows((as) => as.map((a) => ({ ...a, selected: false }))); }}>
+            {checkState.status}
+          </button>
+          {notice && <div className="notice" onClick={() => setNotice("")}>{notice}</div>}
+          {pending && (
+            <RelationMenu x={pending.x} y={pending.y} srcName={nameOf(pending.source)} dstName={nameOf(pending.target)}
+                          srcClasses={pending.srcClasses} dstClasses={pending.dstClasses}
+                          toVocab={boxes.find((b) => b.id === pending.target)?.data.kind === "vocab"}
+                          onChoose={choose} onCancel={() => setPending(null)} />
+          )}
+        </main>
+
+        <aside className="details">
+          {selectedBox ? (
+            <BoxDetails box={selectedBox} onChange={(p) => patchBox(selectedBox.id, p)}
+                        onDelete={() => flow.deleteElements({ nodes: [{ id: selectedBox.id }] })} />
+          ) : selectedArrow ? (
+            <ArrowDetails arrow={selectedArrow} srcName={nameOf(selectedArrow.source)} dstName={nameOf(selectedArrow.target)}
+                          onChange={(p) => patchArrow(selectedArrow.id, p)}
+                          onReconnect={() => menuAt(selectedArrow.source, selectedArrow.target, selectedArrow.id)}
+                          onDelete={() => flow.deleteElements({ edges: [{ id: selectedArrow.id }] })} />
+          ) : (
+            <Overview status={checkState.status} findings={checkState.findings} passed={checkState.passed} onSelect={select} />
+          )}
+        </aside>
+      </div>
+    </div>
+  );
+}
