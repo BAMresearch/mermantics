@@ -291,6 +291,8 @@ export function Overview({ status, ontology, checkedAgainst = "", findings, pass
           <li>Drag a shape from the left onto the canvas, or click it.</li>
           <li>To connect two boxes, drag from a dot on the edge of one box to the other box. You then pick what the arrow means.</li>
           <li>Click a box or arrow to edit it. Delete or Backspace removes it.</li>
+          <li>Drag on empty canvas to select the boxes inside the rectangle; Shift+click adds or removes one.</li>
+          <li>Move around with the scroll wheel or trackpad, or drag with the right mouse button. Ctrl+scroll or pinch zooms.</li>
           {ontology
             ? <li>Everything is checked against PMDco while you draw, in your browser.</li>
             : <li>Type any name for an arrow; the ones you make come back in the menu under "My relations".</li>}
@@ -300,8 +302,9 @@ export function Overview({ status, ontology, checkedAgainst = "", findings, pass
   );
 }
 
-export function SelectionPanel({ count, arrows, questions, canSave, onSave, onDownload }: {
+export function SelectionPanel({ count, arrows, questions, canSave, onSave, onDownload, onDelete }: {
   count: number;
+  onDelete: () => void; // deletes the selected boxes and every arrow touching them
   canSave: boolean; // saving patterns is only in materials science and engineering
   arrows: number;
   questions: string[]; // competency questions whose boxes are all selected
@@ -320,6 +323,10 @@ export function SelectionPanel({ count, arrows, questions, canSave, onSave, onDo
     <div className="panel">
       <div className="panel-kind"><span className="dot" />Selection</div>
       <p className="sentence">{count} boxes and {arrows} arrow{arrows === 1 ? "" : "s"} between them are selected.</p>
+      <div className="panel-actions">
+        <span className="muted">Delete or Backspace also removes them.</span>
+        <button type="button" className="danger" onClick={onDelete}>Delete {count} boxes</button>
+      </div>
       {canSave && <section className="panel-section">
         <h3>Save as a pattern</h3>
         <p className="hint">A pattern is a reusable piece of a model. It appears under "My patterns" on the left, and you can download it as a file to share it.</p>
