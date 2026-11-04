@@ -35,9 +35,9 @@ function ask<T extends Request["type"]>(body: Body<T>): Promise<Response> {
 }
 
 export const PMDCO = {
-  name: "https://raw.githubusercontent.com/materialdigital/core-ontology/v3.1.1/pmdco-full.ttl",
-  title: "PMDco 3.1.1",
-  url: new URL(`${import.meta.env.BASE_URL}ontology/pmdco-full-3.1.1.ttl`, location.href).href,
+  name: "https://raw.githubusercontent.com/materialdigital/core-ontology/v3.1.2/pmdco-full.ttl",
+  title: "PMDco 3.1.2",
+  url: new URL(`${import.meta.env.BASE_URL}ontology/pmdco-full-3.1.2.ttl`, location.href).href,
 };
 
 export async function loadOntology(): Promise<OntologyInfo> {

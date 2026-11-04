@@ -11,7 +11,7 @@ export const GOLDEN = join(WEB, "tests", "golden");
 /** PMDco tests are slow and skipped unless PMDCO=1 (like the Python pmdco marker).
  * The file comes from PMDCO_FILE or `npm run fetch-pmdco`. */
 export const PMDCO_ENABLED = !!process.env.PMDCO;
-export const PMDCO_FILE = process.env.PMDCO_FILE ?? join(WEB, ".cache", "pmdco-full-3.1.1.ttl");
+export const PMDCO_FILE = process.env.PMDCO_FILE ?? join(WEB, ".cache", "pmdco-full-3.1.2.ttl");
 
 export function fixture(name: string): string {
   return readFileSync(join(FIXTURES, name), "utf8");

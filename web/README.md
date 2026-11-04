@@ -16,7 +16,7 @@ npm install
 npm run dev        # http://localhost:5173/
 ```
 
-`npm run dev` and `npm run build` first download PMDco 3.1.1 into `.cache/` (once) and copy
+`npm run dev` and `npm run build` first download PMDco 3.1.2 into `.cache/` (once) and copy
 it to `public/ontology/`, so the page can load it. Neither copy is committed.
 
 ## Test

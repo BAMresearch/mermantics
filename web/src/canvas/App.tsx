@@ -98,11 +98,11 @@ export function App({ mode, onSwitch, onHome }: { mode: Mode; onSwitch: (id: Mod
   const [boxes, setBoxes, onBoxesChange] = useNodesState<Box>([]);
   const [arrows, setArrows, onArrowsChange] = useEdgesState<Arrow>([]);
   const [docName, setDocName] = useState("model.mmd");
-  const [ontoStatus, setOntoStatus] = useState(mode.ontology ? "Loading PMDco 3.1.1..." : "");
+  const [ontoStatus, setOntoStatus] = useState(mode.ontology ? "Loading PMDco 3.1.2..." : "");
   const [ready, setReady] = useState(false);
   const [checkState, setCheckState] = useState<{ status: string; findings: GlobalFinding[]; passed: string[];
                                                   perUse: Record<string, number> }>(
-    { status: mode.ontology ? "Loading PMDco 3.1.1..." : "", findings: [], passed: [], perUse: {} });
+    { status: mode.ontology ? "Loading PMDco 3.1.2..." : "", findings: [], passed: [], perUse: {} });
   const [pending, setPending] = useState<PendingArrow | null>(null);
   const [notice, setNotice] = useState("");
   const [useCase, setUseCase] = useState<UseCase>(emptyUseCase);

@@ -11,7 +11,7 @@
     "boxes": 23,
     "arrows": 37,
     "ontology_files": [
-      ".cache/pmdco-full-3.1.1.ttl"
+      ".cache/pmdco-full-3.1.2.ttl"
     ],
     "reasoner": null
   },

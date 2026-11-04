@@ -11,7 +11,7 @@ Check a Mermaid data-model diagram against an OWL ontology, with a reasoner.
 Many data models are sketched as Mermaid flowcharts, with ontology IDs written into the
 boxes and arrows ("Simulation: local subclass of PMD_0000933", "has specified input
 OBI_0000293"). `mermantics` reads such a diagram, turns it into OWL, and checks it
-against the ontology it claims to align with (by default PMDco 3.1.1):
+against the ontology it claims to align with (by default PMDco 3.1.2):
 
 1. **IDs**: every ID exists in the ontology, is not deprecated, and is the right kind
    (a class on a box, a property on an arrow).
@@ -35,7 +35,7 @@ to install and nothing sent to a server. You draw on a canvas, in one of two sec
 
 - **Domain-agnostic process modelling**: draw any process with plain boxes (process steps,
   objects, agents, information) and name the arrows in your own words. No ontology is used.
-- **Materials science and engineering**: drag boxes in, search PMDco 3.1.1 for their IDs,
+- **Materials science and engineering**: drag boxes in, search PMDco 3.1.2 for their IDs,
   and connect them with arrows chosen from the relations that fit. The checks run as you
   draw, and a finding points to the box or arrow it is about.
 
@@ -59,7 +59,7 @@ to run checks 1, 2, 4 and 5 only.
 ## Usage
 
 ```bash
-mermantics model.mmd                     # check against PMDco 3.1.1
+mermantics model.mmd                     # check against PMDco 3.1.2
 mermantics model.mmd --fast              # no reasoner, about a second
 mermantics model.mmd -o my-ontology.ttl  # another ontology (file, URL or pmdco:<version>)
 mermantics model.mmd --report report.md --json report.json

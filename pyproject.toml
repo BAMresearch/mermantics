@@ -33,5 +33,5 @@ packages = ["src/mermantics"]
 testpaths = ["tests"]
 markers = [
   "reasoner: needs Java and ROBOT; skipped when they are not available",
-  "pmdco: needs PMDco 3.1.1 (set PMDCO_FILE or allow a download); slow, about 40 s per test",
+  "pmdco: needs PMDco 3.1.2 (set PMDCO_FILE or allow a download); slow, about 40 s per test",
 ]

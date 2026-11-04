@@ -1,5 +1,5 @@
 // Parity with the Python tool in fast mode. The golden files come from the Python CLI
-// (scripts/make-golden-fast.sh): every fixture against tiny.ttl and PMDco 3.1.1.
+// (scripts/make-golden-fast.sh): every fixture against tiny.ttl and PMDco 3.1.2.
 
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";

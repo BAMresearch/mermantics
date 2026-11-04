@@ -75,7 +75,7 @@ export function toMarkdown(useCase: UseCase, boxes: Box[], mermaidText: string, 
 
   const cov = coverage(useCase, boxes);
   out.push("## Data model", "");
-  if (checkStatus !== null) out.push(`Checked against PMDco 3.1.1: ${checkStatus}.`);
+  if (checkStatus !== null) out.push(`Checked against PMDco 3.1.2: ${checkStatus}.`);
   if (useCase.questions.length) {
     out.push(`${cov.linked} of ${useCase.questions.length} competency questions are linked to the model.`);
   }

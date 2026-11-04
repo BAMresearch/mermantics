@@ -23,7 +23,7 @@ def robot():
 @pytest.fixture(scope="session")
 def pmdco():
     """PMDco from $PMDCO_FILE, or downloaded once into the cache. Skips if unavailable."""
-    source = os.environ.get("PMDCO_FILE", "pmdco:3.1.1")
+    source = os.environ.get("PMDCO_FILE", "pmdco:3.1.2")
     try:
         return Ontology.load([source])
     except OntologyError as exc:

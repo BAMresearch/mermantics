@@ -3,7 +3,7 @@
 **PASSED: 0 errors, 5 warnings, 5 notes**
 
 - Boxes: 23, arrows: 38
-- Ontology: `.cache/pmdco-full-3.1.1.ttl`
+- Ontology: `.cache/pmdco-full-3.1.2.ttl`
 - Reasoner: not used (fast mode)
 
 ## Warnings (5)
