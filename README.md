@@ -31,10 +31,11 @@ axioms that leads to the contradiction.
 ## Web version
 
 **https://ebb2675.github.io/mermantics/** runs the checks in your browser, with nothing
-to install and nothing sent to a server. Write the diagram as Mermaid text or build it with
-forms (add boxes, search the ontology for IDs, connect them with arrows), see it drawn as you
-type, and click a finding to jump to the box or arrow it is about. It uses PMDco 3.1.1, or a
-Turtle file of your own.
+to install and nothing sent to a server. Draw the model on a canvas: drag boxes in, search
+the ontology for their IDs, and connect them with arrows chosen from the relations that fit.
+The checks run as you draw, and a finding points to the box or arrow it is about. The canvas
+saves a plain Mermaid file, the same one the command line tool checks; "Show Mermaid" shows
+it as text. It uses PMDco 3.1.1.
 
 The web version runs the fast checks for now (1, 2, 4 and 5, like `--fast`); the reasoner
 checks are planned. The code is in [`web/`](web/README.md).

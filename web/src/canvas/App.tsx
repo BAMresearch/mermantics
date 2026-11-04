@@ -21,6 +21,7 @@ import { check, loadOntology, supers } from "./checker.js";
 import { ArrowDetails, BoxDetails, Overview, SelectionPanel, type GlobalFinding } from "./Details.js";
 import { FloatingEdge } from "./FloatingEdge.js";
 import { layout } from "./layout.js";
+import { MermaidPanel } from "./MermaidPanel.js";
 import { emptyUseCase, fromMermaid, makeId, toMermaid, type Arrow, type ArrowData, type Box, type BoxData, type Problem,
          type UseCase } from "./model.js";
 import { EXTRA_SHAPES, KIND_BY_ANCESTOR, SHAPES, shapeOf, type Shape, type ShapeKind } from "./palette.js";
@@ -108,6 +109,7 @@ export function App() {
   const [useCase, setUseCase] = useState<UseCase>(emptyUseCase);
   const [tab, setTab] = useState<"model" | "usecase">("model");
   const [workshop, setWorkshop] = useState(false);
+  const [showMermaid, setShowMermaid] = useState(false);
   const [focused, setFocused] = useState<string | null>(null); // competency question shown on the canvas
   const [patternUses, setPatternUses] = useState<PatternUse[]>([]);
   const [myPatterns, setMyPatterns] = useState<Pattern[]>(loadMine);
@@ -452,8 +454,6 @@ export function App() {
     requestAnimationFrame(() => flow.fitView({ padding: 0.15, duration: 300 }));
   };
 
-  const base = import.meta.env.BASE_URL;
-
   return (
     <div className={`app${workshop ? " workshop" : ""}`} onPointerMove={(e) => { pointer.current = { x: e.clientX, y: e.clientY }; }}>
       <header className="bar">
@@ -469,6 +469,11 @@ export function App() {
           <button type="button" onClick={() => { setBoxes([]); setArrows([]); setUseCase(emptyUseCase()); setPatternUses([]); setFocused(null); setDocName("model.mmd"); }}>New</button>
           <button type="button" onClick={() => fileInput.current?.click()}>Open...</button>
           <button type="button" onClick={download}>Download .mmd</button>
+          <button type="button" className={showMermaid ? "toggle on" : "toggle"} aria-pressed={showMermaid}
+                  title="See the diagram as Mermaid text, the format mermantics saves"
+                  onClick={() => setShowMermaid((s) => !s)}>
+            Show Mermaid
+          </button>
           <input ref={fileInput} type="file" accept=".mmd,.md,.txt" hidden onChange={async (e) => {
             const file = e.target.files?.[0];
             if (file) await open(await file.text(), file.name);
@@ -488,7 +493,6 @@ export function App() {
         </div>
         <div className="bar-spacer" />
         <span className="onto">Checked against <b>{ontoStatus}</b></span>
-        <a className="classic" href={`${base}index.html`}>Text editor</a>
       </header>
 
       <div className="body">
@@ -573,6 +577,9 @@ export function App() {
                           toVocab={boxes.find((b) => b.id === pending.target)?.data.kind === "vocab"}
                           own={ownRelations} onRemember={rememberRelation}
                           onChoose={choose} onCancel={() => setPending(null)} />
+          )}
+          {showMermaid && (
+            <MermaidPanel text={toMermaid(boxes, arrows, useCase, patternUses)} onClose={() => setShowMermaid(false)} />
           )}
         </main>
 

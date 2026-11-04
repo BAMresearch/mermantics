@@ -13,11 +13,6 @@ export default defineConfig(({ command, isPreview }) => ({
   // The logo and favicon come from the repo root (assets/).
   server: { fs: { allow: [".."] } },
   worker: { format: "es" },
-  // Mermaid's large chunks are diagram types and layouts that only load when used.
-  build: {
-    chunkSizeWarningLimit: 2000,
-    // Two pages: the text editor (index.html) and the canvas editor (canvas.html).
-    rollupOptions: { input: { main: "index.html", canvas: "canvas.html" } },
-  },
+  build: { chunkSizeWarningLimit: 2000 },
   plugins: [react()],
 }));

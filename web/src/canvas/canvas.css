@@ -36,10 +36,10 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .bar-group { display: flex; gap: 6px; align-items: center; }
 .bar-spacer { flex: 1; }
 .bar button, .bar select { border: 1px solid var(--line); background: #fff; border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+.bar select { max-width: 170px; }
 .bar button:hover, .bar select:hover { border-color: #cbd5e1; background: #f8fafc; }
 .onto { color: var(--muted); font-size: 13px; }
 .onto b { color: var(--text); font-weight: 600; }
-.classic { color: var(--muted); font-size: 13px; }
 
 .body { flex: 1; display: grid; grid-template-columns: 236px 1fr 340px; min-height: 0; }
 
@@ -255,3 +255,14 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .check { display: flex; gap: 6px; align-items: center; font-size: 12.5px; color: #475569; }
 .menu input[type="checkbox"] { width: auto; margin: 0; flex: none; }
 .menu { max-height: calc(100% - 16px); overflow-y: auto; }
+
+/* Show Mermaid: the diagram as text, read-only */
+.mermaid-panel { position: absolute; z-index: 15; top: 12px; right: 12px; bottom: 12px; width: min(460px, calc(100% - 24px));
+  display: flex; flex-direction: column; background: #fff; border: 1px solid var(--line); border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12); }
+.mermaid-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.mermaid-head button { border: 1px solid var(--line); background: #fff; border-radius: 8px; padding: 4px 10px; cursor: pointer; font-size: 13px; }
+.mermaid-head button.link { border: none; padding: 4px 6px; }
+.mermaid-text { flex: 1; margin: 0; padding: 12px; overflow: auto; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: var(--text); background: #f8fafc; white-space: pre; user-select: text; }
+.mermaid-foot { margin: 0; padding: 8px 12px; border-top: 1px solid var(--line); }

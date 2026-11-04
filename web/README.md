@@ -48,10 +48,12 @@ workflow change).
 |---|---|
 | `src/core/` | The checker, ported module by module from `src/mermantics/`. Pure TypeScript with no DOM, so it runs in Node (tests) and in the browser. Also `edit.ts` (text edits for the forms) and `terms.ts` (ontology term search). |
 | `src/worker/` | A Web Worker that holds the ontology and runs the checks and term searches, so the page never freezes. |
-| `src/ui/` | The page: editor, forms, preview and findings. Plain TypeScript, no framework. |
+| `src/canvas/` | The page: a canvas editor (React and React Flow) that writes the diagram as Mermaid and checks it in the worker. |
 | `examples/` | The example diagrams in the page's Examples menu. |
+| `patterns/` | The built-in patterns in the canvas palette. |
 | `scripts/` | Downloading PMDco and making the golden files. |
 | `tests/` | vitest tests. |
 
-The Mermaid text is always the only copy of the diagram: the forms read it and write small
-edits back into it.
+The canvas keeps the boxes and arrows in memory and writes them as Mermaid after each
+change; that Mermaid text is what is checked, saved and downloaded. Box positions, use case
+notes and patterns go into `%% mermantics-...` comment lines, which Mermaid ignores.
