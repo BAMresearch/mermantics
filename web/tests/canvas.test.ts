@@ -14,7 +14,7 @@ import { PMDCO_ENABLED, PMDCO_FILE, WEB, loadOntology } from "./helpers.js";
 
 const example = (name: string) => readFileSync(join(WEB, "examples", name), "utf8");
 const NAMES = ["process-example.mmd", "simulation-example.mmd", "broken-unknown-id.mmd",
-               "broken-impossible-class.mmd", "broken-wrong-relation.mmd"];
+               "broken-impossible-class.mmd", "broken-wrong-relation.mmd", "coffee-example.mmd"];
 
 /** What the checker sees in a diagram: boxes (label lines, styles) and arrows. */
 function meaning(text: string) {
@@ -41,6 +41,33 @@ test("box positions survive a round trip", () => {
   const back = fromMermaid(toMermaid(imported.boxes, imported.arrows));
   expect(back.positioned).toBe(true);
   expect(back.boxes.map((b) => b.position)).toEqual(imported.boxes.map((b) => b.position));
+});
+
+test("box kinds survive a round trip, so process models keep their shapes", () => {
+  const imported = fromMermaid(example("coffee-example.mmd"));
+  expect(imported.warnings).toEqual([]);
+  const kindOf = (boxes: typeof imported.boxes) => Object.fromEntries(boxes.map((b) => [b.id, b.data.kind]));
+  expect(kindOf(imported.boxes)).toMatchObject({ Brew: "process", Beans: "thing", Barista: "agent", Recipe: "information" });
+  const back = fromMermaid(toMermaid(imported.boxes, imported.arrows));
+  expect(kindOf(back.boxes)).toEqual(kindOf(imported.boxes));
+});
+
+test("process model arrows are plain words, not linked to an ontology", () => {
+  const imported = fromMermaid(example("coffee-example.mmd"));
+  const brew = imported.arrows.find((a) => a.source === "Brew" && a.target === "Barista")!;
+  expect(brew.data).toMatchObject({ kind: "relation", words: "carried out by", curie: "", own: true });
+  expect(meaning(toMermaid(imported.boxes, imported.arrows))).toEqual(meaning(example("coffee-example.mmd")));
+});
+
+test("a stored kind does not override a note or a list of options", () => {
+  const text = [
+    "flowchart TB",
+    '    N["<b>Note</b><br>hello"]:::note',
+    '    A["<b>A</b>"]:::local',
+    '%% mermantics-kinds {"N":"process","A":"agent","B":"nonsense"}',
+  ].join("\n");
+  const kinds = fromMermaid(text).boxes.map((b) => [b.id, b.data.kind]);
+  expect(kinds).toEqual([["N", "note"], ["A", "agent"]]);
 });
 
 describe.skipIf(!PMDCO_ENABLED)("on PMDco", () => {

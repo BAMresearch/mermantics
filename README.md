@@ -31,11 +31,16 @@ axioms that leads to the contradiction.
 ## Web version
 
 **https://ebb2675.github.io/mermantics/** runs the checks in your browser, with nothing
-to install and nothing sent to a server. Draw the model on a canvas: drag boxes in, search
-the ontology for their IDs, and connect them with arrows chosen from the relations that fit.
-The checks run as you draw, and a finding points to the box or arrow it is about. The canvas
-saves a plain Mermaid file, the same one the command line tool checks; "Show Mermaid" shows
-it as text. It uses PMDco 3.1.1.
+to install and nothing sent to a server. You draw on a canvas, in one of two sections:
+
+- **Domain-agnostic process modelling**: draw any process with plain boxes (process steps,
+  objects, agents, information) and name the arrows in your own words. No ontology is used.
+- **Materials science and engineering**: drag boxes in, search PMDco 3.1.1 for their IDs,
+  and connect them with arrows chosen from the relations that fit. The checks run as you
+  draw, and a finding points to the box or arrow it is about.
+
+Both save a plain Mermaid file, the same one the command line tool checks; "Show Mermaid"
+shows it as text.
 
 The web version runs the fast checks for now (1, 2, 4 and 5, like `--fast`); the reasoner
 checks are planned. The code is in [`web/`](web/README.md).

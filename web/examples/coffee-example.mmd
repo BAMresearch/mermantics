@@ -1,0 +1,33 @@
+flowchart TB
+
+%% A made-up example of a domain-agnostic process model: brewing filter coffee.
+%% The arrows are plain words; nothing here is linked to an ontology.
+
+    Grind["<b>Grind the beans</b>"]:::local
+    Brew["<b>Brew</b><br><br>water temperature, brewing time"]:::local
+    Serve["<b>Serve</b>"]:::local
+
+    Beans["<b>Coffee beans</b><br><br>origin, roast date"]:::local
+    Ground["<b>Ground coffee</b><br><br>grind size"]:::local
+    Water["<b>Water</b>"]:::local
+    Coffee["<b>Cup of coffee</b>"]:::local
+    Grinder["<b>Grinder</b>"]:::local
+    Barista["<b>Barista</b>"]:::local
+    Recipe["<b>Recipe</b><br><br>coffee to water ratio"]:::local
+
+    Grind -. "has input" .-> Beans
+    Grind -. "has output" .-> Ground
+    Grind -. "uses" .-> Grinder
+    Grind -. "comes before" .-> Brew
+    Brew -. "has input" .-> Ground
+    Brew -. "has input" .-> Water
+    Brew -. "uses" .-> Recipe
+    Brew -. "has output" .-> Coffee
+    Brew -. "carried out by" .-> Barista
+    Brew -. "comes before" .-> Serve
+    Serve -. "has input" .-> Coffee
+    Serve -. "carried out by" .-> Barista
+
+    classDef local fill:#dbeafe,stroke:#1d4ed8,stroke-width:2px,color:#0f172a
+
+%% mermantics-kinds {"Grind":"process","Brew":"process","Serve":"process","Beans":"thing","Ground":"thing","Water":"thing","Coffee":"thing","Grinder":"thing","Barista":"agent","Recipe":"information"}

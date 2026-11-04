@@ -55,5 +55,11 @@ workflow change).
 | `tests/` | vitest tests. |
 
 The canvas keeps the boxes and arrows in memory and writes them as Mermaid after each
-change; that Mermaid text is what is checked, saved and downloaded. Box positions, use case
-notes and patterns go into `%% mermantics-...` comment lines, which Mermaid ignores.
+change; that Mermaid text is what is checked, saved and downloaded. Box positions, box kinds
+(the shape a box is drawn as), use case notes and patterns go into `%% mermantics-...`
+comment lines, which Mermaid and the checker ignore.
+
+The canvas has two sections, set up in `src/canvas/mode.ts`: process modelling (plain
+shapes and relations, no ontology, no checks) and materials science and engineering
+(PMDco, checked as you draw). The start page picks one; `?mode=process` or `?mode=mse` in
+the URL opens a section directly. Each section keeps its own diagram in the browser.
