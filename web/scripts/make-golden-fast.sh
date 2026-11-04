@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Produce the reference outputs for the parity tests with the Python CLI in fast mode:
-# every fixture in tests/fixtures/ against tiny.ttl and PMDco 3.1.1, saved as JSON,
+# every fixture in tests/fixtures/ against tiny.ttl and PMDco 3.1.2, saved as JSON,
 # Markdown, terminal text and the generated OWL (Turtle) under web/tests/golden/fast/.
 #
 # Run from web/ after `npm run fetch-pmdco`, with the Python tool installed in web/.venv
@@ -10,7 +10,7 @@ cd "$(dirname "$0")/.."
 
 CLI=${MERMANTICS_CLI:-.venv/bin/mermantics}
 OUT=tests/golden/fast
-PMDCO=.cache/pmdco-full-3.1.1.ttl
+PMDCO=.cache/pmdco-full-3.1.2.ttl
 # Python's set order depends on the string hash seed; fix it so reruns give the same files.
 export PYTHONHASHSEED=0
 

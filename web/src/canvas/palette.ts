@@ -3,7 +3,7 @@
  * plain words, for both sections of the canvas.
  *
  * Materials science and engineering: each shape starts with an ontology class (PMDco
- * 3.1.1); the user can make it more specific later. The IDs were checked against PMDco 3.1.1.
+ * 3.1.2); the user can make it more specific later. The IDs were checked against PMDco 3.1.2.
  *
  * Process modelling: plain shapes and relations with no ontology behind them.
  */

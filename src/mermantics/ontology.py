@@ -17,7 +17,7 @@ from rdflib.namespace import SKOS
 
 PMDCO_SHORTHAND = re.compile(r"^pmdco:(\d+\.\d+\.\d+)$")
 PMDCO_URL = "https://raw.githubusercontent.com/materialdigital/core-ontology/v{version}/pmdco-full.ttl"
-DEFAULT_ONTOLOGY = "pmdco:3.1.1"
+DEFAULT_ONTOLOGY = "pmdco:3.1.2"
 
 _DEPRECATED_PREFIXES = ("obsolete", "deprecated")
 

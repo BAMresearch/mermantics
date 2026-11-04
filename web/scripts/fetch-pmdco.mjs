@@ -1,4 +1,4 @@
-// Download PMDco 3.1.1 (pmdco-full.ttl) into web/.cache/ for the PMDco tests and the
+// Download PMDco 3.1.2 (pmdco-full.ttl) into web/.cache/ for the PMDco tests and the
 // golden files, and copy it to public/ontology/ so the web page can load it.
 // Same URL as PMDCO_URL in src/mermantics/ontology.py.
 // Usage (from web/): npm run fetch-pmdco (also runs before npm run dev and npm run build)
@@ -7,7 +7,7 @@ import { copyFile, mkdir, rename, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const VERSION = "3.1.1";
+const VERSION = "3.1.2";
 const URL = `https://raw.githubusercontent.com/materialdigital/core-ontology/v${VERSION}/pmdco-full.ttl`;
 const web = join(dirname(fileURLToPath(import.meta.url)), "..");
 const target = join(web, ".cache", `pmdco-full-${VERSION}.ttl`);
