@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import type { RelationFit } from "../core/relations.js";
 import { relations } from "./checker.js";
-import { COMMON_RELATIONS, wordsFor } from "./palette.js";
+import { COMMON_RELATIONS, PROCESS_RELATIONS, wordsFor } from "./palette.js";
 
 export interface Choice {
   kind: "relation" | "inherit";
@@ -19,11 +19,9 @@ export interface OwnRelation {
   name: string; // the ontology's label for curie
 }
 
-const OWN_KEY = "mermantics-my-relations";
-
-export function loadOwnRelations(): OwnRelation[] {
+export function loadOwnRelations(key: string): OwnRelation[] {
   try {
-    const raw = JSON.parse(localStorage.getItem(OWN_KEY) ?? "[]") as unknown;
+    const raw = JSON.parse(localStorage.getItem(key) ?? "[]") as unknown;
     if (!Array.isArray(raw)) return [];
     return raw.filter((r): r is OwnRelation => !!r && typeof r === "object" && typeof (r as OwnRelation).words === "string"
       && typeof (r as OwnRelation).curie === "string" && typeof (r as OwnRelation).name === "string");
@@ -32,8 +30,8 @@ export function loadOwnRelations(): OwnRelation[] {
   }
 }
 
-export function saveOwnRelations(list: OwnRelation[]) {
-  try { localStorage.setItem(OWN_KEY, JSON.stringify(list)); } catch { /* storage can be off */ }
+export function saveOwnRelations(key: string, list: OwnRelation[]) {
+  try { localStorage.setItem(key, JSON.stringify(list)); } catch { /* storage can be off */ }
 }
 
 /** The relations offered first: the common ones, and the user's own ones whose parent fits. */
@@ -213,6 +211,75 @@ export function RelationMenu({ x, y, srcName, dstName, srcClasses, dstClasses, t
           </div>
         </>
       )}
+      <div className="menu-foot">
+        <button type="button" className="link" onClick={onCancel}>Cancel</button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The arrow menu for process modelling: plain relations, the user's own ones, and a field
+ * to type any other name. Nothing is linked to an ontology.
+ */
+export function PlainRelationMenu({ x, y, srcName, dstName, own, onChoose, onRemember, onCancel }: {
+  x: number;
+  y: number;
+  srcName: string;
+  dstName: string;
+  own: OwnRelation[];
+  onChoose: (choice: Choice) => void;
+  onRemember: (relation: OwnRelation) => void;
+  onCancel: () => void;
+}) {
+  const [typed, setTyped] = useState("");
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onCancel(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onCancel]);
+
+  const pick = (words: string) => onChoose({ kind: "relation", name: words, curie: "", words, own: true });
+  const mine = own.filter((r) => !r.curie && !PROCESS_RELATIONS.includes(r.words));
+  const add = () => {
+    const words = typed.trim().replace(/\s+/g, " ");
+    if (!words) return;
+    // Typed names come back in the menu next time, under "My relations".
+    if (!PROCESS_RELATIONS.includes(words)) onRemember({ words, curie: "", name: words });
+    pick(words);
+  };
+
+  return (
+    <div className="menu" style={{ left: x, top: y, maxHeight: `calc(100% - ${y + 8}px)` }} onMouseDown={(e) => e.stopPropagation()}>
+      <div className="menu-head">
+        <b>{srcName}</b> → <b>{dstName}</b>
+      </div>
+      <div className="menu-section">
+        <input autoFocus placeholder="Type a relation, e.g. heated in" value={typed}
+               onChange={(e) => setTyped(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") add(); }} />
+        {typed.trim() && (
+          <button type="button" className="primary" onClick={add}>Add "{typed.trim()}"</button>
+        )}
+      </div>
+      <div className="menu-section">
+        {mine.length > 0 && <div className="menu-label">My relations</div>}
+        {mine.map((r) => (
+          <button type="button" key={r.words} className="menu-item" onClick={() => pick(r.words)}>
+            <span>{r.words}</span>
+          </button>
+        ))}
+        {mine.length > 0 && <div className="menu-label">Common</div>}
+        {PROCESS_RELATIONS.map((w) => (
+          <button type="button" key={w} className="menu-item" onClick={() => pick(w)}>
+            <span>{w}</span>
+          </button>
+        ))}
+        <button type="button" className="menu-item" onClick={() => onChoose({ kind: "inherit", name: "", curie: "", words: "is a kind of", own: false })}>
+          <span>is a kind of</span>
+          <span className="menu-id">{srcName} is a more specific kind of {dstName}</span>
+        </button>
+      </div>
       <div className="menu-foot">
         <button type="button" className="link" onClick={onCancel}>Cancel</button>
       </div>

@@ -13,9 +13,6 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 
 import logo from "../../../assets/mermantics-logo.svg";
-import brokenC from "../../examples/broken-wrong-relation.mmd?raw";
-import processExample from "../../examples/process-example.mmd?raw";
-import simulation from "../../examples/simulation-example.mmd?raw";
 import { BoxNode, worst } from "./BoxNode.js";
 import { check, loadOntology, supers } from "./checker.js";
 import { ArrowDetails, BoxDetails, Overview, SelectionPanel, type GlobalFinding } from "./Details.js";
@@ -24,27 +21,23 @@ import { layout } from "./layout.js";
 import { MermaidPanel } from "./MermaidPanel.js";
 import { emptyUseCase, fromMermaid, makeId, toMermaid, type Arrow, type ArrowData, type Box, type BoxData, type Problem,
          type UseCase } from "./model.js";
-import { EXTRA_SHAPES, KIND_BY_ANCESTOR, SHAPES, shapeOf, type Shape, type ShapeKind } from "./palette.js";
+import { MODES, type Mode, type ModeId } from "./mode.js";
+import { KIND_BY_ANCESTOR, shapeOf, type Shape, type ShapeKind } from "./palette.js";
 import { BUILT_IN, checkUses, instantiate, loadMine, parsePattern, patternFromSelection, readUses, saveMine, slug,
          type Pattern, type PatternUse } from "./patterns.js";
-import { loadOwnRelations, RelationMenu, saveOwnRelations, type Choice, type OwnRelation } from "./RelationMenu.js";
+import { loadOwnRelations, PlainRelationMenu, RelationMenu, saveOwnRelations, type Choice,
+         type OwnRelation } from "./RelationMenu.js";
 import { toMarkdown } from "./usecase.js";
 import { UseCasePanel } from "./UseCasePanel.js";
 
-const EXAMPLES = [
-  { name: "process-chain.mmd", title: "Process chain: machining, heat treatment, tensile test", text: processExample },
-  { name: "simulation.mmd", title: "Simulation data model", text: simulation },
-  { name: "wrong-relation.mmd", title: "A model with a mistake", text: brokenC },
-];
-const STORAGE_KEY = "mermantics-canvas";
 const nodeTypes: NodeTypes = { box: BoxNode };
 const edgeTypes: EdgeTypes = { floating: FloatingEdge };
 
-function store(text: string) {
-  try { localStorage.setItem(STORAGE_KEY, text); } catch { /* storage can be off */ }
+function storeIn(key: string, text: string) {
+  try { localStorage.setItem(key, text); } catch { /* storage can be off */ }
 }
-function stored(): string | null {
-  try { return localStorage.getItem(STORAGE_KEY); } catch { return null; }
+function storedIn(key: string): string | null {
+  try { return localStorage.getItem(key); } catch { return null; }
 }
 
 /** Shapes for imported boxes, from their classes' superclasses. */
@@ -95,15 +88,21 @@ interface PendingArrow {
   dstClasses: string[];
 }
 
-export function App() {
+/**
+ * The canvas for one section (process modelling, or materials science and engineering).
+ * Switching sections mounts a new App, so each section starts from its own saved diagram.
+ */
+export function App({ mode, onSwitch, onHome }: { mode: Mode; onSwitch: (id: ModeId) => void; onHome: () => void }) {
+  const EXAMPLES = mode.examples;
+  const store = useCallback((text: string) => storeIn(mode.storageKey, text), [mode.storageKey]);
   const [boxes, setBoxes, onBoxesChange] = useNodesState<Box>([]);
   const [arrows, setArrows, onArrowsChange] = useEdgesState<Arrow>([]);
   const [docName, setDocName] = useState("model.mmd");
-  const [ontoStatus, setOntoStatus] = useState("Loading PMDco 3.1.1...");
+  const [ontoStatus, setOntoStatus] = useState(mode.ontology ? "Loading PMDco 3.1.1..." : "");
   const [ready, setReady] = useState(false);
   const [checkState, setCheckState] = useState<{ status: string; findings: GlobalFinding[]; passed: string[];
                                                   perUse: Record<string, number> }>(
-    { status: "Not checked yet", findings: [], passed: [], perUse: {} });
+    { status: mode.ontology ? "Loading PMDco 3.1.1..." : "", findings: [], passed: [], perUse: {} });
   const [pending, setPending] = useState<PendingArrow | null>(null);
   const [notice, setNotice] = useState("");
   const [useCase, setUseCase] = useState<UseCase>(emptyUseCase);
@@ -113,21 +112,21 @@ export function App() {
   const [focused, setFocused] = useState<string | null>(null); // competency question shown on the canvas
   const [patternUses, setPatternUses] = useState<PatternUse[]>([]);
   const [myPatterns, setMyPatterns] = useState<Pattern[]>(loadMine);
-  const [ownRelations, setOwnRelations] = useState<OwnRelation[]>(loadOwnRelations);
+  const [ownRelations, setOwnRelations] = useState<OwnRelation[]>(() => loadOwnRelations(mode.relationsKey));
   const rememberRelation = useCallback((r: OwnRelation) => {
     setOwnRelations((list) => {
       const next = [...list.filter((x) => !(x.words === r.words && x.curie === r.curie)), r];
-      saveOwnRelations(next);
+      saveOwnRelations(mode.relationsKey, next);
       return next;
     });
-  }, []);
+  }, [mode.relationsKey]);
   const forgetRelation = useCallback((r: OwnRelation) => {
     setOwnRelations((list) => {
       const next = list.filter((x) => !(x.words === r.words && x.curie === r.curie));
-      saveOwnRelations(next);
+      saveOwnRelations(mode.relationsKey, next);
       return next;
     });
-  }, []);
+  }, [mode.relationsKey]);
   const patternInput = useRef<HTMLInputElement>(null);
   const wrapper = useRef<HTMLDivElement>(null);
   const pointer = useRef({ x: 0, y: 0 });
@@ -146,7 +145,7 @@ export function App() {
 
   const open = useCallback(async (text: string, name: string) => {
     const imported = fromMermaid(text);
-    let placed = await classify(imported.boxes);
+    let placed = mode.ontology ? await classify(imported.boxes) : imported.boxes;
     if (!imported.positioned) placed = await layout(placed, imported.arrows);
     setBoxes(placed);
     setArrows(imported.arrows);
@@ -156,17 +155,27 @@ export function App() {
     setDocName(name);
     setNotice(imported.warnings.length ? `Some lines could not be read: ${imported.warnings.join("; ")}` : "");
     requestAnimationFrame(() => flow.fitView({ padding: 0.15, duration: 300 }));
-  }, [flow, setArrows, setBoxes]);
+  }, [flow, mode.ontology, setArrows, setBoxes]);
 
   useEffect(() => {
+    const start = () => {
+      setReady(true);
+      const saved = storedIn(mode.storageKey);
+      const example = mode.examples[0]!;
+      void open(saved ?? example.text, saved ? "model.mmd" : example.name);
+    };
+    if (!mode.ontology) {
+      start();
+      return;
+    }
     loadOntology().then((info) => {
       setOntoStatus(`${info.title}`);
-      setReady(true);
-      const saved = stored();
-      const example = EXAMPLES[0]!;
-      void open(saved ?? example.text, saved ? "model.mmd" : example.name);
-    }).catch((e: Error) => setOntoStatus(`Could not load the ontology: ${e.message}`));
-  }, [open]);
+      start();
+    }).catch((e: Error) => {
+      setOntoStatus(`Could not load the ontology: ${e.message}`);
+      setCheckState((c) => ({ ...c, status: `Could not load the ontology: ${e.message}` }));
+    });
+  }, [open, mode]);
 
   // ---- checking -------------------------------------------------------------------------
 
@@ -175,6 +184,11 @@ export function App() {
 
   useEffect(() => {
     if (!ready) return;
+    if (!mode.ontology) {
+      // Nothing to check: only save the diagram.
+      const timer = setTimeout(() => store(toMermaid(boxesRef.current, arrowsRef.current, useCaseRef.current, usesRef.current)), 300);
+      return () => clearTimeout(timer);
+    }
     const mine = ++run.current;
     setCheckState((s) => ({ ...s, status: "Checking..." }));
     const timer = setTimeout(async () => {
@@ -230,14 +244,14 @@ export function App() {
       }
     }, 300);
     return () => clearTimeout(timer);
-  }, [key, ready, setArrows, setBoxes]);
+  }, [key, ready, mode.ontology, store, setArrows, setBoxes]);
 
   // Positions and use case notes are saved too, a little later, as they change.
   useEffect(() => {
     if (!ready) return;
     const timer = setTimeout(() => store(toMermaid(boxesRef.current, arrowsRef.current, useCaseRef.current, usesRef.current)), 800);
     return () => clearTimeout(timer);
-  }, [boxes, useCase, patternUses, ready]);
+  }, [boxes, useCase, patternUses, ready, store]);
 
   // ---- adding boxes ---------------------------------------------------------------------
 
@@ -388,7 +402,7 @@ export function App() {
 
   const shownArrows = useMemo(() => arrows.map((a) => {
     const d = a.data!;
-    const level = workshop ? null : worst(d.problems);
+    const level = workshop || !mode.ontology ? null : worst(d.problems);
     const color = level === "error" ? "#dc2626" : level === "warning" ? "#d97706" : d.kind === "inherit" ? "#475569" : "#64748b";
     return {
       ...a,
@@ -401,7 +415,7 @@ export function App() {
       markerEnd: { type: MarkerType.ArrowClosed, color, width: 18, height: 18 },
       style: { stroke: color, strokeWidth: a.selected ? 2.5 : 1.6, strokeDasharray: d.kind === "inherit" ? undefined : "6 4" },
     };
-  }), [arrows, workshop]);
+  }), [arrows, workshop, mode.ontology]);
 
   // ---- boxes as drawn: question tags, and dimming for the question shown ------------------
 
@@ -413,9 +427,9 @@ export function App() {
     return boxes.map((b) => ({
       ...b,
       className: focus ? (lit.has(b.id) ? "lit" : "dimmed") : undefined,
-      data: { ...b.data, tags: tags.get(b.id) ?? [] },
+      data: { ...b.data, tags: tags.get(b.id) ?? [], plain: !mode.ontology },
     }));
-  }, [boxes, useCase.questions, focused]);
+  }, [boxes, useCase.questions, focused, mode.ontology]);
 
   const showQuestion = useCallback((id: string | null) => {
     setFocused(id);
@@ -444,7 +458,7 @@ export function App() {
   };
 
   const exportUseCase = () => {
-    const md = toMarkdown(useCase, boxes, toMermaid(boxes, arrows, useCase), checkState.status);
+    const md = toMarkdown(useCase, boxes, toMermaid(boxes, arrows, useCase), mode.ontology ? checkState.status : null);
     const base = (useCase.title || docName.replace(/\.mmd$/, "")).replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-|-$/g, "") || "use-case";
     save(md, `${base}.md`);
   };
@@ -457,7 +471,17 @@ export function App() {
   return (
     <div className={`app${workshop ? " workshop" : ""}`} onPointerMove={(e) => { pointer.current = { x: e.clientX, y: e.clientY }; }}>
       <header className="bar">
-        <img className="logo" src={logo} alt="mermantics" />
+        <button type="button" className="logo-button" title="Back to the start page" onClick={onHome}>
+          <img className="logo" src={logo} alt="mermantics" />
+        </button>
+        <div className="switch" role="tablist" aria-label="Section">
+          {(Object.values(MODES)).map((m) => (
+            <button type="button" role="tab" key={m.id} aria-selected={m.id === mode.id} className={m.id === mode.id ? "on" : ""}
+                    title={m.title} onClick={() => m.id !== mode.id && onSwitch(m.id)}>
+              {m.short}
+            </button>
+          ))}
+        </div>
         <div className="bar-group">
           <select value="" onChange={(e) => {
             const ex = EXAMPLES.find((x) => x.name === e.target.value);
@@ -482,23 +506,24 @@ export function App() {
         </div>
         <div className="bar-group">
           <button type="button" onClick={() => void tidy()}>Tidy up</button>
-          <button type="button" className={workshop ? "toggle on" : "toggle"} aria-pressed={workshop}
-                  title="A calmer view for workshops: hides the check results while you draw with domain experts"
-                  onClick={() => setWorkshop((w) => !w)}>
-            Workshop view
-          </button>
+          {mode.ontology && (
+            <button type="button" className={workshop ? "toggle on" : "toggle"} aria-pressed={workshop}
+                    title="A calmer view for workshops: hides the check results while you draw with domain experts"
+                    onClick={() => setWorkshop((w) => !w)}>
+              Workshop view
+            </button>
+          )}
           <button type="button" onClick={exportUseCase} title="The use case, its questions and the diagram as one Markdown file">
             Export use case
           </button>
         </div>
         <div className="bar-spacer" />
-        <span className="onto">Checked against <b>{ontoStatus}</b></span>
       </header>
 
       <div className="body">
         <aside className="palette">
           <h2>Add to the model</h2>
-          {SHAPES.map((s) => (
+          {mode.shapes.map((s) => (
             <button type="button" key={s.kind} className={`shape kind-${s.kind}`} draggable
                     onDragStart={(e) => { e.dataTransfer.setData("application/mermantics-shape", s.kind); e.dataTransfer.effectAllowed = "move"; }}
                     onClick={() => addBox(s)}>
@@ -506,6 +531,7 @@ export function App() {
               <span className="shape-text"><b>{s.title}</b><small>{s.hint}</small></span>
             </button>
           ))}
+          {mode.patterns && (<>
           <h2>Patterns</h2>
           {allPatterns.map((p) => (
             <div key={`${p.builtIn ? "b" : "m"}-${p.id}`} className="pattern-item">
@@ -537,9 +563,10 @@ export function App() {
             else setNotice(`${file.name} is not a pattern file: it has no pattern name. Use "Open..." at the top to open it as a model.`);
           }} />
           <p className="palette-hint">Select several boxes to save them as your own pattern.</p>
+          </>)}
 
           <h2>More</h2>
-          {EXTRA_SHAPES.map((s) => (
+          {mode.extraShapes.map((s) => (
             <button type="button" key={s.kind} className={`shape kind-${s.kind}`} draggable
                     onDragStart={(e) => e.dataTransfer.setData("application/mermantics-shape", s.kind)}
                     onClick={() => addBox(s)}>
@@ -565,13 +592,18 @@ export function App() {
           {boxes.length === 0 && ready && (
             <div className="empty">Drag a shape from the left to start, or open an example.</div>
           )}
-          <button type="button" className={`status ${checkState.findings.some((f) => f.level === "error") ? "bad"
+          {mode.ontology && <button type="button" className={`status ${checkState.findings.some((f) => f.level === "error") ? "bad"
             : checkState.findings.some((f) => f.level === "warning") ? "warn" : "good"}`}
                   onClick={() => { setBoxes((bs) => bs.map((b) => ({ ...b, selected: false }))); setArrows((as) => as.map((a) => ({ ...a, selected: false }))); }}>
             {checkState.status}
-          </button>
+          </button>}
           {notice && <div className="notice" onClick={() => setNotice("")}>{notice}</div>}
-          {pending && (
+          {pending && !mode.ontology && (
+            <PlainRelationMenu x={pending.x} y={pending.y} srcName={nameOf(pending.source)} dstName={nameOf(pending.target)}
+                               own={ownRelations} onRemember={rememberRelation}
+                               onChoose={choose} onCancel={() => setPending(null)} />
+          )}
+          {pending && mode.ontology && (
             <RelationMenu x={pending.x} y={pending.y} srcName={nameOf(pending.source)} dstName={nameOf(pending.target)}
                           srcClasses={pending.srcClasses} dstClasses={pending.dstClasses}
                           toVocab={boxes.find((b) => b.id === pending.target)?.data.kind === "vocab"}
@@ -598,11 +630,11 @@ export function App() {
                           focused={focused} onFocus={showQuestion} />
           ) : (<>
           {selectedBoxes.length > 1 ? (
-            <SelectionPanel count={selectedBoxes.length} arrows={selectionArrows} questions={selectionQuestions}
+            <SelectionPanel count={selectedBoxes.length} arrows={selectionArrows} questions={selectionQuestions} canSave={mode.patterns}
                             onSave={(meta) => { const p = parsePattern(patternText(meta)); if (p) keepPattern(p); }}
                             onDownload={(meta) => save(patternText(meta), `${slug(meta.title)}.mmd`)} />
           ) : selectedBox ? (
-            <BoxDetails box={selectedBox} onChange={(p) => patchBox(selectedBox.id, p)}
+            <BoxDetails box={selectedBox} shapes={mode.shapes} ontology={mode.ontology} onChange={(p) => patchBox(selectedBox.id, p)}
                         questions={useCase.questions.map((q, i) => ({ id: q.id, label: `Q${i + 1}`, text: q.text,
                                                                       linked: q.boxes.includes(selectedBox.id) }))}
                         onToggleQuestion={(qid, on) => toggleLink(qid, selectedBox.id, on)}
@@ -610,12 +642,14 @@ export function App() {
                           .map((p) => ({ pattern: u.title, part: p.name })))}
                         onDelete={() => flow.deleteElements({ nodes: [{ id: selectedBox.id }] })} />
           ) : selectedArrow ? (
-            <ArrowDetails arrow={selectedArrow} srcName={nameOf(selectedArrow.source)} dstName={nameOf(selectedArrow.target)}
+            <ArrowDetails arrow={selectedArrow} ontology={mode.ontology} srcName={nameOf(selectedArrow.source)} dstName={nameOf(selectedArrow.target)}
                           onChange={(p) => patchArrow(selectedArrow.id, p)}
                           onReconnect={() => menuAt(selectedArrow.source, selectedArrow.target, selectedArrow.id)}
                           onDelete={() => flow.deleteElements({ edges: [{ id: selectedArrow.id }] })} />
           ) : (
-            <Overview status={checkState.status} findings={checkState.findings} passed={checkState.passed} onSelect={select}
+            <Overview status={mode.ontology ? checkState.status
+                                : `${boxes.length} box${boxes.length === 1 ? "" : "es"}, ${arrows.length} arrow${arrows.length === 1 ? "" : "s"}`}
+                      ontology={mode.ontology} checkedAgainst={mode.ontology ? ontoStatus : ""} findings={checkState.findings} passed={checkState.passed} onSelect={select}
                       uses={patternUses.map((u) => ({ id: u.id, title: u.title, version: u.version, boxes: u.parts.length,
                                                       problems: checkState.perUse[u.id] ?? 0 }))}
                       onForget={(id) => setPatternUses((us) => us.filter((u) => u.id !== id))}

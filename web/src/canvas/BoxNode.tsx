@@ -27,7 +27,7 @@ function BoxNodeView({ data, selected }: NodeProps<Box>) {
         {shape.title}
       </div>
       <div className="box-name">{data.name || <em>no name</em>}</div>
-      {!isNote && !isVocab && (
+      {!isNote && !isVocab && (data.classId || !data.plain) && (
         data.classId
           ? <div className="box-class" title={data.classId}>{data.classLabel || data.classId}</div>
           : <div className="box-class missing">kind of thing not chosen yet</div>

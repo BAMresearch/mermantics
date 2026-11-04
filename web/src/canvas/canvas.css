@@ -15,6 +15,9 @@
   --k-other: #64748b;
   --k-vocab: #9333ea;
   --k-note: #ca8a04;
+  --k-thing: #d97706;
+  --k-agent: #0d9488;
+  --k-information: #7c3aed;
   --error: #dc2626;
   --warning: #d97706;
   --note: #2563eb;
@@ -31,15 +34,13 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .app { display: flex; flex-direction: column; height: 100%; }
 
 /* ---- top bar ---- */
-.bar { display: flex; align-items: center; gap: 16px; padding: 8px 16px; background: var(--panel); border-bottom: 1px solid var(--line); }
+.bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 8px 16px; background: var(--panel); border-bottom: 1px solid var(--line); }
 .logo { height: 26px; }
 .bar-group { display: flex; gap: 6px; align-items: center; }
 .bar-spacer { flex: 1; }
 .bar button, .bar select { border: 1px solid var(--line); background: #fff; border-radius: 8px; padding: 6px 12px; cursor: pointer; }
 .bar select { max-width: 170px; }
 .bar button:hover, .bar select:hover { border-color: #cbd5e1; background: #f8fafc; }
-.onto { color: var(--muted); font-size: 13px; }
-.onto b { color: var(--text); font-weight: 600; }
 
 .body { flex: 1; display: grid; grid-template-columns: 236px 1fr 340px; min-height: 0; }
 
@@ -65,6 +66,9 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .kind-other { --kc: var(--k-other); }
 .kind-vocab { --kc: var(--k-vocab); }
 .kind-note { --kc: var(--k-note); }
+.kind-thing { --kc: var(--k-thing); }
+.kind-agent { --kc: var(--k-agent); }
+.kind-information { --kc: var(--k-information); }
 .kind-process .dot, .kind-plan .dot { border-radius: 3px; }
 
 /* ---- canvas ---- */
@@ -219,7 +223,6 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .app.workshop .box-name { font-size: 17px; }
 .bar { white-space: nowrap; }
 .bar-group { flex-shrink: 0; }
-.onto { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 
 /* ---- patterns ---- */
 .pattern-item { margin-bottom: 6px; }
@@ -266,3 +269,24 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .mermaid-text { flex: 1; margin: 0; padding: 12px; overflow: auto; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   color: var(--text); background: #f8fafc; white-space: pre; user-select: text; }
 .mermaid-foot { margin: 0; padding: 8px 12px; border-top: 1px solid var(--line); }
+
+/* Sections: the switch in the top bar and the start page */
+.logo-button { border: 0 !important; background: none !important; padding: 0 !important; display: flex; cursor: pointer; }
+.switch { display: flex; flex-shrink: 0; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.bar .switch button { border: 0; border-radius: 0; padding: 6px 12px; background: #fff; color: var(--muted); }
+.bar .switch button + button { border-left: 1px solid var(--line); }
+.bar .switch button.on { background: #eff6ff; color: var(--accent); font-weight: 600; }
+
+.start { min-height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; padding: 40px 24px; }
+.start-logo { height: 40px; }
+.start h1 { margin: 0; font-size: 22px; font-weight: 600; }
+.start-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 340px)); gap: 20px; justify-content: center; width: 100%; }
+.start-card { display: flex; flex-direction: column; gap: 10px; text-align: left; padding: 22px; background: #fff; cursor: pointer;
+  border: 1px solid var(--line); border-top: 4px solid var(--kc, var(--accent)); border-radius: 12px; line-height: 1.45; }
+.start-card:hover { border-color: #cbd5e1; border-top-color: var(--kc, var(--accent)); box-shadow: 0 6px 20px rgba(15, 23, 42, 0.08); }
+.start-card b { font-size: 17px; }
+.start-card span { color: var(--muted); }
+.start-card .start-go { margin-top: auto; color: var(--accent); font-weight: 600; }
+.start-process { --kc: var(--k-agent); }
+.start-mse { --kc: var(--k-process); }
+.start-foot { color: var(--muted); font-size: 13px; margin: 0; }

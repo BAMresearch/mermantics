@@ -2,15 +2,17 @@
  * The canvas model (boxes, arrows and where the boxes sit) and its Mermaid form.
  *
  * The canvas is the editor; Mermaid is the file format. Export writes the same conventions
- * the checker reads (README "How the diagram is read"), plus one comment line with the box
- * positions, which Mermaid and the checker both ignore. Import reads any diagram the
- * checker reads; boxes without a stored position are placed by the automatic layout.
+ * the checker reads (README "How the diagram is read"), plus comment lines with the box
+ * positions and the box kinds (the shape each box is drawn as), which Mermaid and the
+ * checker both ignore. Import reads any diagram the checker reads; boxes without a stored
+ * position are placed by the automatic layout, and boxes without a stored kind get one from
+ * their class (App.classify).
  */
 
 import type { Edge as FlowEdge, Node as FlowNode } from "@xyflow/react";
 
 import { edit, labels, mermaid } from "../core/index.js";
-import { wordsFor, type ShapeKind } from "./palette.js";
+import { isShapeKind, wordsFor, type ShapeKind } from "./palette.js";
 
 export interface Problem {
   level: "error" | "warning" | "note";
@@ -27,6 +29,7 @@ export interface BoxData extends Record<string, unknown> {
   css: string[]; // Mermaid style classes, kept on import and export
   problems: Problem[];
   tags?: string[]; // only for drawing: the competency questions that use this box ("Q1")
+  plain?: boolean; // only for drawing: process modelling, so no "kind of thing not chosen yet"
 }
 
 export interface ArrowData extends Record<string, unknown> {
@@ -108,6 +111,7 @@ function readUseCase(raw: unknown): UseCase {
 export type Arrow = FlowEdge<ArrowData>;
 
 const LAYOUT_PREFIX = "%% mermantics-layout ";
+const KINDS_PREFIX = "%% mermantics-kinds ";
 const USE_CASE_PREFIX = "%% mermantics-usecase ";
 const PATTERN_USES_PREFIX = "%% mermantics-pattern-uses ";
 
@@ -176,6 +180,10 @@ export function toMermaid(boxes: Box[], arrows: Arrow[], useCase: UseCase = empt
   const pos: Record<string, [number, number]> = {};
   for (const b of boxes) pos[b.id] = [Math.round(b.position.x), Math.round(b.position.y)];
   out.push(LAYOUT_PREFIX + JSON.stringify(pos));
+  // Notes and lists of options are known from their style class; the other kinds are kept here.
+  const kinds: Record<string, ShapeKind> = {};
+  for (const b of boxes) if (b.data.kind !== "note" && b.data.kind !== "vocab") kinds[b.id] = b.data.kind;
+  if (Object.keys(kinds).length) out.push(KINDS_PREFIX + JSON.stringify(kinds));
   if (!isEmptyUseCase(useCase)) {
     // Links to boxes that no longer exist are dropped.
     const ids = new Set(boxes.map((b) => b.id));
@@ -239,6 +247,7 @@ export function fromMermaid(text: string): Imported {
   const diagram = mermaid.parse(text);
   const warnings = diagram.findings.map((f) => `${f.where ? `${f.where}: ` : ""}${f.message}`);
   let pos: Record<string, [number, number]> = {};
+  let kinds: Record<string, unknown> = {};
   let useCase = emptyUseCase();
   let patternUses: unknown = [];
   for (const line of text.split(/\r?\n/)) {
@@ -257,6 +266,14 @@ export function fromMermaid(text: string): Imported {
         warnings.push("the use case notes in this file could not be read");
       }
     }
+    if (t.startsWith(KINDS_PREFIX)) {
+      try {
+        const raw = JSON.parse(t.slice(KINDS_PREFIX.length)) as unknown;
+        if (raw && typeof raw === "object" && !Array.isArray(raw)) kinds = raw as Record<string, unknown>;
+      } catch {
+        warnings.push("the stored box kinds could not be read");
+      }
+    }
     if (t.startsWith(LAYOUT_PREFIX.trim())) {
       try {
         pos = JSON.parse(t.slice(LAYOUT_PREFIX.trim().length));
@@ -268,8 +285,10 @@ export function fromMermaid(text: string): Imported {
   const boxes: Box[] = [];
   for (const node of diagram.nodes.values()) {
     const p = pos[node.id];
-    boxes.push({ id: node.id, type: "box", position: { x: p?.[0] ?? 0, y: p?.[1] ?? 0 },
-                 data: { ...readBox(node.label, node.css), problems: [] } });
+    const data = readBox(node.label, node.css);
+    const kind = kinds[node.id];
+    if (data.kind === "other" && isShapeKind(kind) && kind !== "note" && kind !== "vocab") data.kind = kind;
+    boxes.push({ id: node.id, type: "box", position: { x: p?.[0] ?? 0, y: p?.[1] ?? 0 }, data: { ...data, problems: [] } });
   }
   const arrows: Arrow[] = diagram.edges.map((e, i) => {
     if (e.kind === "inherit") {
