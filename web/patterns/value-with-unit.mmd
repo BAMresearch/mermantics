@@ -1,0 +1,14 @@
+flowchart TB
+
+%% Value with a unit: A property with a numeric value, and the unit the value is given in.
+
+    Property["<b>Property</b><br>BFO_0000020 specifically dependent continuant"]:::local
+    Value["<b>Value</b><br>OBI_0001931 scalar value specification<br><br>numeric value"]:::local
+    Unit["<b>Unit</b><br>IAO_0000003 measurement unit label"]:::local
+
+    Property -. "specified by value<br>PMD_0000077" .-> Value
+    Value -. "has measurement unit label<br>IAO_0000039" .-> Unit
+
+    classDef local fill:#dbeafe,stroke:#1d4ed8,stroke-width:2px,color:#0f172a
+
+%% mermantics-pattern {"id":"pmdco-value-with-unit","title":"Value with a unit","version":"0.1.0","description":"A property with a numeric value, and the unit the value is given in.","source":"Based on the PMDco pattern 'scalar value specification' (https://github.com/materialdigital/core-ontology/tree/v3.1.2/patterns, CC BY 4.0), simplified for mermantics.","questions":["What is the value of this property?","In which unit is the value given?"]}

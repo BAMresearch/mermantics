@@ -11,7 +11,9 @@ flowchart TB
 
     WholeProcess -. "starts with<br>RO_0002224" .-> FirstStep
     WholeProcess -. "ends with<br>RO_0002230" .-> LastStep
+    WholeProcess -. "has proper occurrent part<br>BFO_0000118" .-> FirstStep
     WholeProcess -. "has proper occurrent part<br>BFO_0000118" .-> MiddleStep
+    WholeProcess -. "has proper occurrent part<br>BFO_0000118" .-> LastStep
     FirstStep -. "precedes<br>BFO_0000063" .-> MiddleStep
     MiddleStep -. "precedes<br>BFO_0000063" .-> LastStep
     WholeProcess -. "has specified input<br>OBI_0000293" .-> StartingObject
@@ -19,4 +21,4 @@ flowchart TB
 
     classDef local fill:#dbeafe,stroke:#1d4ed8,stroke-width:2px,color:#0f172a
 
-%% mermantics-pattern {"id":"pmdco-process-chain","title":"Process chain","version":"0.1.0","description":"A process made of steps that follow each other, with a first and a last step, and an input and an output of the whole process.","source":"Based on the PMDco pattern 'process chain' (https://github.com/materialdigital/core-ontology/tree/main/patterns, CC BY 4.0), simplified for mermantics.","questions":["Which steps does this process consist of, and in which order?","What did the whole process start from, and what did it produce?"]}
+%% mermantics-pattern {"id":"pmdco-process-chain","title":"Process chain","version":"0.2.0","description":"A process made of steps that follow each other, with a first and a last step, and an input and an output of the whole process.","source":"Based on the PMDco pattern 'process chain' (https://github.com/materialdigital/core-ontology/tree/v3.1.2/patterns, CC BY 4.0), simplified for mermantics.","questions":["Which steps does this process consist of, and in which order?","What did the whole process start from, and what did it produce?"]}
