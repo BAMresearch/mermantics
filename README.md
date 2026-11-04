@@ -6,12 +6,41 @@
 </p>
 
 
-Check a Mermaid data-model diagram against an OWL ontology, with a reasoner.
+Draw process and data models as Mermaid diagrams, and check them against an OWL ontology.
 
-Many data models are sketched as Mermaid flowcharts, with ontology IDs written into the
-boxes and arrows ("Simulation: local subclass of PMD_0000933", "has specified input
-OBI_0000293"). `mermantics` reads such a diagram, turns it into OWL, and checks it
-against the ontology it claims to align with (by default PMDco 3.1.2):
+mermantics has two parts that share one file format, a plain Mermaid flowchart:
+
+- **A canvas in the browser** (https://ebb2675.github.io/mermantics/) to draw the model:
+  drag boxes in, connect them with arrows, and name what the arrows mean.
+- **A checker** (`pip install mermantics`) that reads the diagram, turns it into OWL and
+  checks it against an ontology, with a reasoner. It runs on the command line and in CI.
+
+Because the file is plain Mermaid, it renders wherever Mermaid does (GitHub, GitLab, most
+documentation tools), so the model can live next to the code or the docs and be checked
+on every change.
+
+## Draw: the web canvas
+
+**https://ebb2675.github.io/mermantics/** runs in your browser, with nothing to install
+and nothing sent to a server. It has two sections:
+
+- **Domain-agnostic process modelling**: draw any process with plain boxes (process steps,
+  objects, agents, information) and name the arrows in your own words. No ontology is
+  needed.
+- **Materials science and engineering**: drag boxes in, search PMDco 3.1.2 for their IDs,
+  and connect them with arrows chosen from the relations that fit. The checks run as you
+  draw, and a finding points to the box or arrow it is about.
+
+Both save the same kind of Mermaid file; "Show Mermaid" shows it as text. In the browser
+the checks are the fast ones (1, 2, 4 and 5 below, like `--fast`), against PMDco for now.
+For the reasoner checks or another ontology, use the command line tool. The code is in
+[`web/`](web/README.md).
+
+## Check: a diagram against an ontology
+
+To ground a diagram in an ontology, write ontology IDs into its boxes and arrows, for
+example "Simulation: a local subclass of PMD_0000933" or "has specified input
+OBI_0000293". `mermantics` then checks that the diagram agrees with the ontology:
 
 1. **IDs**: every ID exists in the ontology, is not deprecated, and is the right kind
    (a class on a box, a property on an arrow).
@@ -28,22 +57,10 @@ against the ontology it claims to align with (by default PMDco 3.1.2):
 When the reasoner finds a problem, the report includes its explanation: the chain of
 axioms that leads to the contradiction.
 
-## Web version
-
-**https://ebb2675.github.io/mermantics/** runs the checks in your browser, with nothing
-to install and nothing sent to a server. You draw on a canvas, in one of two sections:
-
-- **Domain-agnostic process modelling**: draw any process with plain boxes (process steps,
-  objects, agents, information) and name the arrows in your own words. No ontology is used.
-- **Materials science and engineering**: drag boxes in, search PMDco 3.1.2 for their IDs,
-  and connect them with arrows chosen from the relations that fit. The checks run as you
-  draw, and a finding points to the box or arrow it is about.
-
-Both save a plain Mermaid file, the same one the command line tool checks; "Show Mermaid"
-shows it as text.
-
-The web version runs the fast checks for now (1, 2, 4 and 5, like `--fast`); the reasoner
-checks are planned. The code is in [`web/`](web/README.md).
+Any OWL ontology works: a file, a URL, or several of them, and their `owl:imports` are
+followed. PMDco 3.1.2 is the default when you do not name one. Boxes and arrows without an
+ID are reported as notes, not errors, so a plain process diagram passes and can be
+grounded step by step.
 
 ## Install
 
@@ -59,17 +76,25 @@ to run checks 1, 2, 4 and 5 only.
 ## Usage
 
 ```bash
-mermantics model.mmd                     # check against PMDco 3.1.2
+mermantics model.mmd -o my-ontology.ttl  # check against your ontology (file or URL)
+mermantics model.mmd -o a.ttl -o b.ttl   # several ontologies together
+mermantics model.mmd                     # no -o: PMDco 3.1.2 (or -o pmdco:<version>)
 mermantics model.mmd --fast              # no reasoner, about a second
-mermantics model.mmd -o my-ontology.ttl  # another ontology (file, URL or pmdco:<version>)
 mermantics model.mmd --report report.md --json report.json
+```
+
+IDs with an OBO prefix (`BFO_`, `IAO_`, `OBI_`, `RO_`, ...) are found without any
+setup. For other ontologies, tell the tool where an ID prefix points:
+
+```bash
+mermantics model.mmd -o https://example.org/myo.ttl --prefix MYO=https://example.org/myo/MYO_
 ```
 
 Exit codes: `0` no errors, `1` errors found, `2` the tool could not run (missing file,
 no Java, download failed). Warnings and notes never fail the run.
 
-A run against the full PMDco takes about 40 seconds: one reasoner pass for the class
-structure and a quicker consistency check for the example data.
+With the reasoner, a run takes one reasoner pass for the class structure and a quicker
+consistency check for the example data; against the full PMDco that is about 40 seconds.
 
 ## How the diagram is read
 
@@ -83,13 +108,13 @@ can be changed with options.
 | Dotted, thick or labelled arrow `A -. "has part<br>BFO_0000051" .-> B` | A relation between instances; the first ID in the label is the property |
 | Box with style class `note` | Ignored (`--skip-class`) |
 | Box with style class `vocab` | A vocabulary: its terms should be subclasses of the class pointing at it (`--vocab-class`) |
-| IDs with prefix `PMD` | `https://w3id.org/pmd/co/PMD_...`; any other prefix becomes an OBO PURL (`--prefix XYZ=https://...`) |
+| ID prefixes | `PMD` maps to `https://w3id.org/pmd/co/PMD_...`; any other prefix becomes an OBO PURL; add your own with `--prefix XYZ=https://...` |
 
 An ID is an upper-case prefix, an underscore and 5 to 9 digits (`IAO_0000030`), so names
 like `MAT_SIM_STRUCTURE` are not mistaken for IDs. Labels may use `<br>`, `<b>` and HTML
 entities. Lines the parser does not understand are reported, never silently dropped.
 
-A small example:
+A small example, aligned to PMDco:
 
 ```mermaid
 flowchart TB
