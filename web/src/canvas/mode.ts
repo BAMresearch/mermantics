@@ -74,30 +74,25 @@ export const MODES: Record<ModeId, Mode> = {
   },
 };
 
-const CHOSEN_KEY = "mermantics-mode";
+// Earlier versions remembered the last section here and skipped the start page; it is cleared.
+const OLD_CHOSEN_KEY = "mermantics-mode";
 
 function isModeId(v: unknown): v is ModeId {
   return v === "process" || v === "mse";
 }
 
-/** The section from the URL (?mode=process or ?mode=mse), else the one used last, else none. */
+/**
+ * The section from the URL (?mode=process or ?mode=mse), else none, so a plain link always
+ * opens the start page.
+ */
 export function initialMode(): ModeId | null {
+  try { localStorage.removeItem(OLD_CHOSEN_KEY); } catch { /* storage can be off */ }
   const fromUrl = new URLSearchParams(location.search).get("mode");
-  if (isModeId(fromUrl)) return fromUrl;
-  try {
-    const last = localStorage.getItem(CHOSEN_KEY);
-    return isModeId(last) ? last : null;
-  } catch {
-    return null;
-  }
+  return isModeId(fromUrl) ? fromUrl : null;
 }
 
-/** Remember the section and show it in the URL, so a link opens the same section. */
+/** Show the section in the URL, so reloading or sharing the link opens the same section. */
 export function rememberMode(id: ModeId | null) {
-  try {
-    if (id) localStorage.setItem(CHOSEN_KEY, id);
-    else localStorage.removeItem(CHOSEN_KEY);
-  } catch { /* storage can be off */ }
   const url = new URL(location.href);
   if (id) url.searchParams.set("mode", id);
   else url.searchParams.delete("mode");

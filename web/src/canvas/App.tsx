@@ -7,7 +7,7 @@
  */
 
 import {
-  Background, ConnectionMode, Controls, MarkerType, MiniMap, ReactFlow, useEdgesState, useNodesState, useReactFlow,
+  Background, ConnectionMode, SelectionMode, Controls, MarkerType, MiniMap, ReactFlow, useEdgesState, useNodesState, useReactFlow,
   type Connection, type EdgeTypes, type IsValidConnection, type NodeTypes, type OnConnectEnd,
 } from "@xyflow/react";
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
@@ -583,6 +583,10 @@ export function App({ mode, onSwitch, onHome }: { mode: Mode; onSwitch: (id: Mod
             onConnect={onConnect} onConnectEnd={onConnectEnd} isValidConnection={isValidConnection}
             connectionMode={ConnectionMode.Loose} connectionRadius={40}
             deleteKeyCode={["Backspace", "Delete"]} onPaneClick={() => setPending(null)} multiSelectionKeyCode={["Shift", "Meta", "Control"]}
+            // Like draw.io: dragging on empty canvas draws a selection rectangle; the canvas moves with
+            // the scroll wheel or trackpad, the middle or right mouse button, or Space + drag.
+            selectionOnDrag selectionKeyCode={null} selectionMode={SelectionMode.Full} panOnDrag={[1, 2]} panOnScroll
+            onPaneContextMenu={(e) => e.preventDefault()}
             minZoom={0.2} fitView>
             <Background gap={20} color="#e2e8f0" />
             <Controls showInteractive={false} />
@@ -631,6 +635,7 @@ export function App({ mode, onSwitch, onHome }: { mode: Mode; onSwitch: (id: Mod
           ) : (<>
           {selectedBoxes.length > 1 ? (
             <SelectionPanel count={selectedBoxes.length} arrows={selectionArrows} questions={selectionQuestions} canSave={mode.patterns}
+                            onDelete={() => void flow.deleteElements({ nodes: selectedBoxes.map((b) => ({ id: b.id })) })}
                             onSave={(meta) => { const p = parsePattern(patternText(meta)); if (p) keepPattern(p); }}
                             onDownload={(meta) => save(patternText(meta), `${slug(meta.title)}.mmd`)} />
           ) : selectedBox ? (
