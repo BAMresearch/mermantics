@@ -15,6 +15,12 @@ import processChain from "../../patterns/process-chain.mmd?raw";
 import measurement from "../../patterns/measurement.mmd?raw";
 import role from "../../patterns/role-in-process.mmd?raw";
 import propertyValue from "../../patterns/property-with-value.mmd?raw";
+import simulationIO from "../../patterns/simulation-inputs-outputs.mmd?raw";
+import valueUnit from "../../patterns/value-with-unit.mmd?raw";
+import categorical from "../../patterns/categorical-value.mmd?raw";
+import composition from "../../patterns/chemical-composition.mmd?raw";
+import objectMaterial from "../../patterns/object-and-material.mmd?raw";
+import deviceIdentifier from "../../patterns/device-identifier.mmd?raw";
 
 const META_PREFIX = "%% mermantics-pattern ";
 
@@ -92,7 +98,8 @@ export function parsePattern(text: string, builtIn = false): Pattern | null {
   return { ...meta, text, builtIn };
 }
 
-export const BUILT_IN: Pattern[] = [inputsOutputs, processChain, measurement, role, propertyValue]
+export const BUILT_IN: Pattern[] = [inputsOutputs, processChain, measurement, role, propertyValue, simulationIO, valueUnit,
+                                    categorical, composition, objectMaterial, deviceIdentifier]
   .map((t) => parsePattern(t, true)).filter((p): p is Pattern => p !== null);
 
 // ---- my patterns, kept in this browser ----------------------------------------------------

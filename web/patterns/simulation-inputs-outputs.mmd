@@ -1,0 +1,20 @@
+flowchart TB
+
+%% Simulation with data in and out: A simulation that takes data as input and produces data as output. Input and output assignments are parts of the simulation that say which data goes in and which comes out, because data cannot have roles in BFO.
+
+    Simulation["<b>Simulation</b><br>PMD_0000933 simulation process"]:::local
+    InputData["<b>Input data</b><br>IAO_0000030 information content entity"]:::local
+    OutputData["<b>Output data</b><br>IAO_0000030 information content entity"]:::local
+    InputAssignment["<b>Input assignment</b><br>PMD_0000066 input assignment"]:::local
+    OutputAssignment["<b>Output assignment</b><br>PMD_0000067 output assignment"]:::local
+
+    Simulation -. "has specified input<br>OBI_0000293" .-> InputData
+    Simulation -. "has specified output<br>OBI_0000299" .-> OutputData
+    InputAssignment -. "part of<br>BFO_0000050" .-> Simulation
+    InputAssignment -. "has participant<br>RO_0000057" .-> InputData
+    OutputAssignment -. "part of<br>BFO_0000050" .-> Simulation
+    OutputAssignment -. "has participant<br>RO_0000057" .-> OutputData
+
+    classDef local fill:#dbeafe,stroke:#1d4ed8,stroke-width:2px,color:#0f172a
+
+%% mermantics-pattern {"id":"pmdco-simulation-inputs-outputs","title":"Simulation with data in and out","version":"0.1.0","description":"A simulation that takes data as input and produces data as output. Input and output assignments are parts of the simulation that say which data goes in and which comes out, because data cannot have roles in BFO.","source":"Based on the PMDco pattern 'simulation inout simple' (https://github.com/materialdigital/core-ontology/tree/v3.1.2/patterns, CC BY 4.0), simplified for mermantics.","questions":["Which data went into this simulation?","Which data did the simulation produce?"]}

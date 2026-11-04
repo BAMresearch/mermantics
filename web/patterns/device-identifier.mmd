@@ -1,0 +1,16 @@
+flowchart TB
+
+%% Device identifier: A device with an identifier (for example a serial or inventory number) and a name, and the process that gave it the identifier.
+
+    Device["<b>Device</b><br>PMD_0000602 device"]:::local
+    Identifier["<b>Identifier</b><br>IAO_0020000 identifier<br><br>value"]:::local
+    Name["<b>Name</b><br>IAO_0000300 textual entity<br><br>value"]:::local
+    Assignment["<b>Identifier assignment</b><br>IAO_0020010 identifier creating process"]:::local
+
+    Device -. "denoted by<br>IAO_0000235" .-> Identifier
+    Device -. "denoted by<br>IAO_0000235" .-> Name
+    Identifier -. "is specified output of<br>OBI_0000312" .-> Assignment
+
+    classDef local fill:#dbeafe,stroke:#1d4ed8,stroke-width:2px,color:#0f172a
+
+%% mermantics-pattern {"id":"pmdco-device-identifier","title":"Device identifier","version":"0.1.0","description":"A device with an identifier (for example a serial or inventory number) and a name, and the process that gave it the identifier.","source":"Based on the PMDco pattern 'device identifier' (https://github.com/materialdigital/core-ontology/tree/v3.1.2/patterns, CC BY 4.0), simplified for mermantics.","questions":["How is this device identified, and what is its name?","Where does the identifier come from?"]}

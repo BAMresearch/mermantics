@@ -1,0 +1,22 @@
+flowchart TB
+
+%% Chemical composition: The chemical composition of a material, as mass fractions of its constituents (for example 96.7 % iron), each with a value and a unit, collected in a composition data item.
+
+    Material["<b>Material</b><br>PMD_0000000 material"]:::local
+    Constituent["<b>Constituent</b><br>PMD_0000001 portion of matter<br><br>e.g. the iron in it"]:::local
+    Fraction["<b>Mass fraction</b><br>PMD_0020102 mass fraction"]:::local
+    Value["<b>Value</b><br>PMD_0025997 concentration value specification<br><br>numeric value, unit"]:::local
+    Composition["<b>Composition</b><br>PMD_0000551 chemical composition"]:::local
+    CompositionData["<b>Composition data</b><br>PMD_0025002 chemical composition data item"]:::local
+
+    Constituent -. "part of<br>BFO_0000050" .-> Material
+    Fraction -. "relational property of<br>PMD_0025999" .-> Material
+    Fraction -. "towards<br>RO_0002503" .-> Constituent
+    Fraction -. "specified by value<br>PMD_0000077" .-> Value
+    Composition -. "quality of<br>RO_0000080" .-> Material
+    Composition -. "is subject of<br>PMD_0000004" .-> CompositionData
+    CompositionData -. "has member<br>RO_0002351" .-> Value
+
+    classDef local fill:#dbeafe,stroke:#1d4ed8,stroke-width:2px,color:#0f172a
+
+%% mermantics-pattern {"id":"pmdco-chemical-composition","title":"Chemical composition","version":"0.1.0","description":"The chemical composition of a material, as mass fractions of its constituents (for example 96.7 % iron), each with a value and a unit, collected in a composition data item.","source":"Based on the PMDco patterns 'chemical composition' and 'fraction value specification' (https://github.com/materialdigital/core-ontology/tree/v3.1.2/patterns, CC BY 4.0), simplified for mermantics.","questions":["What is the chemical composition of this material?","What is the mass fraction of each constituent, and in which unit?"]}

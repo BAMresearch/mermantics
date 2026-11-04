@@ -14,7 +14,10 @@ const ownClass = (boxes: Box[]) => (id: string) => new Set([boxes.find((b) => b.
 
 test("the built-in patterns read cleanly and say what they are for", () => {
   expect(BUILT_IN.map((p) => p.id)).toEqual(["pmdco-process-inputs-outputs", "pmdco-process-chain", "pmdco-measurement",
-                                              "pmdco-role-in-process", "pmdco-property-with-value"]);
+                                              "pmdco-role-in-process", "pmdco-property-with-value",
+                                              "pmdco-simulation-inputs-outputs", "pmdco-value-with-unit",
+                                              "pmdco-categorical-value", "pmdco-chemical-composition",
+                                              "pmdco-object-and-material", "pmdco-device-identifier"]);
   for (const p of BUILT_IN) {
     expect(mermaid.parse(p.text).findings, p.id).toEqual([]);
     expect(p.title && p.description && p.version && p.source.includes("PMDco"), p.id).toBeTruthy();
