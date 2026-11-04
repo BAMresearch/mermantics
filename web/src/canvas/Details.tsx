@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import type { Term } from "../core/terms.js";
 import { lookup } from "./checker.js";
 import type { Arrow, ArrowData, Box, BoxData, Problem } from "./model.js";
-import { SHAPES, shapeOf, type ShapeKind } from "./palette.js";
+import { shapeOf, type Shape, type ShapeKind } from "./palette.js";
 import type { OwnRelation } from "./RelationMenu.js";
 import { TermSearch } from "./TermSearch.js";
 
@@ -47,8 +47,10 @@ export interface QuestionLink {
   linked: boolean;
 }
 
-export function BoxDetails({ box, onChange, onDelete, questions = [], onToggleQuestion, parts = [] }: {
+export function BoxDetails({ box, shapes, ontology, onChange, onDelete, questions = [], onToggleQuestion, parts = [] }: {
   box: Box;
+  shapes: Shape[]; // the shapes a box can be shown as in this section
+  ontology: boolean; // false in process modelling: no ontology class to pick
   onChange: (patch: Partial<BoxData>) => void;
   onDelete: () => void;
   questions?: QuestionLink[];
@@ -73,7 +75,18 @@ export function BoxDetails({ box, onChange, onDelete, questions = [], onToggleQu
         <input value={d.name} onChange={(e) => onChange({ name: e.target.value })} />
       </label>
 
-      {!special && (
+      {!special && !ontology && (
+        <section className="panel-section">
+          <label className="field">
+            Shown as
+            <select value={d.kind} onChange={(e) => onChange({ kind: e.target.value as ShapeKind })}>
+              {shapes.map((s) => <option key={s.kind} value={s.kind}>{s.title}</option>)}
+            </select>
+          </label>
+        </section>
+      )}
+
+      {!special && ontology && (
         <section className="panel-section">
           <h3>What is it, exactly?</h3>
           {d.classId ? (
@@ -93,7 +106,7 @@ export function BoxDetails({ box, onChange, onDelete, questions = [], onToggleQu
           <label className="field">
             Shown as
             <select value={d.kind} onChange={(e) => onChange({ kind: e.target.value as ShapeKind })}>
-              {SHAPES.map((s) => <option key={s.kind} value={s.kind}>{s.title}</option>)}
+              {shapes.map((s) => <option key={s.kind} value={s.kind}>{s.title}</option>)}
             </select>
           </label>
         </section>
@@ -133,8 +146,9 @@ export function BoxDetails({ box, onChange, onDelete, questions = [], onToggleQu
   );
 }
 
-export function ArrowDetails({ arrow, srcName, dstName, onChange, onReconnect, onDelete }: {
+export function ArrowDetails({ arrow, srcName, dstName, ontology, onChange, onReconnect, onDelete }: {
   arrow: Arrow;
+  ontology: boolean; // false in process modelling: arrows are plain words
   srcName: string;
   dstName: string;
   onChange: (patch: Partial<ArrowData>) => void;
@@ -147,7 +161,16 @@ export function ArrowDetails({ arrow, srcName, dstName, onChange, onReconnect, o
     <div className="panel">
       <div className="panel-kind"><span className="dot" />Arrow</div>
       <p className="sentence"><b>{srcName}</b> {d.words} <b>{dstName}</b></p>
-      {d.kind === "relation" && d.own && (
+      {d.kind === "relation" && !ontology && (
+        <section className="panel-section">
+          <label className="field">
+            Relation
+            <input value={d.words} onChange={(e) => onChange(d.curie ? { words: e.target.value } : { words: e.target.value, name: e.target.value })} />
+          </label>
+          <button type="button" className="link" onClick={onReconnect}>Choose another relation...</button>
+        </section>
+      )}
+      {d.kind === "relation" && ontology && d.own && (
         <section className="panel-section">
           <h3>Your own relation</h3>
           <label className="field">
@@ -169,7 +192,7 @@ export function ArrowDetails({ arrow, srcName, dstName, onChange, onReconnect, o
           <button type="button" className="link" onClick={onReconnect}>Choose another relation...</button>
         </section>
       )}
-      {d.kind === "relation" && !d.own && (
+      {d.kind === "relation" && ontology && !d.own && (
         <section className="panel-section">
           <h3>Relation in the ontology</h3>
           {d.curie ? (
@@ -196,8 +219,10 @@ export function ArrowDetails({ arrow, srcName, dstName, onChange, onReconnect, o
   );
 }
 
-export function Overview({ status, findings, passed, onSelect, uses = [], onForget, ownRelations = [], onForgetRelation }: {
+export function Overview({ status, ontology, checkedAgainst = "", findings, passed, onSelect, uses = [], onForget, ownRelations = [], onForgetRelation }: {
   status: string;
+  ontology: boolean; // false in process modelling: nothing is checked
+  checkedAgainst?: string; // the ontology's title, or why it could not be loaded
   findings: GlobalFinding[];
   passed: string[];
   onSelect: (target: GlobalFinding["target"]) => void;
@@ -209,6 +234,7 @@ export function Overview({ status, findings, passed, onSelect, uses = [], onForg
   return (
     <div className="panel">
       <div className="panel-kind"><span className="dot" />Your model</div>
+      {ontology && checkedAgainst && <p className="muted-inline">Checked against <b>{checkedAgainst}</b></p>}
       <p className="muted">{status}</p>
       {findings.length > 0 && (
         <section className="panel-section">
@@ -245,7 +271,7 @@ export function Overview({ status, findings, passed, onSelect, uses = [], onForg
             {ownRelations.map((r) => (
               <li key={`${r.words}|${r.curie}`}>
                 <span className="use-title"><b>{r.words}</b>
-                  <span className="menu-id"> {r.curie ? `a kind of ${r.name} (${r.curie})` : "not linked to the ontology"}</span></span>
+                  {ontology && <span className="menu-id"> {r.curie ? `a kind of ${r.name} (${r.curie})` : "not linked to the ontology"}</span>}</span>
                 <button type="button" className="link" title="Remove it from the menu; arrows that use it stay"
                         onClick={() => onForgetRelation?.(r)}>Remove</button>
               </li>
@@ -265,15 +291,18 @@ export function Overview({ status, findings, passed, onSelect, uses = [], onForg
           <li>Drag a shape from the left onto the canvas, or click it.</li>
           <li>To connect two boxes, drag from a dot on the edge of one box to the other box. You then pick what the arrow means.</li>
           <li>Click a box or arrow to edit it. Delete or Backspace removes it.</li>
-          <li>Everything is checked against PMDco while you draw, in your browser.</li>
+          {ontology
+            ? <li>Everything is checked against PMDco while you draw, in your browser.</li>
+            : <li>Type any name for an arrow; the ones you make come back in the menu under "My relations".</li>}
         </ul>
       </section>
     </div>
   );
 }
 
-export function SelectionPanel({ count, arrows, questions, onSave, onDownload }: {
+export function SelectionPanel({ count, arrows, questions, canSave, onSave, onDownload }: {
   count: number;
+  canSave: boolean; // saving patterns is only in materials science and engineering
   arrows: number;
   questions: string[]; // competency questions whose boxes are all selected
   onSave: (meta: { title: string; description: string; version: string; questions: string[] }) => void;
@@ -291,7 +320,7 @@ export function SelectionPanel({ count, arrows, questions, onSave, onDownload }:
     <div className="panel">
       <div className="panel-kind"><span className="dot" />Selection</div>
       <p className="sentence">{count} boxes and {arrows} arrow{arrows === 1 ? "" : "s"} between them are selected.</p>
-      <section className="panel-section">
+      {canSave && <section className="panel-section">
         <h3>Save as a pattern</h3>
         <p className="hint">A pattern is a reusable piece of a model. It appears under "My patterns" on the left, and you can download it as a file to share it.</p>
         <label className="field">
@@ -317,7 +346,7 @@ export function SelectionPanel({ count, arrows, questions, onSave, onDownload }:
           <button type="button" className="secondary" disabled={!title.trim()} onClick={() => onDownload(meta())}>Download file</button>
         </div>
         {saved && <p className="ok-note">Saved "{saved}" to My patterns.</p>}
-      </section>
+      </section>}
     </div>
   );
 }

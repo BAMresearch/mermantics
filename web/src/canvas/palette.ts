@@ -1,11 +1,17 @@
 /**
  * The shapes in the palette and the relations offered first when drawing an arrow, in
- * plain words. Each shape starts with an ontology class (PMDco 3.1.1); the user can make it
- * more specific later. The IDs were checked against PMDco 3.1.1.
+ * plain words, for both sections of the canvas.
+ *
+ * Materials science and engineering: each shape starts with an ontology class (PMDco
+ * 3.1.1); the user can make it more specific later. The IDs were checked against PMDco 3.1.1.
+ *
+ * Process modelling: plain shapes and relations with no ontology behind them.
  */
 
 export type ShapeKind = "process" | "material" | "device" | "data" | "software" | "plan" | "property"
-  | "other" | "vocab" | "note";
+  | "other" | "vocab" | "note"
+  // process modelling only
+  | "thing" | "agent" | "information";
 
 export interface Shape {
   kind: ShapeKind;
@@ -15,7 +21,7 @@ export interface Shape {
   classLabel: string;
 }
 
-export const SHAPES: Shape[] = [
+export const MSE_SHAPES: Shape[] = [
   { kind: "process", title: "Process step", hint: "Something that happens: a test, a treatment, a simulation",
     classId: "COB_0000035", classLabel: "completely executed planned process" },
   { kind: "material", title: "Material or sample", hint: "A physical thing that is used or made",
@@ -34,15 +40,40 @@ export const SHAPES: Shape[] = [
     classId: "", classLabel: "" },
 ];
 
-export const EXTRA_SHAPES: Shape[] = [
+export const MSE_EXTRA_SHAPES: Shape[] = [
   { kind: "vocab", title: "List of options", hint: "Allowed values, e.g. calculation types",
     classId: "", classLabel: "" },
   { kind: "note", title: "Note", hint: "A comment; not checked",
     classId: "", classLabel: "" },
 ];
 
+const NOTE = MSE_EXTRA_SHAPES.find((s) => s.kind === "note")!;
+
+export const PROCESS_SHAPES: Shape[] = [
+  { kind: "process", title: "Process step", hint: "Something that happens", classId: "", classLabel: "" },
+  { kind: "thing", title: "Object", hint: "Something that is used, changed or made", classId: "", classLabel: "" },
+  { kind: "agent", title: "Agent", hint: "Who or what carries out a step: a person, a team, a machine",
+    classId: "", classLabel: "" },
+  { kind: "information", title: "Information", hint: "Data, a document, a result, instructions",
+    classId: "", classLabel: "" },
+];
+
+export const PROCESS_EXTRA_SHAPES: Shape[] = [{ ...NOTE, hint: "A comment" }];
+
+/** Relations offered when drawing an arrow in process modelling. The user can type any other name. */
+export const PROCESS_RELATIONS: string[] = [
+  "has input", "has output", "comes before", "has step", "carried out by", "uses", "has part", "is about",
+];
+
+const ALL_SHAPES = [...MSE_SHAPES, ...MSE_EXTRA_SHAPES, ...PROCESS_SHAPES];
+const FALLBACK = MSE_SHAPES.find((s) => s.kind === "other")!;
+
 export function shapeOf(kind: ShapeKind): Shape {
-  return [...SHAPES, ...EXTRA_SHAPES].find((s) => s.kind === kind)!;
+  return ALL_SHAPES.find((s) => s.kind === kind) ?? FALLBACK;
+}
+
+export function isShapeKind(v: unknown): v is ShapeKind {
+  return typeof v === "string" && ALL_SHAPES.some((s) => s.kind === v);
 }
 
 /** Guess a shape for a class, from the superclasses the checker reports, for imported diagrams. */

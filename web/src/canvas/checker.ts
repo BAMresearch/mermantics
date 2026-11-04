@@ -1,4 +1,4 @@
-/** Talks to the checker worker (the same worker as the classic page) with promises. */
+/** Talks to the checker worker with promises. */
 
 import type { RelationFit } from "../core/relations.js";
 import type { SearchResult, Term } from "../core/terms.js";
@@ -7,24 +7,30 @@ import type { Checked, OntologyInfo, Request, Response } from "../worker/protoco
 type Pending = { resolve: (r: Response) => void; reject: (e: Error) => void };
 type Body<T extends Request["type"]> = Omit<Extract<Request, { type: T }>, "id">;
 
-const worker = new Worker(new URL("../worker/checker.worker.ts", import.meta.url), { type: "module" });
 const pending = new Map<number, Pending>();
 let nextId = 1;
+let worker: Worker | null = null;
 
-worker.onmessage = (event: MessageEvent<Response>) => {
-  const msg = event.data;
-  const p = pending.get(msg.id);
-  if (!p) return;
-  pending.delete(msg.id);
-  if (msg.type === "error") p.reject(new Error(msg.message));
-  else p.resolve(msg);
-};
+/** The worker starts when it is first needed, so process modelling (no ontology) never starts it. */
+function getWorker(): Worker {
+  if (worker) return worker;
+  worker = new Worker(new URL("../worker/checker.worker.ts", import.meta.url), { type: "module" });
+  worker.onmessage = (event: MessageEvent<Response>) => {
+    const msg = event.data;
+    const p = pending.get(msg.id);
+    if (!p) return;
+    pending.delete(msg.id);
+    if (msg.type === "error") p.reject(new Error(msg.message));
+    else p.resolve(msg);
+  };
+  return worker;
+}
 
 function ask<T extends Request["type"]>(body: Body<T>): Promise<Response> {
   const id = nextId++;
   return new Promise((resolve, reject) => {
     pending.set(id, { resolve, reject });
-    worker.postMessage({ ...body, id } as unknown as Request);
+    getWorker().postMessage({ ...body, id } as unknown as Request);
   });
 }
 
