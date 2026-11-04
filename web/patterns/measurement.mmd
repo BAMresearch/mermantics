@@ -4,7 +4,7 @@ flowchart TB
 
     Measurement["<b>Measurement</b><br>OBI_0000070 assay"]:::local
     Sample["<b>Sample</b><br>PMD_0000000 material"]:::local
-    Property["<b>Property</b><br>BFO_0000019 quality"]:::local
+    Property["<b>Property</b><br>BFO_0000020 specifically dependent continuant"]:::local
     Result["<b>Result</b><br>IAO_0000109 measurement datum"]:::local
     Value["<b>Value</b><br>OBI_0001931 scalar value specification<br><br>numeric value, unit"]:::local
     Plan["<b>Plan</b><br>OBI_0000260 plan"]:::local
@@ -23,4 +23,4 @@ flowchart TB
 
     classDef local fill:#dbeafe,stroke:#1d4ed8,stroke-width:2px,color:#0f172a
 
-%% mermantics-pattern {"id":"pmdco-measurement","title":"Measurement of a property","version":"0.1.0","description":"A measurement (assay) of a property of a sample, with a result that has a value and a unit, done according to a written method.","source":"Based on the PMDco pattern 'measurement' (https://github.com/materialdigital/core-ontology/tree/main/patterns, CC BY 4.0), simplified for mermantics.","questions":["What is the measured value of this property, and in which unit?","Which sample was measured, and with which method or standard?"]}
+%% mermantics-pattern {"id":"pmdco-measurement","title":"Measurement of a property","version":"0.2.0","description":"A measurement (assay) of a property of a sample, with a result that has a value and a unit, done according to a written method.","source":"Based on the PMDco pattern 'measurement' (https://github.com/materialdigital/core-ontology/tree/v3.1.2/patterns, CC BY 4.0), simplified for mermantics.","questions":["What is the measured value of this property, and in which unit?","Which sample was measured, and with which method or standard?"]}

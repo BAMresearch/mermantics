@@ -16,7 +16,7 @@ test("the built-in patterns read cleanly and say what they are for", () => {
   expect(BUILT_IN.map((p) => p.id)).toEqual(["pmdco-process-inputs-outputs", "pmdco-process-chain", "pmdco-measurement",
                                               "pmdco-role-in-process", "pmdco-property-with-value",
                                               "pmdco-simulation-inputs-outputs", "pmdco-value-with-unit",
-                                              "pmdco-categorical-value", "pmdco-chemical-composition",
+                                              "pmdco-chemical-composition",
                                               "pmdco-object-and-material", "pmdco-device-identifier"]);
   for (const p of BUILT_IN) {
     expect(mermaid.parse(p.text).findings, p.id).toEqual([]);
