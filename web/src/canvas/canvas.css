@@ -305,7 +305,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .start-process { --kc: var(--k-agent); }
 .start-mse { --kc: var(--k-process); }
 .start-datastore { --kc: var(--k-dataset); }
-.start-hackathon { --kc: var(--k-property); }
+.start-hackathon { --kc: var(--k-data); }
 .start-card.is-soon { cursor: default; border-top-style: dashed; background: #fbfcfd; }
 .start-card.is-soon:hover { border-color: var(--line); border-top-color: var(--kc); box-shadow: none; }
 .start-card.is-soon .start-go { color: var(--muted); font-weight: 500; }
