@@ -5,179 +5,82 @@
   </picture>
 </p>
 
+mermantics is a small tool for drawing data models together with the people who know the
+data. You put boxes and arrows on a canvas in the browser, and what you keep is a plain
+Mermaid flowchart. When the model is ready for it, the same file can be checked against an
+ontology.
 
-Draw process and data models as Mermaid diagrams, and check them against an OWL ontology.
+**Open the canvas: https://ebb2675.github.io/mermantics/**
 
-mermantics has two parts that share one file format, a plain Mermaid flowchart:
+![The mermantics canvas with a simple process model: brewing coffee](assets/screenshots/process.png)
 
-- **A canvas in the browser** (https://ebb2675.github.io/mermantics/) to draw the model:
-  drag boxes in, connect them with arrows, and name what the arrows mean.
-- **A checker** (`pip install mermantics`) that reads the diagram, turns it into OWL and
-  checks it against an ontology, with a reasoner. It runs on the command line and in CI.
+## Why
 
-Because the file is plain Mermaid, it renders wherever Mermaid does (GitHub, GitLab, most
-documentation tools), so the model can live next to the code or the docs and be checked
-on every change.
+A data model usually starts as a conversation between people who know the domain (how a
+sample is made, what a measurement produces) and people who have to store and connect the
+data. A whiteboard is good for that conversation, but afterwards you have a photo. A schema
+file or an ontology editor is precise, but only half of the room can read it.
 
-## Draw: the web canvas
+mermantics tries to sit in between. Drawing is about as quick as on a whiteboard, and the
+result is a text file that GitHub and GitLab render as a diagram, that shows changes in a
+normal diff, and that a script can check. You can start with plain words on the arrows and
+link things to an ontology later, or never.
 
-**https://ebb2675.github.io/mermantics/** runs in your browser, with nothing to install
-and nothing sent to a server. It has three sections:
+## What you can model
 
-- **Domain-agnostic process modelling**: draw any process with plain boxes (process steps,
-  objects, agents, information) and name the arrows in your own words. No ontology is
-  needed.
-- **Materials science and engineering**: drag boxes in, search PMDco 3.1.2 for their IDs,
-  and connect them with arrows chosen from the relations that fit. The checks run as you
-  draw, and a finding points to the box or arrow it is about.
-- **BAM Data Store**: plan how research data goes into the
-  [BAM Data Store](https://datastore.bam.de) (openBIS), following its guide "Represent
-  research data in the Data Store": experimental steps, samples, chemicals, instruments and
-  datasets, linked from parent to child. Each object gets a BAM object type (searchable, from
-  [bam-masterdata](https://github.com/BAMresearch/bam-masterdata)) and its Space, Project and
-  Collection. No ontology is needed.
+The start page has a few sections. Each keeps its own diagram, and all of them save the
+same kind of Mermaid file.
 
-All three save the same kind of Mermaid file; "Show Mermaid" shows it as text. In the browser
-the checks are the fast ones (1, 2, 4 and 5 below, like `--fast`), against PMDco for now.
-For the reasoner checks or another ontology, use the command line tool. The code is in
-[`web/`](web/README.md).
+| Section | For |
+|---|---|
+| Process modelling | Any process: its steps, what goes in and comes out, who or what does it. You name the arrows yourself. No ontology. |
+| Materials science and engineering | Models linked to the [Platform MaterialDigital Core Ontology (PMDco)](https://github.com/materialdigital/core-ontology). You search PMDco for each box, pick arrows from the relations that fit, and the model is checked while you draw. |
+| BAM Data Store | Planning how research data goes into the [BAM Data Store](https://datastore.bam.de) (openBIS): experimental steps, samples, chemicals, instruments and datasets, with their BAM object types and where they live (Space, Project, Collection). |
+| PMD Hackathon - Computations | In progress. |
 
-## Check: a diagram against an ontology
+![The BAM Data Store section: experimental steps, samples, chemicals, instruments and datasets](assets/screenshots/datastore.png)
 
-To ground a diagram in an ontology, write ontology IDs into its boxes and arrows, for
-example "Simulation: a local subclass of PMD_0000933" or "has specified input
-OBI_0000293". `mermantics` then checks that the diagram agrees with the ontology:
+For workshops, there is a bit more around the diagram: you can write down the use case
+(user stories, the questions the model should answer, open points), mark which boxes each
+question needs, and export all of it with the diagram as one Markdown file. The canvas runs
+entirely in your browser, nothing is uploaded, and it works on a phone too.
 
-1. **IDs**: every ID exists in the ontology, is not deprecated, and is the right kind
-   (a class on a box, a property on an arrow).
-2. **Labels**: the text written next to each ID matches the ontology's label.
-3. **Schema** (reasoner): no box becomes an impossible class, for example a box that sits
-   under "information content entity" but is aligned to "material entity".
-4. **Domain and range**: each arrow fits the domain and range of its property, including
-   ones inherited from super-properties and inverses. A reasoner never reports these on
-   its own; it silently infers new types instead, so they are checked separately.
-5. **Vocabularies**: terms in a vocabulary box are kinds of the class that uses them.
-6. **Example data** (reasoner): one example instance per box, linked by every arrow, is
-   consistent with the ontology.
+## How the pieces fit
 
-When the reasoner finds a problem, the report includes its explanation: the chain of
-axioms that leads to the contradiction.
+```mermaid
+flowchart LR
+    People["Domain experts and data people"] -- "draw together" --> Canvas["Canvas in the browser"]
+    Canvas -- "saves" --> File["model.mmd, a plain Mermaid file"]
+    File -- "is shown by" --> Docs["GitHub, GitLab, your docs"]
+    File -- "is checked by" --> Checker["mermantics on the command line or in CI"]
+    Ontology["An OWL ontology, e.g. PMDco"] -.-> Checker
+```
 
-Any OWL ontology works: a file, a URL, or several of them, and their `owl:imports` are
-followed. PMDco 3.1.2 is the default when you do not name one. Boxes and arrows without an
-ID are reported as notes, not errors, so a plain process diagram passes and can be
-grounded step by step.
+## Checking against an ontology
 
-## Install
+If the boxes and arrows carry ontology IDs, the `mermantics` command checks that the IDs
+exist, that the labels match, that each arrow fits its relation, and, with a reasoner, that
+the model does not contradict the ontology. It works with any OWL ontology; PMDco is the
+default.
 
 ```bash
 pip install mermantics
+mermantics model.mmd --fast          # the quick checks, about a second
+mermantics model.mmd -o my-onto.ttl  # all checks against your own ontology (needs Java 11+)
 ```
 
-The reasoner checks (3 and 6) need **Java 11 or newer**. On first use, `mermantics`
-downloads [ROBOT](https://robot.obolibrary.org) (v1.9.11) and the ontology into a cache
-folder (`~/.cache/mermantics`, or `$MERMANTICS_CACHE`). Without Java, use `--fast`
-to run checks 1, 2, 4 and 5 only.
+A plain diagram without any IDs passes too; the missing IDs are reported as notes. All
+the checks, options and conventions, and how to run it in CI, are in
+[docs/checker.md](docs/checker.md).
 
-## Usage
+## Status
 
-```bash
-mermantics model.mmd -o my-ontology.ttl  # check against your ontology (file or URL)
-mermantics model.mmd -o a.ttl -o b.ttl   # several ontologies together
-mermantics model.mmd                     # no -o: PMDco 3.1.2 (or -o pmdco:<version>)
-mermantics model.mmd --fast              # no reasoner, about a second
-mermantics model.mmd --report report.md --json report.json
-```
+This is an early version and it still changes quite a lot. If something does not work, or
+you would model something differently, please open an issue.
 
-IDs with an OBO prefix (`BFO_`, `IAO_`, `OBI_`, `RO_`, ...) are found without any
-setup. For other ontologies, tell the tool where an ID prefix points:
+## Code
 
-```bash
-mermantics model.mmd -o https://example.org/myo.ttl --prefix MYO=https://example.org/myo/MYO_
-```
+- `web/`: the canvas (TypeScript, React, React Flow), see [web/README.md](web/README.md)
+- `src/mermantics/`: the checker (Python), see [docs/checker.md](docs/checker.md#development)
 
-Exit codes: `0` no errors, `1` errors found, `2` the tool could not run (missing file,
-no Java, download failed). Warnings and notes never fail the run.
-
-With the reasoner, a run takes one reasoner pass for the class structure and a quicker
-consistency check for the example data; against the full PMDco that is about 40 seconds.
-
-## How the diagram is read
-
-Mermaid has no meaning of its own, so the tool relies on a few conventions. All of them
-can be changed with options.
-
-| In the diagram | Read as |
-|---|---|
-| First ID in a box label, e.g. `PMD_0000933` | The box's alignment: a subclass of that ontology class (never equivalence) |
-| Unlabelled solid arrow `Parent --> Child` | Schema inheritance: Child is a subclass of Parent (`--inherit child-parent` to flip) |
-| Dotted, thick or labelled arrow `A -. "has part<br>BFO_0000051" .-> B` | A relation between instances; the first ID in the label is the property |
-| Box with style class `note` | Ignored (`--skip-class`) |
-| Box with style class `vocab` | A vocabulary: its terms should be subclasses of the class pointing at it (`--vocab-class`) |
-| ID prefixes | `PMD` maps to `https://w3id.org/pmd/co/PMD_...`; any other prefix becomes an OBO PURL; add your own with `--prefix XYZ=https://...` |
-
-An ID is an upper-case prefix, an underscore and 5 to 9 digits (`IAO_0000030`), so names
-like `MAT_SIM_STRUCTURE` are not mistaken for IDs. Labels may use `<br>`, `<b>` and HTML
-entities. Lines the parser does not understand are reported, never silently dropped.
-
-A small example, aligned to PMDco:
-
-```mermaid
-flowchart TB
-    Computation["<b>Computation</b><br>PMD_0000583 computing process"]
-    Simulation["<b>Simulation</b><br>PMD_0000933 simulation process"]:::local
-    System["<b>SimulatedSystem</b><br>IAO_0000030 information content entity"]:::local
-    Types["<b>Calculation types</b><br>STRUC_OPT: PMD_0000956 structural optimization simulation<br>MC: PMD_0000862 Monte Carlo simulation"]:::vocab
-
-    Computation --> Simulation
-    Simulation -. "has specified input<br>OBI_0000293" .-> System
-    Simulation -. "calculation_type" .-> Types
-```
-
-## Using it in CI
-
-```yaml
-# .github/workflows/check-diagrams.yml
-name: Check data-model diagrams
-on: [push, pull_request]
-jobs:
-  check:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
-        with: { distribution: temurin, java-version: "21" }
-      - uses: actions/setup-python@v5
-        with: { python-version: "3.12" }
-      - uses: actions/cache@v4
-        with: { path: ~/.cache/mermantics, key: mermantics-${{ runner.os }} }
-      - run: pip install mermantics
-      - run: mermantics docs/data-model.mmd --report report.md
-```
-
-## Limitations
-
-- Only flowcharts. Nodes defined inline inside an arrow (`A["x"] --> B`) are not
-  supported; define the node on its own line.
-- The example-data check uses one instance per box. A box that is both input and output
-  of the same process gets one instance for both.
-- Domain and range checks understand named classes, unions and intersections; other
-  class expressions are reported as "could not check".
-- The label check is a text comparison. A label on the same line as its ID that does not
-  match is a warning; when only the neighbouring lines are there and none match, it is a
-  note (the label was probably just not written down).
-- The reasoner is only as good as the ontology's axioms: if the ontology does not say two
-  classes are disjoint, mixing them up is not a contradiction.
-
-## Development
-
-```bash
-pip install -e ".[test]"
-pytest -m "not reasoner"              # fast tests, no Java needed
-pytest -m "reasoner and not pmdco"    # reasoner on a tiny test ontology, a few seconds
-PMDCO_FILE=/path/to/pmdco-full.ttl pytest -m pmdco   # full PMDco runs, a few minutes
-```
-
-`tests/fixtures/` contains a real simulation data-model diagram and three deliberately
-broken copies (unknown ID, impossible class, misused relation) with the expected results.
-
+MIT License, © 2026 Bundesanstalt für Materialforschung und -prüfung (BAM).
