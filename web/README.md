@@ -51,7 +51,7 @@ workflow change).
 | `src/canvas/` | The page: a canvas editor (React and React Flow) that writes the diagram as Mermaid and checks it in the worker. |
 | `examples/` | The example diagrams in the page's Examples menu. |
 | `patterns/` | The built-in patterns in the canvas palette. |
-| `scripts/` | Downloading PMDco and making the golden files. |
+| `scripts/` | Downloading PMDco, making the golden files, and `bam-types.py`, which writes the BAM Data Store object and dataset types (`src/canvas/bamTypes.ts`) from a bam-masterdata checkout. |
 | `tests/` | vitest tests. |
 
 The canvas keeps the boxes and arrows in memory and writes them as Mermaid after each

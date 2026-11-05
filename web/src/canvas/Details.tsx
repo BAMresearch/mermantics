@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import type { Term } from "../core/terms.js";
 import { lookup } from "./checker.js";
+import { DatastoreArrowSection, DatastoreBoxSection } from "./DatastorePanel.js";
 import type { Arrow, ArrowData, Box, BoxData, Problem } from "./model.js";
-import { shapeOf, type Shape, type ShapeKind } from "./palette.js";
+import { HAS_DATASET, shapeOf, type Shape, type ShapeKind } from "./palette.js";
 import type { OwnRelation } from "./RelationMenu.js";
 import { TermSearch } from "./TermSearch.js";
 
@@ -47,10 +48,13 @@ export interface QuestionLink {
   linked: boolean;
 }
 
-export function BoxDetails({ box, shapes, ontology, onChange, onDelete, questions = [], onToggleQuestion, parts = [] }: {
+export function BoxDetails({ box, shapes, ontology, datastore = false, boxes = [], onChange, onDelete, questions = [],
+                            onToggleQuestion, parts = [] }: {
   box: Box;
   shapes: Shape[]; // the shapes a box can be shown as in this section
   ontology: boolean; // false in process modelling: no ontology class to pick
+  datastore?: boolean; // BAM Data Store: the object type and where it lives, instead of "Shown as"
+  boxes?: Box[]; // all boxes, for the names already used (Data Store)
   onChange: (patch: Partial<BoxData>) => void;
   onDelete: () => void;
   questions?: QuestionLink[];
@@ -75,7 +79,9 @@ export function BoxDetails({ box, shapes, ontology, onChange, onDelete, question
         <input value={d.name} onChange={(e) => onChange({ name: e.target.value })} />
       </label>
 
-      {!special && !ontology && (
+      {!special && datastore && <DatastoreBoxSection data={d} boxes={boxes} onChange={onChange} />}
+
+      {!special && !ontology && !datastore && (
         <section className="panel-section">
           <label className="field">
             Shown as
@@ -146,9 +152,11 @@ export function BoxDetails({ box, shapes, ontology, onChange, onDelete, question
   );
 }
 
-export function ArrowDetails({ arrow, srcName, dstName, ontology, onChange, onReconnect, onDelete }: {
+export function ArrowDetails({ arrow, srcName, dstName, ontology, datastore = false, onChange, onReconnect, onSwap, onDelete }: {
   arrow: Arrow;
   ontology: boolean; // false in process modelling: arrows are plain words
+  datastore?: boolean; // BAM Data Store: parent-child arrows and datasets, no relation to choose
+  onSwap?: () => void;
   srcName: string;
   dstName: string;
   onChange: (patch: Partial<ArrowData>) => void;
@@ -160,8 +168,10 @@ export function ArrowDetails({ arrow, srcName, dstName, ontology, onChange, onRe
   return (
     <div className="panel">
       <div className="panel-kind"><span className="dot" />Arrow</div>
-      <p className="sentence"><b>{srcName}</b> {d.words} <b>{dstName}</b></p>
-      {d.kind === "relation" && !ontology && (
+      {datastore
+        ? <DatastoreArrowSection srcName={srcName} dstName={dstName} dataset={d.name === HAS_DATASET} onSwap={() => onSwap?.()} />
+        : <p className="sentence"><b>{srcName}</b> {d.words} <b>{dstName}</b></p>}
+      {d.kind === "relation" && !ontology && !datastore && (
         <section className="panel-section">
           <label className="field">
             Relation
@@ -219,8 +229,11 @@ export function ArrowDetails({ arrow, srcName, dstName, ontology, onChange, onRe
   );
 }
 
-export function Overview({ status, ontology, checkedAgainst = "", findings, passed, onSelect, uses = [], onForget, ownRelations = [], onForgetRelation }: {
+export function Overview({ status, ontology, datastore = false, checkedAgainst = "", findings, passed, onSelect, uses = [], onForget,
+                          ownRelations = [], onForgetRelation, children }: {
   status: string;
+  datastore?: boolean;
+  children?: ReactNode; // shown after the status
   ontology: boolean; // false in process modelling: nothing is checked
   checkedAgainst?: string; // the ontology's title, or why it could not be loaded
   findings: GlobalFinding[];
@@ -236,6 +249,7 @@ export function Overview({ status, ontology, checkedAgainst = "", findings, pass
       <div className="panel-kind"><span className="dot" />Your model</div>
       {ontology && checkedAgainst && <p className="muted-inline">Checked against <b>{checkedAgainst}</b></p>}
       <p className="muted">{status}</p>
+      {children}
       {findings.length > 0 && (
         <section className="panel-section">
           <h3>To look at</h3>
@@ -289,14 +303,18 @@ export function Overview({ status, ontology, checkedAgainst = "", findings, pass
         <h3>How to</h3>
         <ul>
           <li>Drag a shape from the left onto the canvas, or click it.</li>
-          <li>To connect two boxes, drag from a dot on the edge of one box to the other box. You then pick what the arrow means.</li>
+          {datastore
+            ? <li>To connect two boxes, drag from a dot on the edge of the parent to the child. Connect a dataset to the step that made it.</li>
+            : <li>To connect two boxes, drag from a dot on the edge of one box to the other box. You then pick what the arrow means.</li>}
           <li>Click a box or arrow to edit it. Delete or Backspace removes it.</li>
           <li>Drag on empty canvas to select the boxes inside the rectangle; Shift+click adds or removes one.</li>
           <li>Zoom with the buttons at the bottom left, by scrolling, by pinching, or with Ctrl/Cmd and + or -. Shift+1 shows the whole diagram.</li>
           <li>Move around by dragging with the right mouse button or holding Space and dragging. If you would rather scroll to move, switch "Scroll" at the bottom left to "moves".</li>
           {ontology
             ? <li>Everything is checked against PMDco while you draw, in your browser.</li>
-            : <li>Type any name for an arrow; the ones you make come back in the menu under "My relations".</li>}
+            : datastore
+              ? <li>Click a box to pick its BAM object type and say where it lives: Space, Project and Collection.</li>
+              : <li>Type any name for an arrow; the ones you make come back in the menu under "My relations".</li>}
         </ul>
       </section>
     </div>

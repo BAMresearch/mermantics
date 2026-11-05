@@ -15,6 +15,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } fro
 import logo from "../../../assets/mermantics-logo.svg";
 import { BoxNode, worst } from "./BoxNode.js";
 import { check, loadOntology, supers } from "./checker.js";
+import { WhereThingsGo } from "./DatastorePanel.js";
 import { ArrowDetails, BoxDetails, Overview, SelectionPanel, type GlobalFinding } from "./Details.js";
 import { FloatingEdge } from "./FloatingEdge.js";
 import { layout } from "./layout.js";
@@ -22,7 +23,7 @@ import { MermaidPanel } from "./MermaidPanel.js";
 import { emptyUseCase, fromMermaid, makeId, toMermaid, type Arrow, type ArrowData, type Box, type BoxData, type Problem,
          type UseCase } from "./model.js";
 import { MODES, type Mode, type ModeId } from "./mode.js";
-import { KIND_BY_ANCESTOR, shapeOf, type Shape, type ShapeKind } from "./palette.js";
+import { HAS_DATASET, KIND_BY_ANCESTOR, openbisFor, PARENT_OF, shapeOf, type Shape, type ShapeKind } from "./palette.js";
 import { BUILT_IN, checkUses, instantiate, loadMine, parsePattern, patternFromSelection, readUses, saveMine, slug,
          type Pattern, type PatternUse } from "./patterns.js";
 import { loadOwnRelations, PlainRelationMenu, RelationMenu, saveOwnRelations, type Choice,
@@ -58,7 +59,7 @@ async function classify(boxes: Box[]): Promise<Box[]> {
 /** The structure that the checks see; moving a box does not change it. */
 function structureKey(boxes: Box[], arrows: Arrow[]): string {
   return JSON.stringify([
-    boxes.map((b) => [b.id, b.data.name, b.data.kind, b.data.classId, b.data.classLabel, b.data.lines, b.data.css]),
+    boxes.map((b) => [b.id, b.data.name, b.data.kind, b.data.classId, b.data.classLabel, b.data.lines, b.data.css, b.data.openbis]),
     arrows.map((a) => [a.id, a.source, a.target, a.data?.kind, a.data?.name, a.data?.curie]),
   ]);
 }
@@ -157,7 +158,7 @@ export function App({ mode, onSwitch, onHome }: { mode: Mode; onSwitch: (id: Mod
     setFocused(null);
     setDocName(name);
     setNotice(imported.warnings.length ? `Some lines could not be read: ${imported.warnings.join("; ")}` : "");
-    requestAnimationFrame(() => flow.fitView({ padding: 0.15, duration: 300 }));
+    requestAnimationFrame(() => flow.fitView({ padding: 0.15, duration: 300, maxZoom: 1.2 }));
   }, [flow, mode.ontology, setArrows, setBoxes]);
 
   useEffect(() => {
@@ -264,9 +265,10 @@ export function App({ mode, onSwitch, onHome }: { mode: Mode; onSwitch: (id: Mod
     const id = makeId(shape.title, new Set(boxesRef.current.map((b) => b.id)));
     const data: BoxData = { name: shape.kind === "note" ? "Note" : shape.title, kind: shape.kind, classId: shape.classId,
                             classLabel: shape.classLabel, lines: [], css: [], problems: [] };
+    if (mode.datastore && shape.kind !== "note") data.openbis = openbisFor(shape.kind);
     setBoxes((bs) => [...bs.map((b) => ({ ...b, selected: false })), { id, type: "box", position, data, selected: true }]);
     setArrows((as) => as.map((a) => ({ ...a, selected: false })));
-  }, [flow, setArrows, setBoxes]);
+  }, [flow, mode.datastore, setArrows, setBoxes]);
 
   const allPatterns = useMemo(() => [...BUILT_IN, ...myPatterns], [myPatterns]);
 
@@ -291,7 +293,7 @@ export function App({ mode, onSwitch, onHome }: { mode: Mode; onSwitch: (id: Mod
     setBoxes((bs) => [...bs.map((b) => ({ ...b, selected: false })), ...placed]);
     setArrows((as) => [...as.map((a) => ({ ...a, selected: false })), ...inserted.arrows]);
     setPatternUses((us) => [...us, inserted.use]);
-    if (!at) setTimeout(() => flow.fitView({ padding: 0.12, duration: 300 }), 50);
+    if (!at) setTimeout(() => flow.fitView({ padding: 0.12, duration: 300, maxZoom: 1.2 }), 50);
   }, [flow, setArrows, setBoxes]);
 
   const onDrop = useCallback((e: DragEvent) => {
@@ -331,10 +333,32 @@ export function App({ mode, onSwitch, onHome }: { mode: Mode; onSwitch: (id: Mod
   const isValidConnection: IsValidConnection<Arrow> = useCallback((c) => {
     if (c.source === c.target) return false;
     const ends = [c.source, c.target].map((id) => boxesRef.current.find((b) => b.id === id));
-    return ends.every((b) => b && b.data.kind !== "note") && ends[0]!.data.kind !== "vocab";
-  }, []);
+    if (!ends.every((b) => b && b.data.kind !== "note") || ends[0]!.data.kind === "vocab") return false;
+    // Data Store: a dataset belongs to an object; two datasets are not linked.
+    return !(mode.datastore && ends.every((b) => b!.data.kind === "dataset"));
+  }, [mode.datastore]);
 
-  const onConnect = useCallback((c: Connection) => menuAt(c.source, c.target), [menuAt]);
+  /**
+   * Data Store: no relation to choose. Between objects the arrow goes from parent to child, as
+   * drawn; a dataset is linked from the object it belongs to, whichever way it was drawn.
+   */
+  const connectDatastore = useCallback((source: string, target: string) => {
+    const kindOf = (id: string) => boxesRef.current.find((b) => b.id === id)?.data.kind;
+    const dataset = kindOf(source) === "dataset" || kindOf(target) === "dataset";
+    const [from, to] = kindOf(source) === "dataset" ? [target, source] : [source, target];
+    const name = dataset ? HAS_DATASET : PARENT_OF;
+    setArrows((as) => as.some((a) => a.source === from && a.target === to) ? as : [...as, {
+      id: `a${Date.now().toString(36)}`, source: from, target: to,
+      data: { kind: "relation", name, curie: "", words: name, own: true, problems: [] },
+    }]);
+  }, [setArrows]);
+
+  const connect = useCallback((source: string, target: string) => {
+    if (mode.datastore) connectDatastore(source, target);
+    else menuAt(source, target);
+  }, [connectDatastore, menuAt, mode.datastore]);
+
+  const onConnect = useCallback((c: Connection) => connect(c.source, c.target), [connect]);
 
   // Dropping the arrow anywhere on a box connects it, not only on one of its dots.
   const onConnectEnd: OnConnectEnd = useCallback((event, state) => {
@@ -345,8 +369,8 @@ export function App({ mode, onSwitch, onHome }: { mode: Mode; onSwitch: (id: Mod
     const under = document.elementFromPoint(point.clientX, point.clientY)?.closest(".react-flow__node");
     const to = under?.getAttribute("data-id");
     const from = state.fromNode.id;
-    if (to && isValidConnection({ source: from, target: to, sourceHandle: null, targetHandle: null })) menuAt(from, to);
-  }, [isValidConnection, menuAt]);
+    if (to && isValidConnection({ source: from, target: to, sourceHandle: null, targetHandle: null })) connect(from, to);
+  }, [connect, isValidConnection]);
 
 
   const choose = useCallback((choice: Choice) => {
@@ -405,6 +429,18 @@ export function App({ mode, onSwitch, onHome }: { mode: Mode; onSwitch: (id: Mod
 
   const shownArrows = useMemo(() => arrows.map((a) => {
     const d = a.data!;
+    if (mode.datastore && d.kind === "relation" && !d.curie && (d.name === PARENT_OF || d.name === HAS_DATASET)) {
+      // Like the guide: plain arrows from parent to child; a dataset hangs off its object.
+      const dataset = d.name === HAS_DATASET;
+      const color = dataset ? "#b85450" : "#334155";
+      return {
+        ...a,
+        type: "floating",
+        label: undefined,
+        markerEnd: dataset ? undefined : { type: MarkerType.ArrowClosed, color, width: 18, height: 18 },
+        style: { stroke: color, strokeWidth: a.selected ? 2.5 : 1.6, strokeDasharray: dataset ? "3 4" : undefined },
+      };
+    }
     const level = workshop || !mode.ontology ? null : worst(d.problems);
     const color = level === "error" ? "#dc2626" : level === "warning" ? "#d97706" : d.kind === "inherit" ? "#475569" : "#64748b";
     return {
@@ -418,7 +454,7 @@ export function App({ mode, onSwitch, onHome }: { mode: Mode; onSwitch: (id: Mod
       markerEnd: { type: MarkerType.ArrowClosed, color, width: 18, height: 18 },
       style: { stroke: color, strokeWidth: a.selected ? 2.5 : 1.6, strokeDasharray: d.kind === "inherit" ? undefined : "6 4" },
     };
-  }), [arrows, workshop, mode.ontology]);
+  }), [arrows, workshop, mode.ontology, mode.datastore]);
 
   // ---- boxes as drawn: question tags, and dimming for the question shown ------------------
 
@@ -468,7 +504,7 @@ export function App({ mode, onSwitch, onHome }: { mode: Mode; onSwitch: (id: Mod
 
   const tidy = async () => {
     setBoxes(await layout(boxesRef.current, arrowsRef.current));
-    requestAnimationFrame(() => flow.fitView({ padding: 0.15, duration: 300 }));
+    requestAnimationFrame(() => flow.fitView({ padding: 0.15, duration: 300, maxZoom: 1.2 }));
   };
 
   return (
@@ -592,7 +628,7 @@ export function App({ mode, onSwitch, onHome }: { mode: Mode; onSwitch: (id: Mod
             selectionOnDrag selectionKeyCode={null} selectionMode={SelectionMode.Full} panOnDrag={[1, 2]}
             panOnScroll={wheel === "move"} zoomOnScroll={wheel === "zoom"} zoomOnDoubleClick={false}
             onPaneContextMenu={(e) => e.preventDefault()}
-            minZoom={0.1} maxZoom={3} fitView>
+            minZoom={0.1} maxZoom={3} fitView fitViewOptions={{ maxZoom: 1.2 }}>
             <Background gap={20} color="#e2e8f0" />
             <ZoomBar wheel={wheel} onWheel={changeWheel} />
             <MiniMap pannable zoomable style={{ width: 150, height: 100 }} nodeColor={(n) => getComputedStyle(document.documentElement)
@@ -644,7 +680,8 @@ export function App({ mode, onSwitch, onHome }: { mode: Mode; onSwitch: (id: Mod
                             onSave={(meta) => { const p = parsePattern(patternText(meta)); if (p) keepPattern(p); }}
                             onDownload={(meta) => save(patternText(meta), `${slug(meta.title)}.mmd`)} />
           ) : selectedBox ? (
-            <BoxDetails box={selectedBox} shapes={mode.shapes} ontology={mode.ontology} onChange={(p) => patchBox(selectedBox.id, p)}
+            <BoxDetails box={selectedBox} shapes={mode.shapes} ontology={mode.ontology} datastore={mode.datastore} boxes={boxes}
+                        onChange={(p) => patchBox(selectedBox.id, p)}
                         questions={useCase.questions.map((q, i) => ({ id: q.id, label: `Q${i + 1}`, text: q.text,
                                                                       linked: q.boxes.includes(selectedBox.id) }))}
                         onToggleQuestion={(qid, on) => toggleLink(qid, selectedBox.id, on)}
@@ -652,18 +689,23 @@ export function App({ mode, onSwitch, onHome }: { mode: Mode; onSwitch: (id: Mod
                           .map((p) => ({ pattern: u.title, part: p.name })))}
                         onDelete={() => flow.deleteElements({ nodes: [{ id: selectedBox.id }] })} />
           ) : selectedArrow ? (
-            <ArrowDetails arrow={selectedArrow} ontology={mode.ontology} srcName={nameOf(selectedArrow.source)} dstName={nameOf(selectedArrow.target)}
+            <ArrowDetails arrow={selectedArrow} ontology={mode.ontology} datastore={mode.datastore}
+                          srcName={nameOf(selectedArrow.source)} dstName={nameOf(selectedArrow.target)}
+                          onSwap={() => setArrows((as) => as.map((a) => (a.id === selectedArrow.id
+                            ? { ...a, source: a.target, target: a.source } : a)))}
                           onChange={(p) => patchArrow(selectedArrow.id, p)}
                           onReconnect={() => menuAt(selectedArrow.source, selectedArrow.target, selectedArrow.id)}
                           onDelete={() => flow.deleteElements({ edges: [{ id: selectedArrow.id }] })} />
           ) : (
             <Overview status={mode.ontology ? checkState.status
                                 : `${boxes.length} box${boxes.length === 1 ? "" : "es"}, ${arrows.length} arrow${arrows.length === 1 ? "" : "s"}`}
-                      ontology={mode.ontology} checkedAgainst={mode.ontology ? ontoStatus : ""} findings={checkState.findings} passed={checkState.passed} onSelect={select}
+                      ontology={mode.ontology} datastore={mode.datastore} checkedAgainst={mode.ontology ? ontoStatus : ""} findings={checkState.findings} passed={checkState.passed} onSelect={select}
                       uses={patternUses.map((u) => ({ id: u.id, title: u.title, version: u.version, boxes: u.parts.length,
                                                       problems: checkState.perUse[u.id] ?? 0 }))}
                       onForget={(id) => setPatternUses((us) => us.filter((u) => u.id !== id))}
-                      ownRelations={ownRelations} onForgetRelation={forgetRelation} />
+                      ownRelations={ownRelations} onForgetRelation={forgetRelation}>
+              {mode.datastore && <WhereThingsGo boxes={boxes} onSelect={(id) => select({ box: id })} />}
+            </Overview>
           )}
 </>)}
         </aside>

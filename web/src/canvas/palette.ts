@@ -6,12 +6,17 @@
  * 3.1.2); the user can make it more specific later. The IDs were checked against PMDco 3.1.2.
  *
  * Process modelling: plain shapes and relations with no ontology behind them.
+ *
+ * BAM Data Store: the object types of openBIS that the Data Store guide starts from
+ * ("Represent research data in the Data Store"), plus datasets. No ontology.
  */
 
 export type ShapeKind = "process" | "material" | "device" | "data" | "software" | "plan" | "property"
   | "other" | "vocab" | "note"
   // process modelling only
-  | "thing" | "agent" | "information";
+  | "thing" | "agent" | "information"
+  // BAM Data Store only
+  | "step" | "sample" | "chemical" | "instrument" | "dataset" | "object";
 
 export interface Shape {
   kind: ShapeKind;
@@ -60,12 +65,73 @@ export const PROCESS_SHAPES: Shape[] = [
 
 export const PROCESS_EXTRA_SHAPES: Shape[] = [{ ...NOTE, hint: "A comment" }];
 
+/**
+ * Where an object lives in the BAM Data Store (Space > Project > Collection), and its openBIS
+ * object type, or for a dataset its dataset type.
+ */
+export interface OpenbisInfo {
+  type: string; // e.g. EXPERIMENTAL_STEP.SEM; "" if not decided yet
+  area: string; // "Lab Notebook", "FB-Inventory" or "BAM-Inventory"; "" if not decided yet
+  space: string;
+  project: string;
+  collection: string;
+}
+
+export const AREAS = ["Lab Notebook", "FB-Inventory", "BAM-Inventory"];
+
+/**
+ * The shapes of the Data Store section, following the guide: things you do (experimental
+ * steps), things you generate (samples), things you have or use (chemicals, instruments) and
+ * datasets. Where each one goes first is taken from the guide's example; the group then agrees on
+ * its own names.
+ */
+export const DATASTORE_SHAPES: (Shape & { openbis: OpenbisInfo })[] = [
+  { kind: "step", title: "Experimental step", hint: "Something you do: synthesis, treatment, measurement, analysis",
+    classId: "", classLabel: "",
+    openbis: { type: "EXPERIMENTAL_STEP", area: "Lab Notebook", space: "", project: "", collection: "Experimental Steps" } },
+  { kind: "sample", title: "Sample", hint: "Something you generate: a sample, a synthesized material",
+    classId: "", classLabel: "",
+    openbis: { type: "SAMPLE", area: "FB-Inventory", space: "MATERIALS", project: "MATERIALS", collection: "Samples" } },
+  { kind: "chemical", title: "Chemical", hint: "Something you have or use: a chemical, a solution",
+    classId: "", classLabel: "",
+    openbis: { type: "CHEMICAL", area: "FB-Inventory", space: "MATERIALS", project: "CONSUMABLES", collection: "Chemicals" } },
+  { kind: "instrument", title: "Instrument", hint: "Something you have or use: an instrument, a machine",
+    classId: "", classLabel: "",
+    openbis: { type: "INSTRUMENT", area: "FB-Inventory", space: "EQUIPMENT", project: "INSTRUMENTS", collection: "Instruments" } },
+  { kind: "dataset", title: "Dataset", hint: "Files from a step: raw data, images, code, results",
+    classId: "", classLabel: "",
+    openbis: { type: "", area: "", space: "", project: "", collection: "" } },
+  { kind: "object", title: "Other object", hint: "Another BAM object type (SOP, software, ...) or not decided yet",
+    classId: "", classLabel: "",
+    openbis: { type: "", area: "", space: "", project: "", collection: "" } },
+];
+
+export const DATASTORE_EXTRA_SHAPES: Shape[] = [{ ...NOTE, hint: "A comment" }];
+
+export const DATASTORE_KINDS = new Set<ShapeKind>(DATASTORE_SHAPES.map((s) => s.kind));
+
+/** A fresh copy of where a new box of this kind goes first. */
+export function openbisFor(kind: ShapeKind): OpenbisInfo {
+  const s = DATASTORE_SHAPES.find((x) => x.kind === kind);
+  return { ...(s?.openbis ?? { type: "", area: "", space: "", project: "", collection: "" }) };
+}
+
+/** The shape for an object type: EXPERIMENTAL_STEP.SEM is drawn as an experimental step. */
+export function kindForType(code: string): ShapeKind {
+  const top = code.split(".")[0];
+  return DATASTORE_SHAPES.find((s) => s.kind !== "dataset" && s.kind !== "object" && s.openbis.type === top)?.kind ?? "object";
+}
+
+/** The arrows of the Data Store section: openBIS parent-child links, and a dataset's object. */
+export const PARENT_OF = "parent of";
+export const HAS_DATASET = "has dataset";
+
 /** Relations offered when drawing an arrow in process modelling. The user can type any other name. */
 export const PROCESS_RELATIONS: string[] = [
   "has input", "has output", "comes before", "has step", "carried out by", "uses", "has part", "is about",
 ];
 
-const ALL_SHAPES = [...MSE_SHAPES, ...MSE_EXTRA_SHAPES, ...PROCESS_SHAPES];
+const ALL_SHAPES: Shape[] = [...MSE_SHAPES, ...MSE_EXTRA_SHAPES, ...PROCESS_SHAPES, ...DATASTORE_SHAPES];
 const FALLBACK = MSE_SHAPES.find((s) => s.kind === "other")!;
 
 export function shapeOf(kind: ShapeKind): Shape {
