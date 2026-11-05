@@ -365,3 +365,37 @@ button, input, select, textarea { font: inherit; color: inherit; }
   font: inherit; font-size: 12px; cursor: pointer; }
 .ds-chip:hover { background: #f8fafc; }
 .ds-hits .term-label { white-space: normal; overflow-wrap: anywhere; }
+
+/* ---- phones and narrow windows: the canvas gets the whole width ---- */
+.phone-buttons, .sheet-close { display: none; }
+@media (max-width: 900px) {
+  .bar { flex-wrap: nowrap; overflow-x: auto; padding: 6px 10px; gap: 8px; -webkit-overflow-scrolling: touch; }
+  .bar-spacer { display: none; }
+  .body { display: block; position: relative; overflow: hidden; }
+  .canvas { height: 100%; }
+  /* the shapes: a drawer from the left */
+  .palette { position: absolute; top: 0; bottom: 0; left: 0; width: min(82vw, 300px); z-index: 30;
+    transform: translateX(-102%); transition: transform 0.2s ease; box-shadow: 4px 0 20px rgb(15 23 42 / 0.12); }
+  .body.open-shapes .palette { transform: none; }
+  /* the details: a sheet from the bottom, so the canvas stays in view above it */
+  .details { position: absolute; left: 0; right: 0; bottom: 0; height: min(58%, 560px); z-index: 30; border-left: 0;
+    border-top: 1px solid var(--line); border-radius: 14px 14px 0 0; transform: translateY(102%); transition: transform 0.2s ease;
+    box-shadow: 0 -6px 24px rgb(15 23 42 / 0.12); }
+  .body.open-details .details { transform: none; }
+  .tabs { border-radius: 14px 14px 0 0; }
+  .sheet-close { display: inline-block; margin-left: auto; border: 0; background: none; color: var(--accent); font-weight: 600; cursor: pointer; }
+  .drawer-backdrop { position: absolute; inset: 0; z-index: 25; background: rgb(15 23 42 / 0.25); }
+  .phone-buttons { display: flex; justify-content: space-between; position: absolute; top: 10px; left: 10px; right: 10px; z-index: 6;
+    pointer-events: none; }
+  .phone-buttons button { pointer-events: auto; border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 8px 16px;
+    font-weight: 600; box-shadow: 0 2px 10px rgb(15 23 42 / 0.1); cursor: pointer; }
+  .notice { top: 58px; }
+  .status { left: 50%; }
+  .menu { max-width: calc(100% - 16px); }
+  .help-card { max-width: calc(100vw - 32px); }
+}
+/* touch screens: bigger dots to start an arrow; no mouse wheel to set */
+@media (pointer: coarse) {
+  .box .react-flow__handle { width: 20px; height: 20px; }
+  .zoom-wheel, .zoom-sep:has(+ .zoom-wheel) { display: none; }
+}

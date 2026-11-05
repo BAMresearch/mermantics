@@ -20,6 +20,7 @@ import { ArrowDetails, BoxDetails, Overview, SelectionPanel, type GlobalFinding 
 import { FloatingEdge } from "./FloatingEdge.js";
 import { layout } from "./layout.js";
 import { MermaidPanel } from "./MermaidPanel.js";
+import { NARROW, TOUCH, useMedia } from "./media.js";
 import { emptyUseCase, fromMermaid, makeId, toMermaid, type Arrow, type ArrowData, type Box, type BoxData, type Problem,
          type UseCase } from "./model.js";
 import { MODES, type Mode, type ModeId } from "./mode.js";
@@ -135,6 +136,11 @@ export function App({ mode, onSwitch, onHome }: { mode: Mode; onSwitch: (id: Mod
   const fileInput = useRef<HTMLInputElement>(null);
   const flow = useReactFlow<Box, Arrow>();
   const [wheel, setWheel] = useState<WheelMode>(loadWheelMode);
+  // On a phone: the shapes are a drawer from the left, the details a sheet from the bottom.
+  const narrow = useMedia(NARROW);
+  const touch = useMedia(TOUCH);
+  const [drawer, setDrawer] = useState<"shapes" | "details" | null>(null);
+  useEffect(() => { if (!narrow) setDrawer(null); }, [narrow]);
   const changeWheel = useCallback((m: WheelMode) => { setWheel(m); saveWheelMode(m); }, []);
   const boxesRef = useRef(boxes);
   const arrowsRef = useRef(arrows);
@@ -325,8 +331,8 @@ export function App({ mode, onSwitch, onHome }: { mode: Mode; onSwitch: (id: Mod
 
   const menuAt = useCallback((source: string, target: string, replace?: string) => {
     const rect = wrapper.current!.getBoundingClientRect();
-    const x = Math.min(Math.max(pointer.current.x - rect.left, 8), rect.width - 340);
-    const y = Math.min(Math.max(pointer.current.y - rect.top, 8), rect.height - 360);
+    const x = Math.max(8, Math.min(pointer.current.x - rect.left, rect.width - 340));
+    const y = Math.max(8, Math.min(pointer.current.y - rect.top, rect.height - 360));
     setPending({ source, target, x, y, replace, srcClasses: classesOf(source), dstClasses: classesOf(target) });
   }, [classesOf]);
 
@@ -559,8 +565,9 @@ export function App({ mode, onSwitch, onHome }: { mode: Mode; onSwitch: (id: Mod
         <div className="bar-spacer" />
       </header>
 
-      <div className="body">
-        <aside className="palette">
+      <div className={`body${drawer ? ` open-${drawer}` : ""}`}>
+        {/* Phone: tapping a shape adds it and closes the drawer. */}
+        <aside className="palette" onClick={(e) => { if (narrow && (e.target as Element).closest(".shape")) setDrawer(null); }}>
           <h2>Add to the model</h2>
           {mode.shapes.map((s) => (
             <button type="button" key={s.kind} className={`shape kind-${s.kind}`} draggable
@@ -621,21 +628,28 @@ export function App({ mode, onSwitch, onHome }: { mode: Mode; onSwitch: (id: Mod
             onNodesChange={onBoxesChange} onEdgesChange={onArrowsChange}
             onConnect={onConnect} onConnectEnd={onConnectEnd} isValidConnection={isValidConnection}
             connectionMode={ConnectionMode.Loose} connectionRadius={40}
-            deleteKeyCode={["Backspace", "Delete"]} onPaneClick={() => setPending(null)} multiSelectionKeyCode={["Shift", "Meta", "Control"]}
+            deleteKeyCode={["Backspace", "Delete"]} onPaneClick={() => { setPending(null); if (narrow) setDrawer(null); }} multiSelectionKeyCode={["Shift", "Meta", "Control"]}
+            // On a phone, tapping a box or arrow opens its details.
+            onNodeClick={() => { if (narrow) setDrawer("details"); }} onEdgeClick={() => { if (narrow) setDrawer("details"); }}
             // Like draw.io: dragging on empty canvas draws a selection rectangle; the canvas moves with
             // the middle or right mouse button or Space + drag. Scrolling zooms or moves, as chosen in
-            // the zoom bar; pinching and Ctrl/Cmd+scroll always zoom.
-            selectionOnDrag selectionKeyCode={null} selectionMode={SelectionMode.Full} panOnDrag={[1, 2]}
+            // the zoom bar; pinching and Ctrl/Cmd+scroll always zoom. On a touch screen one finger
+            // moves the canvas instead, and two fingers zoom.
+            selectionOnDrag={!touch} selectionKeyCode={null} selectionMode={SelectionMode.Full} panOnDrag={touch ? true : [1, 2]}
             panOnScroll={wheel === "move"} zoomOnScroll={wheel === "zoom"} zoomOnDoubleClick={false}
             onPaneContextMenu={(e) => e.preventDefault()}
             minZoom={0.1} maxZoom={3} fitView fitViewOptions={{ maxZoom: 1.2 }}>
             <Background gap={20} color="#e2e8f0" />
             <ZoomBar wheel={wheel} onWheel={changeWheel} />
-            <MiniMap pannable zoomable style={{ width: 150, height: 100 }} nodeColor={(n) => getComputedStyle(document.documentElement)
-              .getPropertyValue(`--k-${(n.data as BoxData).kind}`) || "#94a3b8"} />
+            {!narrow && <MiniMap pannable zoomable style={{ width: 150, height: 100 }} nodeColor={(n) => getComputedStyle(document.documentElement)
+              .getPropertyValue(`--k-${(n.data as BoxData).kind}`) || "#94a3b8"} />}
           </ReactFlow>
+          <div className="phone-buttons">
+            <button type="button" onClick={() => setDrawer((d) => (d === "shapes" ? null : "shapes"))}>+ Add</button>
+            <button type="button" onClick={() => setDrawer((d) => (d === "details" ? null : "details"))}>Details</button>
+          </div>
           {boxes.length === 0 && ready && (
-            <div className="empty">Drag a shape from the left to start, or open an example.</div>
+            <div className="empty">{narrow ? "Tap \"+ Add\" to start, or open an example." : "Drag a shape from the left to start, or open an example."}</div>
           )}
           {mode.ontology && <button type="button" className={`status ${checkState.findings.some((f) => f.level === "error") ? "bad"
             : checkState.findings.some((f) => f.level === "warning") ? "warn" : "good"}`}
@@ -660,6 +674,7 @@ export function App({ mode, onSwitch, onHome }: { mode: Mode; onSwitch: (id: Mod
           )}
         </main>
 
+        {drawer === "shapes" && <div className="drawer-backdrop" onClick={() => setDrawer(null)} />}
         <aside className="details">
           <div className="tabs" role="tablist">
             <button type="button" role="tab" aria-selected={tab === "model"} className={tab === "model" ? "on" : ""}
@@ -668,6 +683,7 @@ export function App({ mode, onSwitch, onHome }: { mode: Mode; onSwitch: (id: Mod
                     onClick={() => setTab("usecase")}>
               Use case{useCase.questions.length ? ` · ${useCase.questions.length} Q` : ""}
             </button>
+            <button type="button" className="sheet-close" aria-label="Close" onClick={() => setDrawer(null)}>Close</button>
           </div>
           {tab === "usecase" ? (
             <UseCasePanel useCase={useCase} onChange={setUseCase} boxes={boxes}
