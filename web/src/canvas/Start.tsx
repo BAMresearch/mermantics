@@ -18,9 +18,15 @@ export function Start({ onChoose }: { onChoose: (id: ModeId) => void }) {
             </button>
           );
         })}
+        {/* Not a section yet: the design options for the PMD Hackathon come here later. */}
+        <div className="start-card start-hackathon is-soon" aria-disabled="true">
+          <b>PMD Hackathon - Computations <span className="start-soon">In progress</span></b>
+          <span>Design options for modelling computations, for the PMD Hackathon.</span>
+          <span className="start-go">Coming soon</span>
+        </div>
       </div>
       <p className="start-foot">
-        All three save a plain Mermaid file, and you can switch at any time from the top bar.
+        Each section saves a plain Mermaid file, and you can switch at any time from the top bar.
       </p>
     </div>
   );
