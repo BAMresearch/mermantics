@@ -175,6 +175,3 @@ PMDCO_FILE=/path/to/pmdco-full.ttl pytest -m pmdco   # full PMDco runs, a few mi
 `tests/fixtures/` contains a real simulation data-model diagram and three deliberately
 broken copies (unknown ID, impossible class, misused relation) with the expected results.
 
-## License
-
-To be decided.
