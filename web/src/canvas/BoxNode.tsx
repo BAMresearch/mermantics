@@ -2,7 +2,7 @@ import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { memo } from "react";
 
 import type { Box, Problem } from "./model.js";
-import { shapeOf } from "./palette.js";
+import { openbisFor, shapeOf } from "./palette.js";
 
 export function worst(problems: Problem[]): Problem["level"] | null {
   for (const level of ["error", "warning", "note"] as const) {
@@ -27,7 +27,18 @@ function BoxNodeView({ data, selected }: NodeProps<Box>) {
         {shape.title}
       </div>
       <div className="box-name">{data.name || <em>no name</em>}</div>
-      {!isNote && !isVocab && (data.classId || !data.plain) && (
+      {data.openbis && (<>
+        {data.openbis.type
+          ? data.openbis.type !== openbisFor(data.kind).type && <div className="box-class box-type" title={`${data.kind === "dataset" ? "Dataset" : "Object"} type ${data.openbis.type}`}>{data.openbis.type}</div>
+          : <div className="box-class open-type">type not decided yet</div>}
+        {data.kind !== "dataset" && (data.openbis.project || data.openbis.collection) && (
+          <div className="box-where" title={[data.openbis.area, data.openbis.space, data.openbis.project, data.openbis.collection]
+            .filter((x) => x).join(" > ")}>
+            {[data.openbis.project, data.openbis.collection].filter((x) => x).join(" › ")}
+          </div>
+        )}
+      </>)}
+      {!data.openbis && !isNote && !isVocab && (data.classId || !data.plain) && (
         data.classId
           ? <div className="box-class" title={data.classId}>{data.classLabel || data.classId}</div>
           : <div className="box-class missing">kind of thing not chosen yet</div>

@@ -12,7 +12,7 @@
 import type { Edge as FlowEdge, Node as FlowNode } from "@xyflow/react";
 
 import { edit, labels, mermaid } from "../core/index.js";
-import { isShapeKind, wordsFor, type ShapeKind } from "./palette.js";
+import { DATASTORE_KINDS, isShapeKind, wordsFor, type OpenbisInfo, type ShapeKind } from "./palette.js";
 
 export interface Problem {
   level: "error" | "warning" | "note";
@@ -30,6 +30,7 @@ export interface BoxData extends Record<string, unknown> {
   problems: Problem[];
   tags?: string[]; // only for drawing: the competency questions that use this box ("Q1")
   plain?: boolean; // only for drawing: process modelling, so no "kind of thing not chosen yet"
+  openbis?: OpenbisInfo; // BAM Data Store boxes: object or dataset type, and where the object lives
 }
 
 export interface ArrowData extends Record<string, unknown> {
@@ -123,6 +124,46 @@ const CLASS_DEFS = [
   "classDef note fill:#fffbeb,stroke:#d97706,color:#374151",
 ];
 
+// BAM Data Store boxes, in the colours of the Data Store guide; only written when used.
+const DATASTORE_CLASS_DEFS: Record<string, string> = {
+  dsdo: "classDef dsdo fill:#fff2cc,stroke:#d6b656,color:#0f172a",
+  dsmake: "classDef dsmake fill:#d5e8d4,stroke:#82b366,color:#0f172a",
+  dsuse: "classDef dsuse fill:#e1d5e7,stroke:#9673a6,color:#0f172a",
+  dsdata: "classDef dsdata fill:#f8cecc,stroke:#b85450,color:#0f172a",
+  dsobject: "classDef dsobject fill:#f1f5f9,stroke:#64748b,color:#0f172a",
+};
+const DATASTORE_CSS: Partial<Record<ShapeKind, string>> = {
+  step: "dsdo", sample: "dsmake", chemical: "dsuse", instrument: "dsuse", dataset: "dsdata", object: "dsobject",
+};
+
+/** How the Data Store fields are written as label lines, so the Mermaid file reads well. */
+const OPENBIS_LINES: [keyof OpenbisInfo, string][] = [
+  ["area", "In"], ["space", "Space"], ["project", "Project"], ["collection", "Collection"],
+];
+
+function openbisLines(kind: ShapeKind, o: OpenbisInfo): string[] {
+  const out = [`${kind === "dataset" ? "Dataset type" : "Object type"}: ${o.type}`];
+  if (kind !== "dataset") for (const [k, word] of OPENBIS_LINES) if (o[k]) out.push(`${word}: ${o[k]}`);
+  return out;
+}
+
+/** Takes the Data Store field lines out of `lines`. */
+function readOpenbis(lines: string[]): { openbis: OpenbisInfo; rest: string[] } {
+  const openbis: OpenbisInfo = { type: "", area: "", space: "", project: "", collection: "" };
+  const rest: string[] = [];
+  for (const line of lines) {
+    const m = /^(Object type|Dataset type|In|Space|Project|Collection):\s*(.*)$/u.exec(line);
+    if (!m) {
+      rest.push(line);
+      continue;
+    }
+    const value = m[2]!.trim();
+    if (m[1] === "Object type" || m[1] === "Dataset type") openbis.type = value;
+    else openbis[OPENBIS_LINES.find(([, w]) => w === m[1])![0]] = value;
+  }
+  return { openbis, rest };
+}
+
 // ---- ids -----------------------------------------------------------------------------------
 
 /** A Mermaid-safe box id from a name, not yet in `taken`. */
@@ -146,6 +187,7 @@ function boxLabel(d: BoxData): string {
   }
   const lines: edit.LabelLine[] = [];
   if (d.classId) lines.push({ code: "", curie: d.classId, label: d.classLabel });
+  if (d.openbis && DATASTORE_KINDS.has(d.kind)) lines.push(...openbisLines(d.kind, d.openbis).map((text) => ({ text })));
   const extra = d.lines.filter((l) => l.trim());
   if (extra.length) lines.push({ text: "" }, ...extra.map((text) => ({ text })));
   return edit.writeBoxLabel({ name: d.name, bold: true, lines });
@@ -154,6 +196,7 @@ function boxLabel(d: BoxData): string {
 function styleClass(d: BoxData): string {
   if (d.kind === "note") return "note";
   if (d.kind === "vocab") return "vocab";
+  if (d.openbis && DATASTORE_CSS[d.kind]) return DATASTORE_CSS[d.kind]!;
   return d.css.find((c) => c !== "note" && c !== "vocab") ?? "local";
 }
 
@@ -176,7 +219,9 @@ export function toMermaid(boxes: Box[], arrows: Arrow[], useCase: UseCase = empt
       out.push(`    ${a.source} -. "${label}" .-> ${a.target}`);
     }
   }
-  out.push("", ...CLASS_DEFS.map((c) => `    ${c}`), "");
+  const used = new Set(boxes.map((b) => styleClass(b.data)));
+  const defs = [...CLASS_DEFS, ...Object.entries(DATASTORE_CLASS_DEFS).filter(([c]) => used.has(c)).map(([, d]) => d)];
+  out.push("", ...defs.map((c) => `    ${c}`), "");
   const pos: Record<string, [number, number]> = {};
   for (const b of boxes) pos[b.id] = [Math.round(b.position.x), Math.round(b.position.y)];
   out.push(LAYOUT_PREFIX + JSON.stringify(pos));
@@ -288,7 +333,14 @@ export function fromMermaid(text: string): Imported {
     const data = readBox(node.label, node.css);
     const kind = kinds[node.id];
     if (data.kind === "other" && isShapeKind(kind) && kind !== "note" && kind !== "vocab") data.kind = kind;
-    boxes.push({ id: node.id, type: "box", position: { x: p?.[0] ?? 0, y: p?.[1] ?? 0 }, data: { ...data, problems: [] } });
+    const extra: Partial<BoxData> = {};
+    if (DATASTORE_KINDS.has(data.kind)) {
+      const { openbis, rest } = readOpenbis(data.lines);
+      extra.openbis = openbis;
+      data.lines = rest;
+      data.css = data.css.filter((c) => !(c in DATASTORE_CLASS_DEFS));
+    }
+    boxes.push({ id: node.id, type: "box", position: { x: p?.[0] ?? 0, y: p?.[1] ?? 0 }, data: { ...data, ...extra, problems: [] } });
   }
   const arrows: Arrow[] = diagram.edges.map((e, i) => {
     if (e.kind === "inherit") {

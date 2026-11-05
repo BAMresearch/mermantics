@@ -8,7 +8,7 @@ export function Start({ onChoose }: { onChoose: (id: ModeId) => void }) {
       <img className="start-logo" src={logo} alt="mermantics" />
       <h1>What do you want to model?</h1>
       <div className="start-cards">
-        {(["process", "mse"] as const).map((id) => {
+        {(["process", "mse", "datastore"] as const).map((id) => {
           const m = MODES[id];
           return (
             <button type="button" key={id} className={`start-card start-${id}`} onClick={() => onChoose(id)}>
@@ -20,7 +20,7 @@ export function Start({ onChoose }: { onChoose: (id: ModeId) => void }) {
         })}
       </div>
       <p className="start-foot">
-        Both save a plain Mermaid file, and you can switch at any time from the top bar.
+        All three save a plain Mermaid file, and you can switch at any time from the top bar.
       </p>
     </div>
   );

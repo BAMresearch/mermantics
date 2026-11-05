@@ -53,7 +53,7 @@ export function ZoomBar({ wheel, onWheel }: { wheel: WheelMode; onWheel: (m: Whe
         void flow.zoomTo(1, { duration: 150 });
       } else if (!mod && !e.altKey && e.shiftKey && e.code === "Digit1") {
         e.preventDefault();
-        void flow.fitView({ padding: 0.15, duration: 250 });
+        void flow.fitView({ padding: 0.15, duration: 250, maxZoom: 1.2 });
       }
     };
     window.addEventListener("keydown", onKey);
@@ -70,7 +70,7 @@ export function ZoomBar({ wheel, onWheel }: { wheel: WheelMode; onWheel: (m: Whe
               disabled={zoom >= maxZoom - 1e-3} onClick={() => void flow.zoomIn({ duration: 150 })}>+</button>
       <span className="zoom-sep" />
       <button type="button" className="zoom-fit" title="Show the whole diagram (Shift+1)"
-              onClick={() => void flow.fitView({ padding: 0.15, duration: 250 })}>Fit</button>
+              onClick={() => void flow.fitView({ padding: 0.15, duration: 250, maxZoom: 1.2 })}>Fit</button>
       <span className="zoom-sep" />
       <label className="zoom-wheel" title={wheel === "zoom"
         ? "Scrolling zooms. Move around by dragging with the right mouse button, or hold Space and drag."

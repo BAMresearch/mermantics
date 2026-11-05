@@ -22,7 +22,7 @@ on every change.
 ## Draw: the web canvas
 
 **https://ebb2675.github.io/mermantics/** runs in your browser, with nothing to install
-and nothing sent to a server. It has two sections:
+and nothing sent to a server. It has three sections:
 
 - **Domain-agnostic process modelling**: draw any process with plain boxes (process steps,
   objects, agents, information) and name the arrows in your own words. No ontology is
@@ -30,8 +30,14 @@ and nothing sent to a server. It has two sections:
 - **Materials science and engineering**: drag boxes in, search PMDco 3.1.2 for their IDs,
   and connect them with arrows chosen from the relations that fit. The checks run as you
   draw, and a finding points to the box or arrow it is about.
+- **BAM Data Store**: plan how research data goes into the
+  [BAM Data Store](https://datastore.bam.de) (openBIS), following its guide "Represent
+  research data in the Data Store": experimental steps, samples, chemicals, instruments and
+  datasets, linked from parent to child. Each object gets a BAM object type (searchable, from
+  [bam-masterdata](https://github.com/BAMresearch/bam-masterdata)) and its Space, Project and
+  Collection. No ontology is needed.
 
-Both save the same kind of Mermaid file; "Show Mermaid" shows it as text. In the browser
+All three save the same kind of Mermaid file; "Show Mermaid" shows it as text. In the browser
 the checks are the fast ones (1, 2, 4 and 5 below, like `--fast`), against PMDco for now.
 For the reasoner checks or another ontology, use the command line tool. The code is in
 [`web/`](web/README.md).
