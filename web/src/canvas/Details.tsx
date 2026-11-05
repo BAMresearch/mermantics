@@ -292,7 +292,8 @@ export function Overview({ status, ontology, checkedAgainst = "", findings, pass
           <li>To connect two boxes, drag from a dot on the edge of one box to the other box. You then pick what the arrow means.</li>
           <li>Click a box or arrow to edit it. Delete or Backspace removes it.</li>
           <li>Drag on empty canvas to select the boxes inside the rectangle; Shift+click adds or removes one.</li>
-          <li>Move around with the scroll wheel or trackpad, or drag with the right mouse button. Ctrl+scroll or pinch zooms.</li>
+          <li>Zoom with the buttons at the bottom left, by scrolling, by pinching, or with Ctrl/Cmd and + or -. Shift+1 shows the whole diagram.</li>
+          <li>Move around by dragging with the right mouse button or holding Space and dragging. If you would rather scroll to move, switch "Scroll" at the bottom left to "moves".</li>
           {ontology
             ? <li>Everything is checked against PMDco while you draw, in your browser.</li>
             : <li>Type any name for an arrow; the ones you make come back in the menu under "My relations".</li>}
