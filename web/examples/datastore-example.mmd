@@ -1,51 +1,61 @@
 flowchart TB
 
-%% The example from the BAM Data Store guide "Represent research data in the Data Store":
-%% material synthesis and characterization. Arrows go from parent to child; datasets hang off
-%% the experimental step that made them.
+%% Example for the BAM Data Store: material synthesis and characterization. Arrows go from
+%% parent to child, and the experimental steps are linked through the samples they use and
+%% make. Datasets hang off the experimental step that made them.
 
     Synthesis["<b>Material synthesis</b><br>Object type: EXPERIMENTAL_STEP<br>In: Lab Notebook<br>Space: Home space (FB username)<br>Project: Material synthesis and characterization<br>Collection: Experimental Steps"]:::dsdo
     Treatment["<b>Material treatment</b><br>Object type: EXPERIMENTAL_STEP<br>In: Lab Notebook<br>Space: Home space (FB username)<br>Project: Material synthesis and characterization<br>Collection: Experimental Steps"]:::dsdo
     Char1["<b>Characterization parameter 1</b><br>Object type: EXPERIMENTAL_STEP<br>In: Lab Notebook<br>Space: Home space (FB username)<br>Project: Material synthesis and characterization<br>Collection: Experimental Steps"]:::dsdo
     Char2["<b>Characterization parameter 2</b><br>Object type: EXPERIMENTAL_STEP<br>In: Lab Notebook<br>Space: Home space (FB username)<br>Project: Material synthesis and characterization<br>Collection: Experimental Steps"]:::dsdo
     Analysis2["<b>Data analysis parameter 2</b><br>Object type: EXPERIMENTAL_STEP<br>In: Lab Notebook<br>Space: Home space (FB username)<br>Project: Material synthesis and characterization<br>Collection: Experimental Steps"]:::dsdo
-
     Chemical1["<b>Chemical 1</b><br>Object type: CHEMICAL<br>In: FB-Inventory<br>Space: MATERIALS<br>Project: CONSUMABLES<br>Collection: Chemicals"]:::dsuse
     Chemical2["<b>Chemical 2</b><br>Object type: CHEMICAL<br>In: FB-Inventory<br>Space: MATERIALS<br>Project: CONSUMABLES<br>Collection: Chemicals"]:::dsuse
     Solution["<b>Treatment solution</b><br>Object type: CHEMICAL<br>In: FB-Inventory<br>Space: MATERIALS<br>Project: CONSUMABLES<br>Collection: Chemicals"]:::dsuse
     Instrument1["<b>Instrument 1</b><br>Object type: INSTRUMENT<br>In: FB-Inventory<br>Space: EQUIPMENT<br>Project: INSTRUMENTS<br>Collection: Instruments"]:::dsuse
     Instrument2["<b>Instrument 2</b><br>Object type: INSTRUMENT<br>In: BAM-Inventory<br>Space: EQUIPMENT<br>Project: INSTRUMENTS<br>Collection: Instruments"]:::dsuse
     Instrument3["<b>Instrument 3</b><br>Object type: INSTRUMENT<br>In: BAM-Inventory<br>Space: EQUIPMENT<br>Project: INSTRUMENTS<br>Collection: Instruments"]:::dsuse
-
     Synthesized["<b>Synthesized material</b><br>Object type: SAMPLE<br>In: FB-Inventory<br>Space: MATERIALS<br>Project: MATERIALS<br>Collection: Samples"]:::dsmake
-    Sample001["<b>Sample_001</b><br>Object type: SAMPLE<br>In: FB-Inventory<br>Space: MATERIALS<br>Project: MATERIALS<br>Collection: Samples"]:::dsmake
-
-    DataSynthesis["<b>Material synthesis data</b><br>Dataset type: RAW_DATA"]:::dsdata
+    Sample001["<b>Material Sample 002</b><br>Object type: SAMPLE<br>In: FB-Inventory<br>Space: MATERIALS<br>Project: MATERIALS<br>Collection: Samples"]:::dsmake
     DataChar1["<b>Characterization parameter 1 data</b><br>Dataset type: RAW_DATA"]:::dsdata
     DataChar2["<b>Characterization parameter 2 data</b><br>Dataset type: RAW_DATA"]:::dsdata
     DataAnalysis2["<b>Analysis of characterization parameter 2</b><br>Dataset type: ANALYZED_DATA"]:::dsdata
+    Sample["<b>Material Sample 001</b><br>Object type: SAMPLE<br>In: FB-Inventory<br>Space: MATERIALS<br>Project: MATERIALS<br>Collection: Samples"]:::dsmake
+    Sample2["<b>Treated Sample 001</b><br>Object type: SAMPLE<br>In: FB-Inventory<br>Space: MATERIALS<br>Project: MATERIALS<br>Collection: Samples"]:::dsmake
+    Sample3["<b>Treated Sample 002</b><br>Object type: SAMPLE<br>In: FB-Inventory<br>Space: MATERIALS<br>Project: MATERIALS<br>Collection: Samples"]:::dsmake
+    ExperimentalStep["<b>Characterization Parameter 1</b><br>Object type: EXPERIMENTAL_STEP<br>In: Lab Notebook<br>Collection: Experimental Steps"]:::dsdo
+    Dataset["<b>Characterization Parameter 1 data</b><br>Dataset type: "]:::dsdata
 
     Chemical1 -. "parent of" .-> Synthesis
     Chemical2 -. "parent of" .-> Synthesis
     Instrument1 -. "parent of" .-> Synthesis
     Synthesis -. "parent of" .-> Synthesized
-    Synthesis -. "parent of" .-> Treatment
     Synthesized -. "parent of" .-> Sample001
-    Sample001 -. "parent of" .-> Treatment
     Solution -. "parent of" .-> Treatment
-    Treatment -. "parent of" .-> Char1
-    Treatment -. "parent of" .-> Char2
     Instrument2 -. "parent of" .-> Char1
     Instrument3 -. "parent of" .-> Char2
     Char2 -. "parent of" .-> Analysis2
-    Synthesis -. "has dataset" .-> DataSynthesis
-    Char1 -. "has dataset" .-> DataChar1
     Char2 -. "has dataset" .-> DataChar2
     Analysis2 -. "has dataset" .-> DataAnalysis2
+    Synthesized -. "parent of" .-> Sample
+    Sample001 -. "parent of" .-> Treatment
+    Sample -. "parent of" .-> Char1
+    Treatment -. "parent of" .-> Sample2
+    Treatment -. "parent of" .-> Sample3
+    Char1 -. "has dataset" .-> DataChar1
+    Sample3 -. "parent of" .-> Char2
+    Sample2 -. "parent of" .-> ExperimentalStep
+    ExperimentalStep -. "has dataset" .-> Dataset
 
+    classDef base fill:#e5e7eb,stroke:#6b7280,stroke-width:2px,color:#111827
+    classDef upper fill:#ffffff,stroke:#9ca3af,stroke-width:2px,color:#374151
+    classDef local fill:#dbeafe,stroke:#1d4ed8,stroke-width:2px,color:#0f172a
+    classDef vocab fill:#f5f3ff,stroke:#7c3aed,color:#0f172a
+    classDef note fill:#fffbeb,stroke:#d97706,color:#374151
     classDef dsdo fill:#fff2cc,stroke:#d6b656,color:#0f172a
     classDef dsmake fill:#d5e8d4,stroke:#82b366,color:#0f172a
     classDef dsuse fill:#e1d5e7,stroke:#9673a6,color:#0f172a
     classDef dsdata fill:#f8cecc,stroke:#b85450,color:#0f172a
 
-%% mermantics-kinds {"Synthesis":"step","Treatment":"step","Char1":"step","Char2":"step","Analysis2":"step","Chemical1":"chemical","Chemical2":"chemical","Solution":"chemical","Instrument1":"instrument","Instrument2":"instrument","Instrument3":"instrument","Synthesized":"sample","Sample001":"sample","DataSynthesis":"dataset","DataChar1":"dataset","DataChar2":"dataset","DataAnalysis2":"dataset"}
+%% mermantics-layout {"Synthesis":[529,174],"Treatment":[863,582],"Char1":[197,595],"Char2":[1073,852],"Analysis2":[1101,1069],"Chemical1":[797,12],"Chemical2":[529,12],"Solution":[1151,506],"Instrument1":[261,12],"Instrument2":[56,444],"Instrument3":[1448,786],"Synthesized":[606,296],"Sample001":[907,437],"DataChar1":[456,706],"DataChar2":[1326,942],"DataAnalysis2":[1313,1166],"Sample":[423,436],"Sample2":[817,720],"Sample3":[1077,711],"ExperimentalStep":[697,856],"Dataset":[791,970]}
+%% mermantics-kinds {"Synthesis":"step","Treatment":"step","Char1":"step","Char2":"step","Analysis2":"step","Chemical1":"chemical","Chemical2":"chemical","Solution":"chemical","Instrument1":"instrument","Instrument2":"instrument","Instrument3":"instrument","Synthesized":"sample","Sample001":"sample","DataChar1":"dataset","DataChar2":"dataset","DataAnalysis2":"dataset","Sample":"sample","Sample2":"sample","Sample3":"sample","ExperimentalStep":"step","Dataset":"dataset"}
