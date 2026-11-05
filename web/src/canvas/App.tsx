@@ -7,7 +7,7 @@
  */
 
 import {
-  Background, ConnectionMode, SelectionMode, Controls, MarkerType, MiniMap, ReactFlow, useEdgesState, useNodesState, useReactFlow,
+  Background, ConnectionMode, SelectionMode, MarkerType, MiniMap, ReactFlow, useEdgesState, useNodesState, useReactFlow,
   type Connection, type EdgeTypes, type IsValidConnection, type NodeTypes, type OnConnectEnd,
 } from "@xyflow/react";
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
@@ -29,6 +29,7 @@ import { loadOwnRelations, PlainRelationMenu, RelationMenu, saveOwnRelations, ty
          type OwnRelation } from "./RelationMenu.js";
 import { toMarkdown } from "./usecase.js";
 import { UseCasePanel } from "./UseCasePanel.js";
+import { loadWheelMode, saveWheelMode, ZoomBar, type WheelMode } from "./ZoomBar.js";
 
 const nodeTypes: NodeTypes = { box: BoxNode };
 const edgeTypes: EdgeTypes = { floating: FloatingEdge };
@@ -132,6 +133,8 @@ export function App({ mode, onSwitch, onHome }: { mode: Mode; onSwitch: (id: Mod
   const pointer = useRef({ x: 0, y: 0 });
   const fileInput = useRef<HTMLInputElement>(null);
   const flow = useReactFlow<Box, Arrow>();
+  const [wheel, setWheel] = useState<WheelMode>(loadWheelMode);
+  const changeWheel = useCallback((m: WheelMode) => { setWheel(m); saveWheelMode(m); }, []);
   const boxesRef = useRef(boxes);
   const arrowsRef = useRef(arrows);
   const useCaseRef = useRef(useCase);
@@ -584,12 +587,14 @@ export function App({ mode, onSwitch, onHome }: { mode: Mode; onSwitch: (id: Mod
             connectionMode={ConnectionMode.Loose} connectionRadius={40}
             deleteKeyCode={["Backspace", "Delete"]} onPaneClick={() => setPending(null)} multiSelectionKeyCode={["Shift", "Meta", "Control"]}
             // Like draw.io: dragging on empty canvas draws a selection rectangle; the canvas moves with
-            // the scroll wheel or trackpad, the middle or right mouse button, or Space + drag.
-            selectionOnDrag selectionKeyCode={null} selectionMode={SelectionMode.Full} panOnDrag={[1, 2]} panOnScroll
+            // the middle or right mouse button or Space + drag. Scrolling zooms or moves, as chosen in
+            // the zoom bar; pinching and Ctrl/Cmd+scroll always zoom.
+            selectionOnDrag selectionKeyCode={null} selectionMode={SelectionMode.Full} panOnDrag={[1, 2]}
+            panOnScroll={wheel === "move"} zoomOnScroll={wheel === "zoom"} zoomOnDoubleClick={false}
             onPaneContextMenu={(e) => e.preventDefault()}
-            minZoom={0.2} fitView>
+            minZoom={0.1} maxZoom={3} fitView>
             <Background gap={20} color="#e2e8f0" />
-            <Controls showInteractive={false} />
+            <ZoomBar wheel={wheel} onWheel={changeWheel} />
             <MiniMap pannable zoomable style={{ width: 150, height: 100 }} nodeColor={(n) => getComputedStyle(document.documentElement)
               .getPropertyValue(`--k-${(n.data as BoxData).kind}`) || "#94a3b8"} />
           </ReactFlow>
