@@ -2,7 +2,7 @@
  * The canvas model (boxes, arrows and where the boxes sit) and its Mermaid form.
  *
  * The canvas is the editor; Mermaid is the file format. Export writes the same conventions
- * the checker reads (README "How the diagram is read"), plus comment lines with the box
+ * the checker reads (docs/checker.md, "How the diagram is read"), plus comment lines with the box
  * positions and the box kinds (the shape each box is drawn as), which Mermaid and the
  * checker both ignore. Import reads any diagram the checker reads; boxes without a stored
  * position are placed by the automatic layout, and boxes without a stored kind get one from
