@@ -90,7 +90,7 @@ export const MODES: Record<ModeId, Mode> = {
     patterns: false,
     shapes: DATASTORE_SHAPES,
     extraShapes: DATASTORE_EXTRA_SHAPES,
-    examples: [{ name: "material-synthesis.mmd", title: "Material synthesis and characterization (from the guide)", text: datastore }],
+    examples: [{ name: "material-synthesis.mmd", title: "Material synthesis and characterization", text: datastore }],
     storageKey: "mermantics-datastore-canvas",
     relationsKey: "mermantics-datastore-relations",
   },

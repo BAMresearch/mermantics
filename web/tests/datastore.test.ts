@@ -16,10 +16,11 @@ const example = readFileSync(join(WEB, "examples", "datastore-example.mmd"), "ut
 describe("Data Store boxes in Mermaid", () => {
   const first = fromMermaid(example);
 
-  test("the guide's example reads without warnings", () => {
+  test("the example reads without warnings, with its stored layout", () => {
     expect(first.warnings).toEqual([]);
-    expect(first.boxes).toHaveLength(17);
-    expect(first.arrows).toHaveLength(17);
+    expect(first.boxes).toHaveLength(21);
+    expect(first.arrows).toHaveLength(20);
+    expect(first.positioned).toBe(true);
   });
 
   test("type and place are read into the box, not left as text lines", () => {
