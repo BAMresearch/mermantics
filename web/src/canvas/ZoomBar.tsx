@@ -2,11 +2,13 @@
  * The zoom bar at the bottom left of the canvas: zoom out, the zoom level (click it to go back
  * to 100%), zoom in, fit the whole diagram, and what the scroll wheel does.
  *
+ * The "i" button at the end shows how to use the mouse, trackpad and keys on the canvas.
+ *
  * It also handles the zoom keys: Ctrl/Cmd and + or -, Ctrl/Cmd+0 for 100%, Shift+1 to fit.
  */
 
 import { Panel, useReactFlow, useStore } from "@xyflow/react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 /** What scrolling with the wheel or two fingers does on the canvas. */
 export type WheelMode = "zoom" | "move";
@@ -79,6 +81,60 @@ export function ZoomBar({ wheel, onWheel }: { wheel: WheelMode; onWheel: (m: Whe
           <option value="move">moves</option>
         </select>
       </label>
+      <span className="zoom-sep" />
+      <ControlsHelp wheel={wheel} />
     </Panel>
+  );
+}
+
+/** One row of the controls card: what you want to do, and how. */
+function Row({ what, children }: { what: string; children: React.ReactNode }) {
+  return <tr><th>{what}</th><td>{children}</td></tr>;
+}
+
+/** The "i" button: shows the controls while hovered, or until clicked again or Escape. */
+function ControlsHelp({ wheel }: { wheel: WheelMode }) {
+  const [hover, setHover] = useState(false);
+  const [pinned, setPinned] = useState(false);
+  const open = hover || pinned;
+
+  useEffect(() => {
+    if (!pinned) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setPinned(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [pinned]);
+
+  const k = (text: string) => <kbd>{text}</kbd>;
+  return (
+    <div className="controls-help" onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
+      <button type="button" className={`help-button${pinned ? " pinned" : ""}`} aria-label="How to use the canvas"
+              aria-expanded={open} onClick={() => setPinned((p) => !p)}>i</button>
+      {open && (
+        <div className="help-card" role="dialog" aria-label="Canvas controls">
+          <table>
+            <tbody>
+              <tr className="help-group"><td colSpan={2}>Mouse</td></tr>
+              <Row what="Select">Left-click a box or arrow</Row>
+              <Row what="Select several">Left-drag on empty canvas, or {k("Shift")} + click</Row>
+              <Row what="Move a box">Left-drag the box</Row>
+              <Row what="Connect">Drag from a dot on a box edge to another box</Row>
+              <Row what="Move around">Right-drag or middle-drag{wheel === "move" ? ", or scroll" : ""}</Row>
+              <Row what="Zoom">{wheel === "zoom" ? "Scroll" : <>{k(MOD)}+scroll</>}</Row>
+              <tr className="help-group"><td colSpan={2}>Trackpad</td></tr>
+              <Row what="Zoom">Pinch{wheel === "zoom" ? ", or two-finger swipe" : ""}</Row>
+              {wheel === "move" && <Row what="Move around">Two-finger swipe</Row>}
+              <tr className="help-group"><td colSpan={2}>Keys</td></tr>
+              <Row what="Move around">Hold {k("Space")} and drag</Row>
+              <Row what="Zoom">{k(MOD)} {k("+")} / {k(MOD)} {k("−")}</Row>
+              <Row what="100%">{k(MOD)} {k("0")}</Row>
+              <Row what="Whole diagram">{k("Shift")} {k("1")}</Row>
+              <Row what="Delete">{k("Delete")} or {k("Backspace")}</Row>
+            </tbody>
+          </table>
+          <p className="help-foot">Scroll does something else? Change "Scroll" in this bar.</p>
+        </div>
+      )}
+    </div>
   );
 }
