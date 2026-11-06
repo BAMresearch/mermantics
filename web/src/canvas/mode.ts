@@ -36,14 +36,12 @@ export interface Example {
 export interface Mode {
   id: ModeId;
   title: string; // on the start page
-  short: string; // in the section switch
   description: string;
   ontology: boolean; // load PMDco and check the diagram
   datastore: boolean; // BAM Data Store: openBIS object types, parent-child arrows, no relation menu
   patterns: boolean; // the built-in PMDco patterns and saving your own
   patternIds?: string[]; // only these built-in patterns (all if not set)
   options?: boolean; // design options: several diagrams per option, a compare view
-  hidden?: boolean; // not in the section switch yet (only with ?mode=...)
   shapes: Shape[];
   extraShapes: Shape[];
   examples: Example[];
@@ -55,7 +53,6 @@ export const MODES: Record<ModeId, Mode> = {
   process: {
     id: "process",
     title: "Domain-agnostic process modelling",
-    short: "Process modelling",
     description: "Draw any process: its steps, what goes in and comes out, and who or what carries it out. "
       + "Name the arrows in your own words. No ontology needed.",
     ontology: false,
@@ -70,7 +67,6 @@ export const MODES: Record<ModeId, Mode> = {
   mse: {
     id: "mse",
     title: "Materials science and engineering",
-    short: "Materials science",
     description: "Build a data model grounded in PMDco. Boxes and arrows get ontology terms, "
       + "and the model is checked as you draw.",
     ontology: true,
@@ -91,7 +87,6 @@ export const MODES: Record<ModeId, Mode> = {
   datastore: {
     id: "datastore",
     title: "BAM Data Store",
-    short: "BAM Data Store",
     description: "Plan how your research data goes into the BAM Data Store (openBIS): experimental steps, "
       + "samples, chemicals, instruments and datasets, linked as parents and children. No ontology needed.",
     ontology: false,
@@ -106,7 +101,6 @@ export const MODES: Record<ModeId, Mode> = {
   comp: {
     id: "comp",
     title: "PMD Hackathon - Computations",
-    short: "Computations",
     description: "Compare design options for computational terms in PMDco: what each option proposes, "
       + "and how a DFT and an FEM calculation look in it. Checked against PMDco as you draw.",
     ontology: true,

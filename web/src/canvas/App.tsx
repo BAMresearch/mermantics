@@ -26,7 +26,7 @@ import { openbisLayout } from "./openbisLayout.js";
 import { NARROW, TOUCH, useMedia } from "./media.js";
 import { emptyUseCase, fromMermaid, makeId, toMermaid, type Arrow, type ArrowData, type Box, type BoxData, type Problem,
          type UseCase } from "./model.js";
-import { MODES, type Mode, type ModeId } from "./mode.js";
+import type { Mode } from "./mode.js";
 import { checkStatus, Compare, OptionBar, OptionPanel, TermsTree } from "./Options.js";
 import { EMPTY_VIEW, newOptionId, nextLetter, originalView, readState, resultsMarkdown, VIEWS, type DesignOption,
          type OptionsState, type ViewId } from "./options.js";
@@ -102,7 +102,7 @@ interface PendingArrow {
  * The canvas for one section (process modelling, or materials science and engineering).
  * Switching sections mounts a new App, so each section starts from its own saved diagram.
  */
-export function App({ mode, onSwitch, onHome }: { mode: Mode; onSwitch: (id: ModeId) => void; onHome: () => void }) {
+export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
   const EXAMPLES = mode.examples;
   // Design options (computations section): all options, which one is on the canvas, the workshop's use case.
   const [opts, setOpts] = useState<OptionsState | null>(() => (mode.options ? readState(storedIn(mode.storageKey)) : null));
@@ -693,14 +693,6 @@ export function App({ mode, onSwitch, onHome }: { mode: Mode; onSwitch: (id: Mod
         <button type="button" className="logo-button" title="Back to the start page" onClick={onHome}>
           <img className="logo" src={logo} alt="mermantics" />
         </button>
-        <div className="switch" role="tablist" aria-label="Section">
-          {(Object.values(MODES)).filter((m) => !m.hidden || m.id === mode.id).map((m) => (
-            <button type="button" role="tab" key={m.id} aria-selected={m.id === mode.id} className={m.id === mode.id ? "on" : ""}
-                    title={m.title} onClick={() => m.id !== mode.id && onSwitch(m.id)}>
-              {m.short}
-            </button>
-          ))}
-        </div>
         <div className="bar-group">
           {EXAMPLES.length > 0 && (
             <select value="" onChange={(e) => {

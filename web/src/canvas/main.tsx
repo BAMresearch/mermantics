@@ -20,7 +20,7 @@ function Root() {
   return (
     // A new provider and App per section, so nothing carries over from the other one.
     <ReactFlowProvider key={mode}>
-      <App mode={MODES[mode]} onSwitch={choose} onHome={() => choose(null)} />
+      <App mode={MODES[mode]} onHome={() => choose(null)} />
     </ReactFlowProvider>
   );
 }

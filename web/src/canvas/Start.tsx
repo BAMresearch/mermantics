@@ -20,7 +20,7 @@ export function Start({ onChoose }: { onChoose: (id: ModeId) => void }) {
         })}
       </div>
       <p className="start-foot">
-        Each section saves a plain Mermaid file, and you can switch at any time from the top bar.
+        Each section saves a plain Mermaid file. The logo at the top left of the canvas brings you back here.
       </p>
     </div>
   );
