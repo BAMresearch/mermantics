@@ -35,7 +35,7 @@ same kind of Mermaid file.
 |---|---|
 | Process modelling | Any process: its steps, what goes in and comes out, who or what does it. You name the arrows yourself. No ontology. |
 | Materials science and engineering | Models linked to the [Platform MaterialDigital Core Ontology (PMDco)](https://github.com/materialdigital/core-ontology). You search PMDco for each box, pick arrows from the relations that fit, and the model is checked while you draw. |
-| BAM Data Store | Planning how research data goes into the [BAM Data Store](https://datastore.bam.de) (openBIS): experimental steps, samples, chemicals, instruments and datasets, with their BAM object types and where they live (Space, Project, Collection). |
+| BAM Data Store | Planning how research data goes into the [BAM Data Store](https://datastore.bam.de) (openBIS): experimental steps, samples, chemicals, instruments and datasets, linked as parent and child, with their BAM object types. A second view lays the same model out the way openBIS stores it: Lab Notebook and Inventories, Space, Project, Collection. |
 | PMD Hackathon - Computations | In progress. |
 
 ![The BAM Data Store section: experimental steps, samples, chemicals, instruments and datasets](assets/screenshots/datastore.png)

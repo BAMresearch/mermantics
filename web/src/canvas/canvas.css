@@ -399,3 +399,22 @@ button, input, select, textarea { font: inherit; color: inherit; }
   .box .react-flow__handle { width: 20px; height: 20px; }
   .zoom-wheel, .zoom-sep:has(+ .zoom-wheel) { display: none; }
 }
+
+/* ---- BAM Data Store: the openBIS view, in the colours of the Data Store guide ---- */
+.react-flow__node-lane { pointer-events: none; }
+.lane { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; text-align: center;
+  border: 1px solid; border-radius: 4px; font-size: 12.5px; font-weight: 600; padding: 0 8px; overflow: hidden; }
+.lane span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lane-area { font-size: 14px; color: #fff; }
+.lane-area.inventory { background: #a20025; border-color: #6f0000; }
+.lane-area.notebook { background: #0050ef; border-color: #001dbc; }
+.lane-space { background: #e1d5e7; border-color: #9673a6; }
+.lane-project { background: #d5e8d4; border-color: #82b366; }
+.lane-collection { background: #fff2cc; border-color: #d6b656; font-weight: 500; }
+.lane.open { background: #f8fafc; border: 1.5px dashed #94a3b8; color: var(--muted); font-style: italic; font-weight: 500; }
+.lane-row { background: #f1f5f9; border-color: #cbd5e1; color: #334155; text-transform: uppercase; letter-spacing: 0.05em; font-size: 11.5px; }
+.view-hint { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 5; background: #eff6ff; color: #1e3a8a;
+  border: 1px solid #bfdbfe; border-radius: 999px; padding: 5px 14px; font-size: 12.5px; white-space: nowrap; pointer-events: none; }
+@media (max-width: 900px) { .view-hint { top: 58px; white-space: normal; width: calc(100% - 24px); text-align: center; border-radius: 10px; } }
+.canvas.openbis-view .notice { top: 50px; }
+@media (max-width: 900px) { .canvas.openbis-view .notice { top: 112px; } }

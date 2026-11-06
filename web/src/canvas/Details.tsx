@@ -4,7 +4,7 @@ import type { Term } from "../core/terms.js";
 import { lookup } from "./checker.js";
 import { DatastoreArrowSection, DatastoreBoxSection } from "./DatastorePanel.js";
 import type { Arrow, ArrowData, Box, BoxData, Problem } from "./model.js";
-import { HAS_DATASET, shapeOf, type Shape, type ShapeKind } from "./palette.js";
+import { shapeOf, type Shape, type ShapeKind } from "./palette.js";
 import type { OwnRelation } from "./RelationMenu.js";
 import { TermSearch } from "./TermSearch.js";
 
@@ -152,11 +152,12 @@ export function BoxDetails({ box, shapes, ontology, datastore = false, boxes = [
   );
 }
 
-export function ArrowDetails({ arrow, srcName, dstName, ontology, datastore = false, onChange, onReconnect, onSwap, onDelete }: {
+export function ArrowDetails({ arrow, srcName, dstName, ontology, datastore = false, onChange, onReconnect, onSwap, onFlip, onDelete }: {
   arrow: Arrow;
   ontology: boolean; // false in process modelling: arrows are plain words
   datastore?: boolean; // BAM Data Store: parent-child arrows and datasets, no relation to choose
   onSwap?: () => void;
+  onFlip?: () => void;
   srcName: string;
   dstName: string;
   onChange: (patch: Partial<ArrowData>) => void;
@@ -169,7 +170,7 @@ export function ArrowDetails({ arrow, srcName, dstName, ontology, datastore = fa
     <div className="panel">
       <div className="panel-kind"><span className="dot" />Arrow</div>
       {datastore
-        ? <DatastoreArrowSection srcName={srcName} dstName={dstName} dataset={d.name === HAS_DATASET} onSwap={() => onSwap?.()} />
+        ? <DatastoreArrowSection srcName={srcName} dstName={dstName} name={d.name} onFlip={() => onFlip?.()} onSwap={() => onSwap?.()} />
         : <p className="sentence"><b>{srcName}</b> {d.words} <b>{dstName}</b></p>}
       {d.kind === "relation" && !ontology && !datastore && (
         <section className="panel-section">
@@ -304,7 +305,7 @@ export function Overview({ status, ontology, datastore = false, checkedAgainst =
         <ul>
           <li>Drag a shape from the left onto the canvas, or click it.</li>
           {datastore
-            ? <li>To connect two boxes, drag from a dot on the edge of the parent to the child. Connect a dataset to the step that made it.</li>
+            ? <li>To connect two objects, drag from a dot on the edge of one to the other, then pick "is parent of" or "is child of". A dataset is attached to the object you connect it to.</li>
             : <li>To connect two boxes, drag from a dot on the edge of one box to the other box. You then pick what the arrow means.</li>}
           <li>Click a box or arrow to edit it. Delete or Backspace removes it.</li>
           <li>Drag on empty canvas to select the boxes inside the rectangle; Shift+click adds or removes one.</li>

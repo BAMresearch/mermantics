@@ -12,7 +12,7 @@
 import type { Edge as FlowEdge, Node as FlowNode } from "@xyflow/react";
 
 import { edit, labels, mermaid } from "../core/index.js";
-import { DATASTORE_KINDS, isShapeKind, wordsFor, type OpenbisInfo, type ShapeKind } from "./palette.js";
+import { DATASTORE_KINDS, IS_ATTACHED_TO, IS_PARENT_OF, isShapeKind, wordsFor, type OpenbisInfo, type ShapeKind } from "./palette.js";
 
 export interface Problem {
   level: "error" | "warning" | "note";
@@ -348,6 +348,16 @@ export function fromMermaid(text: string): Imported {
                data: { kind: "inherit", name: "", curie: "", words: "is a kind of", own: false, problems: [] } };
     }
     const { name, curie, words, own } = readArrow(e.label);
+    // Data Store files from before the arrows had openBIS names: "parent of" is now "is parent
+    // of", and "Step has dataset Data" is now "Data is attached to Step".
+    if (own && !curie && name === "parent of") {
+      return { id: `a${i}`, source: e.src, target: e.dst,
+               data: { kind: "relation", name: IS_PARENT_OF, curie, words: IS_PARENT_OF, own, problems: [] } };
+    }
+    if (own && !curie && name === "has dataset") {
+      return { id: `a${i}`, source: e.dst, target: e.src,
+               data: { kind: "relation", name: IS_ATTACHED_TO, curie, words: IS_ATTACHED_TO, own, problems: [] } };
+    }
     return { id: `a${i}`, source: e.src, target: e.dst, data: { kind: "relation", name, curie, words, own, problems: [] } };
   });
   return { boxes, arrows, positioned: boxes.every((b) => pos[b.id] !== undefined), useCase, patternUses, warnings };
