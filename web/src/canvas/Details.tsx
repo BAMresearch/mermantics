@@ -6,6 +6,7 @@ import { DatastoreArrowSection, DatastoreBoxSection } from "./DatastorePanel.js"
 import type { Arrow, ArrowData, Box, BoxData, Problem } from "./model.js";
 import { shapeOf, statusOf, TERM_STATUSES, type Shape, type ShapeKind } from "./palette.js";
 import type { OwnRelation } from "./RelationMenu.js";
+import { QUICK_CHECK_HINT } from "./quickcheck.js";
 import { TermSearch } from "./TermSearch.js";
 
 export interface GlobalFinding extends Problem {
@@ -279,7 +280,9 @@ export function Overview({ status, ontology, datastore = false, checkedAgainst =
   return (
     <div className="panel">
       <div className="panel-kind"><span className="dot" />Your model</div>
-      {ontology && checkedAgainst && <p className="muted-inline">Checked against <b>{checkedAgainst}</b></p>}
+      {ontology && checkedAgainst && (checkedAgainst.startsWith("Could not")
+        ? <p className="muted-inline">{checkedAgainst}</p>
+        : <p className="muted-inline">{QUICK_CHECK_HINT}</p>)}
       <p className="muted">{status}</p>
       {children}
       {findings.length > 0 && (
@@ -343,7 +346,7 @@ export function Overview({ status, ontology, datastore = false, checkedAgainst =
           <li>Zoom with the buttons at the bottom left, by scrolling, by pinching, or with Ctrl/Cmd and + or -. Shift+1 shows the whole diagram.</li>
           <li>Move around by dragging with the right mouse button or holding Space and dragging. If you would rather scroll to move, switch "Scroll" at the bottom left to "moves".</li>
           {ontology
-            ? <li>Everything is checked against PMDco while you draw, in your browser.</li>
+            ? <li>The quick check runs against PMDco while you draw, in your browser. Hover over its result at the bottom to see what it covers.</li>
             : datastore
               ? <li>Click a box to pick its BAM object type and say where it lives: Space, Project and Collection.</li>
               : <li>Type any name for an arrow; the ones you make come back in the menu under "My relations".</li>}

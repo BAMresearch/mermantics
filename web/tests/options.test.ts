@@ -152,12 +152,12 @@ test("results: use case, a verdict table and every option with its diagrams", ()
   options[4]!.verdict = "preferred";
   options[4]!.why = "Same pattern | for both";
   const useCase = { ...emptyUseCase(), title: "Computations", openPoints: [{ id: "p1", text: "Ask about QM/MM", done: false }] };
-  const md = resultsMarkdown(useCase, options, { [options[4]!.id]: { dft: "No problems found" } });
+  const md = resultsMarkdown(useCase, options, { [options[4]!.id]: { dft: "no problems" } });
   expect(md).toMatch(/^# PMD Hackathon - Computations: Computations/);
   expect(md).toContain("- [ ] Ask about QM/MM");
   expect(md).not.toContain("## Data model");
   expect(md).toContain("| E | Task, model and solver as parts | Preferred | Same pattern \\| for both |");
   expect(md).toContain("### A. PMDco 3.1.2 today");
-  expect(md).toContain("Checked against PMDco 3.1.2: No problems found.");
+  expect(md).toContain("Quick check against PMDco 3.1.2 (no reasoner): no problems.");
   expect(md.match(/```mermaid/g)).toHaveLength(18);
 });

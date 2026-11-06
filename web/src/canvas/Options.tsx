@@ -14,6 +14,7 @@ import { layout } from "./layout.js";
 import { fromMermaid, type Arrow, type Box } from "./model.js";
 import { EMPTY_VIEW, VERDICTS, VIEWS, type DesignOption, type ViewId } from "./options.js";
 import { statusOf, type Shape } from "./palette.js";
+import { QUICK_CHECK, QUICK_CHECK_HINT, resultLine } from "./quickcheck.js";
 import { countStatuses, mergeTree, type ClassTree, type TermNode } from "./termsTree.js";
 
 const nodeTypes: NodeTypes = { box: BoxNode };
@@ -186,18 +187,11 @@ function MiniFlow({ text, shapes }: { text: string; shapes: Shape[] }) {
   );
 }
 
-function checkLine(findings: { level: string }[], empty: boolean): string {
-  const counts = (["error", "warning", "note"] as const)
-    .map((l) => [l, findings.filter((f) => f.level === l).length] as const).filter(([, n]) => n);
-  return counts.length ? counts.map(([l, n]) => `${n} ${l}${n === 1 ? "" : "s"}`).join(", ")
-    : empty ? "Empty" : "No problems found";
-}
-
-/** The fast checks on a diagram, as one line ("2 errors, 1 note"). */
+/** The quick check of a diagram, as a few words ("no problems", "2 errors, 1 note"). */
 export async function checkStatus(text: string): Promise<string> {
   const checked = await check(text);
   const findings = checked.result.findings.filter((f) => f.level !== "ok");
-  return checkLine(findings, !fromMermaid(text).boxes.length);
+  return resultLine(findings, !fromMermaid(text).boxes.length);
 }
 
 function CheckLine({ text }: { text: string }) {
@@ -207,7 +201,11 @@ function CheckLine({ text }: { text: string }) {
     checkStatus(text).then((s) => live && setLine(s)).catch(() => live && setLine("Could not check"));
     return () => { live = false; };
   }, [text]);
-  return <span className={`check-line ${/error/.test(line) ? "bad" : /warning/.test(line) ? "warn" : ""}`}>PMDco check: {line}</span>;
+  return (
+    <span className={`check-line ${/error/.test(line) ? "bad" : /warning/.test(line) ? "warn" : ""}`} title={QUICK_CHECK_HINT}>
+      {QUICK_CHECK}: {line}
+    </span>
+  );
 }
 
 // ---- compare ------------------------------------------------------------------------------

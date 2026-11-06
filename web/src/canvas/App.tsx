@@ -37,6 +37,7 @@ import { BUILT_IN, checkUses, instantiate, loadMine, parsePattern, patternFromSe
 import { loadOwnRelations, PlainRelationMenu, RelationMenu, saveOwnRelations, type Choice,
          type OwnRelation } from "./RelationMenu.js";
 import { toMarkdown } from "./usecase.js";
+import { QUICK_CHECK, QUICK_CHECK_HINT, resultLine } from "./quickcheck.js";
 import { UseCasePanel } from "./UseCasePanel.js";
 import { loadWheelMode, saveWheelMode, ZoomBar, type WheelMode } from "./ZoomBar.js";
 
@@ -132,9 +133,10 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
   const [docName, setDocName] = useState("model.mmd");
   const [ontoStatus, setOntoStatus] = useState(mode.ontology ? "Loading PMDco 3.1.2..." : "");
   const [ready, setReady] = useState(false);
-  const [checkState, setCheckState] = useState<{ status: string; findings: GlobalFinding[]; passed: string[];
+  // status: what the badge says; result: the quick check's result alone ("no problems"), "" until there is one.
+  const [checkState, setCheckState] = useState<{ status: string; result: string; findings: GlobalFinding[]; passed: string[];
                                                   perUse: Record<string, number> }>(
-    { status: mode.ontology ? "Loading PMDco 3.1.2..." : "", findings: [], passed: [], perUse: {} });
+    { status: mode.ontology ? "Loading PMDco 3.1.2..." : "", result: "", findings: [], passed: [], perUse: {} });
   const [pending, setPending] = useState<PendingArrow | null>(null);
   // Data Store: two objects were connected; which one is the parent?
   // Data Store: the model as drawn, or laid out like openBIS (Space > Project > Collection).
@@ -334,14 +336,11 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
         }
         setBoxes((bs) => bs.map((b) => ({ ...b, data: { ...b.data, problems: byBox.get(b.id) ?? [] } })));
         setArrows((as) => as.map((a) => ({ ...a, data: { ...a.data!, problems: byArrow.get(a.id) ?? [] } })));
-        const counts = (["error", "warning", "note"] as const)
-          .map((l) => [l, findings.filter((f) => f.level === l).length] as const).filter(([, n]) => n);
-        const status = counts.length
-          ? counts.map(([l, n]) => `${n} ${l}${n === 1 ? "" : "s"}`).join(", ")
-          : snapBoxes.length ? "No problems found" : "Empty";
-        setCheckState({ status, findings, passed, perUse });
+        const result = resultLine(findings, !snapBoxes.length);
+        const status = snapBoxes.length ? `${QUICK_CHECK}: ${result}` : "Empty";
+        setCheckState({ status, result, findings, passed, perUse });
       } catch (e) {
-        if (mine === run.current) setCheckState({ status: `The check failed: ${(e as Error).message}`, findings: [], passed: [], perUse: {} });
+        if (mine === run.current) setCheckState({ status: `The check failed: ${(e as Error).message}`, result: "", findings: [], passed: [], perUse: {} });
       }
     }, 300);
     return () => clearTimeout(timer);
@@ -646,7 +645,7 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
       void exportResults();
       return;
     }
-    const md = toMarkdown(useCase, boxes, toMermaid(boxes, arrows, useCase), mode.ontology ? checkState.status : null);
+    const md = toMarkdown(useCase, boxes, toMermaid(boxes, arrows, useCase), mode.ontology ? checkState.result || checkState.status : null);
     const base = (useCase.title || docName.replace(/\.mmd$/, "")).replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-|-$/g, "") || "use-case";
     save(md, `${base}.md`);
   };
@@ -839,7 +838,9 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
           )}
           {mode.ontology && <button type="button" className={`status ${checkState.findings.some((f) => f.level === "error") ? "bad"
             : checkState.findings.some((f) => f.level === "warning") ? "warn" : "good"}`}
-                  onClick={() => { setBoxes((bs) => bs.map((b) => ({ ...b, selected: false }))); setArrows((as) => as.map((a) => ({ ...a, selected: false }))); }}>
+                  title={QUICK_CHECK_HINT}
+                  // Clicking shows the overview with all results; on a phone it opens the details sheet.
+                  onClick={() => { setBoxes((bs) => bs.map((b) => ({ ...b, selected: false }))); setArrows((as) => as.map((a) => ({ ...a, selected: false }))); if (narrow) { setTab("model"); setDrawer("details"); } }}>
             {checkState.status}
           </button>}
           {notice && <div className="notice" onClick={() => setNotice("")}>{notice}</div>}
