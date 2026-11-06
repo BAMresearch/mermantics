@@ -3,11 +3,12 @@
  * the object lives (Space > Project > Collection), and an overview of where everything goes.
  */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { BAM_DATASET_TYPES, BAM_OBJECT_TYPES, BAM_TYPES_SOURCE, type BamType } from "./bamTypes.js";
 import type { Box, BoxData } from "./model.js";
-import { AREAS, DATASTORE_KINDS, kindForType, openbisFor, type OpenbisInfo, type ShapeKind } from "./palette.js";
+import { AREAS, DATASTORE_KINDS, IS_ATTACHED_TO, IS_CHILD_OF, IS_PARENT_OF, kindForType, openbisFor, type OpenbisInfo,
+         type ShapeKind } from "./palette.js";
 
 const MAX_HITS = 25;
 
@@ -135,7 +136,7 @@ export function DatastoreBoxSection({ data, boxes, onChange }: {
       </section>
       {dataset ? (
         <section className="panel-section">
-          <p className="muted">A dataset holds the files of the object it belongs to, usually the experimental step that
+          <p className="muted">A dataset holds the files of the object it is attached to, usually the experimental step that
             made them. Draw an arrow between the two.</p>
         </section>
       ) : (
@@ -160,23 +161,64 @@ export function DatastoreBoxSection({ data, boxes, onChange }: {
   );
 }
 
-/** The sentence for an arrow of the Data Store section. */
-export function DatastoreArrowSection({ srcName, dstName, dataset, onSwap }: {
+/** The sentence for an arrow of the Data Store section, and ways to turn it around. */
+export function DatastoreArrowSection({ srcName, dstName, name, onFlip, onSwap }: {
   srcName: string;
   dstName: string;
-  dataset: boolean;
-  onSwap: () => void;
+  name: string; // is parent of, is child of, is attached to
+  onFlip: () => void; // the same link, read from the other end
+  onSwap: () => void; // the other one becomes the parent
 }) {
-  return dataset ? (
+  if (name === IS_ATTACHED_TO) {
+    return (
+      <section className="panel-section">
+        <p className="sentence">The dataset <b>{srcName}</b> is attached to <b>{dstName}</b>.</p>
+        <p className="muted-inline">A dataset holds the files of one object, usually the experimental step that made them.</p>
+      </section>
+    );
+  }
+  const parentOf = name === IS_PARENT_OF;
+  const [parent, child] = parentOf ? [srcName, dstName] : [dstName, srcName];
+  return (
     <section className="panel-section">
-      <p className="sentence">The dataset <b>{dstName}</b> belongs to <b>{srcName}</b>.</p>
+      <p className="sentence"><b>{srcName}</b> {name} <b>{dstName}</b>.</p>
+      <p className="muted-inline">In openBIS: <b>{parent}</b> is the parent, <b>{child}</b> the child. An object can have many
+        parents and many children.</p>
+      <button type="button" className="link" onClick={onFlip}>Write it as "{child} {parentOf ? IS_CHILD_OF : IS_PARENT_OF} {parent}"</button>
+      <button type="button" className="link" onClick={onSwap}>Swap: make {child} the parent</button>
     </section>
-  ) : (
-    <section className="panel-section">
-      <p className="sentence"><b>{srcName}</b> is a parent of <b>{dstName}</b>.</p>
-      <p className="muted-inline">The arrow goes from parent to child. An object can have many parents and many children.</p>
-      <button type="button" className="link" onClick={onSwap}>Swap: make {dstName} the parent</button>
-    </section>
+  );
+}
+
+/** Asked when two objects are linked: which one is the parent? */
+export function DatastoreLinkMenu({ x, y, srcName, dstName, onChoose, onCancel }: {
+  x: number;
+  y: number;
+  srcName: string;
+  dstName: string;
+  onChoose: (name: string) => void;
+  onCancel: () => void;
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onCancel(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onCancel]);
+  return (
+    <div className="menu ds-link-menu" style={{ left: x, top: y }} onMouseDown={(e) => e.stopPropagation()}>
+      <div className="menu-head">How are they linked?</div>
+      <div className="menu-section">
+        {[IS_PARENT_OF, IS_CHILD_OF].map((name, i) => (
+          <button type="button" key={name} className="menu-item" autoFocus={i === 0} onClick={() => onChoose(name)}>
+            <span><b>{srcName}</b> {name} <b>{dstName}</b></span>
+            <span className="menu-id">{i === 0 ? `${srcName} is the parent` : `${dstName} is the parent`}</span>
+          </button>
+        ))}
+      </div>
+      <div className="menu-section">
+        <button type="button" className="menu-item small" onClick={onCancel}><span>Cancel</span></button>
+      </div>
+    </div>
   );
 }
 

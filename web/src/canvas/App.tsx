@@ -15,16 +15,19 @@ import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } fro
 import logo from "../../../assets/mermantics-logo.svg";
 import { BoxNode, worst } from "./BoxNode.js";
 import { check, loadOntology, supers } from "./checker.js";
-import { WhereThingsGo } from "./DatastorePanel.js";
+import { DatastoreLinkMenu, WhereThingsGo } from "./DatastorePanel.js";
 import { ArrowDetails, BoxDetails, Overview, SelectionPanel, type GlobalFinding } from "./Details.js";
 import { FloatingEdge } from "./FloatingEdge.js";
 import { layout } from "./layout.js";
 import { MermaidPanel } from "./MermaidPanel.js";
+import { LaneNode } from "./OpenbisLane.js";
+import { openbisLayout } from "./openbisLayout.js";
 import { NARROW, TOUCH, useMedia } from "./media.js";
 import { emptyUseCase, fromMermaid, makeId, toMermaid, type Arrow, type ArrowData, type Box, type BoxData, type Problem,
          type UseCase } from "./model.js";
 import { MODES, type Mode, type ModeId } from "./mode.js";
-import { HAS_DATASET, KIND_BY_ANCESTOR, openbisFor, PARENT_OF, shapeOf, type Shape, type ShapeKind } from "./palette.js";
+import { DATASTORE_LINKS, IS_ATTACHED_TO, IS_CHILD_OF, IS_PARENT_OF, KIND_BY_ANCESTOR, openbisFor, shapeOf, type Shape,
+         type ShapeKind } from "./palette.js";
 import { BUILT_IN, checkUses, instantiate, loadMine, parsePattern, patternFromSelection, readUses, saveMine, slug,
          type Pattern, type PatternUse } from "./patterns.js";
 import { loadOwnRelations, PlainRelationMenu, RelationMenu, saveOwnRelations, type Choice,
@@ -33,7 +36,7 @@ import { toMarkdown } from "./usecase.js";
 import { UseCasePanel } from "./UseCasePanel.js";
 import { loadWheelMode, saveWheelMode, ZoomBar, type WheelMode } from "./ZoomBar.js";
 
-const nodeTypes: NodeTypes = { box: BoxNode };
+const nodeTypes: NodeTypes = { box: BoxNode, lane: LaneNode };
 const edgeTypes: EdgeTypes = { floating: FloatingEdge };
 
 function storeIn(key: string, text: string) {
@@ -107,6 +110,11 @@ export function App({ mode, onSwitch, onHome }: { mode: Mode; onSwitch: (id: Mod
                                                   perUse: Record<string, number> }>(
     { status: mode.ontology ? "Loading PMDco 3.1.2..." : "", findings: [], passed: [], perUse: {} });
   const [pending, setPending] = useState<PendingArrow | null>(null);
+  // Data Store: two objects were connected; which one is the parent?
+  // Data Store: the model as drawn, or laid out like openBIS (Space > Project > Collection).
+  const [view, setView] = useState<"model" | "openbis">("model");
+  const openbis = mode.datastore && view === "openbis";
+  const [linking, setLinking] = useState<{ source: string; target: string; x: number; y: number } | null>(null);
   const [notice, setNotice] = useState("");
   const [useCase, setUseCase] = useState<UseCase>(emptyUseCase);
   const [tab, setTab] = useState<"model" | "usecase">("model");
@@ -344,20 +352,31 @@ export function App({ mode, onSwitch, onHome }: { mode: Mode; onSwitch: (id: Mod
     return !(mode.datastore && ends.every((b) => b!.data.kind === "dataset"));
   }, [mode.datastore]);
 
-  /**
-   * Data Store: no relation to choose. Between objects the arrow goes from parent to child, as
-   * drawn; a dataset is linked from the object it belongs to, whichever way it was drawn.
-   */
-  const connectDatastore = useCallback((source: string, target: string) => {
-    const kindOf = (id: string) => boxesRef.current.find((b) => b.id === id)?.data.kind;
-    const dataset = kindOf(source) === "dataset" || kindOf(target) === "dataset";
-    const [from, to] = kindOf(source) === "dataset" ? [target, source] : [source, target];
-    const name = dataset ? HAS_DATASET : PARENT_OF;
-    setArrows((as) => as.some((a) => a.source === from && a.target === to) ? as : [...as, {
-      id: `a${Date.now().toString(36)}`, source: from, target: to,
+  /** Data Store: add a link, unless the two boxes are already linked. */
+  const addLink = useCallback((source: string, target: string, name: string) => {
+    if (arrowsRef.current.some((a) => (a.source === source && a.target === target) || (a.source === target && a.target === source))) {
+      setNotice("These two are already linked. Click the arrow to change it.");
+      return;
+    }
+    setArrows((as) => [...as, {
+      id: `a${Date.now().toString(36)}`, source, target,
       data: { kind: "relation", name, curie: "", words: name, own: true, problems: [] },
     }]);
   }, [setArrows]);
+
+  /**
+   * Data Store: a dataset is attached to the object it is connected to, whichever way the arrow
+   * was drawn. Between two objects, a small menu asks which one is the parent.
+   */
+  const connectDatastore = useCallback((source: string, target: string) => {
+    const kindOf = (id: string) => boxesRef.current.find((b) => b.id === id)?.data.kind;
+    if (kindOf(source) === "dataset") return addLink(source, target, IS_ATTACHED_TO);
+    if (kindOf(target) === "dataset") return addLink(target, source, IS_ATTACHED_TO);
+    const rect = wrapper.current!.getBoundingClientRect();
+    const x = Math.max(8, Math.min(pointer.current.x - rect.left, rect.width - 340));
+    const y = Math.max(8, Math.min(pointer.current.y - rect.top, rect.height - 200));
+    setLinking({ source, target, x, y });
+  }, [addLink]);
 
   const connect = useCallback((source: string, target: string) => {
     if (mode.datastore) connectDatastore(source, target);
@@ -435,16 +454,20 @@ export function App({ mode, onSwitch, onHome }: { mode: Mode; onSwitch: (id: Mod
 
   const shownArrows = useMemo(() => arrows.map((a) => {
     const d = a.data!;
-    if (mode.datastore && d.kind === "relation" && !d.curie && (d.name === PARENT_OF || d.name === HAS_DATASET)) {
-      // Like the guide: plain arrows from parent to child; a dataset hangs off its object.
-      const dataset = d.name === HAS_DATASET;
+    if (mode.datastore && d.kind === "relation" && !d.curie && DATASTORE_LINKS.has(d.name)) {
+      // openBIS links: solid for parent and child, dotted red for a dataset and its object.
+      const dataset = d.name === IS_ATTACHED_TO;
       const color = dataset ? "#b85450" : "#334155";
       return {
         ...a,
         type: "floating",
-        label: undefined,
-        markerEnd: dataset ? undefined : { type: MarkerType.ArrowClosed, color, width: 18, height: 18 },
-        style: { stroke: color, strokeWidth: a.selected ? 2.5 : 1.6, strokeDasharray: dataset ? "3 4" : undefined },
+        label: d.name,
+        labelBgPadding: [5, 2] as [number, number],
+        labelBgBorderRadius: 5,
+        labelStyle: { fontSize: 11, fill: dataset ? "#9f1239" : "#334155", fontWeight: 500 },
+        labelBgStyle: { fill: "#ffffff", fillOpacity: 0.95 },
+        markerEnd: { type: MarkerType.ArrowClosed, color, width: 16, height: 16 },
+        style: { stroke: color, strokeWidth: a.selected ? 2.5 : 1.5, strokeDasharray: dataset ? "3 4" : undefined },
       };
     }
     const level = workshop || !mode.ontology ? null : worst(d.problems);
@@ -475,6 +498,21 @@ export function App({ mode, onSwitch, onHome }: { mode: Mode; onSwitch: (id: Mod
       data: { ...b.data, tags: tags.get(b.id) ?? [], plain: !mode.ontology },
     }));
   }, [boxes, useCase.questions, focused, mode.ontology]);
+
+  // The openBIS view: the same boxes, placed by their Space, Project and Collection.
+  const viewNodes = useMemo(() => {
+    if (!openbis) return shownBoxes;
+    const { boxes: placed, lanes } = openbisLayout(shownBoxes, arrows);
+    return [...lanes, ...placed] as unknown as Box[];
+  }, [openbis, shownBoxes, arrows]);
+  const viewArrows = useMemo(() => {
+    if (!openbis) return shownArrows;
+    const ids = new Set(viewNodes.map((n) => n.id));
+    return shownArrows.filter((a) => ids.has(a.source) && ids.has(a.target));
+  }, [openbis, shownArrows, viewNodes]);
+  useEffect(() => {
+    if (mode.datastore) requestAnimationFrame(() => flow.fitView({ padding: 0.08, duration: 300, maxZoom: 1.2 }));
+  }, [view, mode.datastore, flow]);
 
   const showQuestion = useCallback((id: string | null) => {
     setFocused(id);
@@ -550,7 +588,14 @@ export function App({ mode, onSwitch, onHome }: { mode: Mode; onSwitch: (id: Mod
           }} />
         </div>
         <div className="bar-group">
-          <button type="button" onClick={() => void tidy()}>Tidy up</button>
+          {mode.datastore && (
+            <button type="button" className={openbis ? "toggle on" : "toggle"} aria-pressed={openbis}
+                    title="See where everything goes in openBIS: Lab Notebook and Inventories, Space, Project, Collection"
+                    onClick={() => setView((v) => (v === "openbis" ? "model" : "openbis"))}>
+              openBIS view
+            </button>
+          )}
+          {!openbis && <button type="button" onClick={() => void tidy()}>Tidy up</button>}
           {mode.ontology && (
             <button type="button" className={workshop ? "toggle on" : "toggle"} aria-pressed={workshop}
                     title="A calmer view for workshops: hides the check results while you draw with domain experts"
@@ -622,13 +667,13 @@ export function App({ mode, onSwitch, onHome }: { mode: Mode; onSwitch: (id: Mod
           ))}
         </aside>
 
-        <main className="canvas" ref={wrapper} onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }} onDrop={onDrop}>
+        <main className={`canvas${openbis ? " openbis-view" : ""}`} ref={wrapper} onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }} onDrop={onDrop}>
           <ReactFlow<Box, Arrow>
-            nodes={shownBoxes} edges={shownArrows} nodeTypes={nodeTypes} edgeTypes={edgeTypes}
+            nodes={viewNodes} edges={viewArrows} nodeTypes={nodeTypes} edgeTypes={edgeTypes} nodesDraggable={!openbis}
             onNodesChange={onBoxesChange} onEdgesChange={onArrowsChange}
             onConnect={onConnect} onConnectEnd={onConnectEnd} isValidConnection={isValidConnection}
             connectionMode={ConnectionMode.Loose} connectionRadius={40}
-            deleteKeyCode={["Backspace", "Delete"]} onPaneClick={() => { setPending(null); if (narrow) setDrawer(null); }} multiSelectionKeyCode={["Shift", "Meta", "Control"]}
+            deleteKeyCode={["Backspace", "Delete"]} onPaneClick={() => { setPending(null); setLinking(null); if (narrow) setDrawer(null); }} multiSelectionKeyCode={["Shift", "Meta", "Control"]}
             // On a phone, tapping a box or arrow opens its details.
             onNodeClick={() => { if (narrow) setDrawer("details"); }} onEdgeClick={() => { if (narrow) setDrawer("details"); }}
             // Like draw.io: dragging on empty canvas draws a selection rectangle; the canvas moves with
@@ -668,6 +713,14 @@ export function App({ mode, onSwitch, onHome }: { mode: Mode; onSwitch: (id: Mod
                           toVocab={boxes.find((b) => b.id === pending.target)?.data.kind === "vocab"}
                           own={ownRelations} onRemember={rememberRelation}
                           onChoose={choose} onCancel={() => setPending(null)} />
+          )}
+          {openbis && (
+            <div className="view-hint">openBIS view: placed by each box's Space, Project and Collection. Click a box to change them.</div>
+          )}
+          {linking && (
+            <DatastoreLinkMenu x={linking.x} y={linking.y} srcName={nameOf(linking.source)} dstName={nameOf(linking.target)}
+                               onCancel={() => setLinking(null)}
+                               onChoose={(name) => { addLink(linking.source, linking.target, name); setLinking(null); }} />
           )}
           {showMermaid && (
             <MermaidPanel text={toMermaid(boxes, arrows, useCase, patternUses)} onClose={() => setShowMermaid(false)} />
@@ -709,6 +762,11 @@ export function App({ mode, onSwitch, onHome }: { mode: Mode; onSwitch: (id: Mod
                           srcName={nameOf(selectedArrow.source)} dstName={nameOf(selectedArrow.target)}
                           onSwap={() => setArrows((as) => as.map((a) => (a.id === selectedArrow.id
                             ? { ...a, source: a.target, target: a.source } : a)))}
+                          onFlip={() => setArrows((as) => as.map((a) => {
+                            if (a.id !== selectedArrow.id) return a;
+                            const name = a.data!.name === IS_PARENT_OF ? IS_CHILD_OF : IS_PARENT_OF;
+                            return { ...a, source: a.target, target: a.source, data: { ...a.data!, name, words: name } };
+                          }))}
                           onChange={(p) => patchArrow(selectedArrow.id, p)}
                           onReconnect={() => menuAt(selectedArrow.source, selectedArrow.target, selectedArrow.id)}
                           onDelete={() => flow.deleteElements({ edges: [{ id: selectedArrow.id }] })} />

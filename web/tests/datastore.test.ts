@@ -8,7 +8,8 @@ import { describe, expect, test } from "vitest";
 
 import { BAM_DATASET_TYPES, BAM_OBJECT_TYPES } from "../src/canvas/bamTypes.js";
 import { fromMermaid, toMermaid } from "../src/canvas/model.js";
-import { DATASTORE_SHAPES, kindForType } from "../src/canvas/palette.js";
+import { openbisLayout } from "../src/canvas/openbisLayout.js";
+import { DATASTORE_SHAPES, IS_ATTACHED_TO, IS_CHILD_OF, IS_PARENT_OF, kindForType, parentChild } from "../src/canvas/palette.js";
 import { WEB } from "./helpers.js";
 
 const example = readFileSync(join(WEB, "examples", "datastore-example.mmd"), "utf8");
@@ -34,10 +35,37 @@ describe("Data Store boxes in Mermaid", () => {
     expect(data.data.openbis?.type).toBe("ANALYZED_DATA");
   });
 
-  test("arrows are parent-child links and dataset links", () => {
+  test("arrows are openBIS parent-child links and datasets attached to objects", () => {
     const names = new Set(first.arrows.map((a) => a.data!.name));
-    expect(names).toEqual(new Set(["parent of", "has dataset"]));
+    expect(names).toEqual(new Set([IS_PARENT_OF, IS_ATTACHED_TO]));
     expect(first.arrows.every((a) => a.data!.own && !a.data!.curie)).toBe(true);
+    const attached = first.arrows.filter((a) => a.data!.name === IS_ATTACHED_TO);
+    const kindOf = (id: string) => first.boxes.find((b) => b.id === id)!.data.kind;
+    expect(attached.every((a) => kindOf(a.source) === "dataset" && kindOf(a.target) === "step")).toBe(true);
+  });
+
+  test("files with the old arrow words still open", () => {
+    const old = [
+      "flowchart TB",
+      '    A["<b>Synthesis</b><br>Object type: EXPERIMENTAL_STEP"]:::dsdo',
+      '    B["<b>Sample</b><br>Object type: SAMPLE"]:::dsmake',
+      '    D["<b>Data</b><br>Dataset type: RAW_DATA"]:::dsdata',
+      '    A -. "parent of" .-> B',
+      '    A -. "has dataset" .-> D',
+      '%% mermantics-kinds {"A":"step","B":"sample","D":"dataset"}',
+    ].join("\n");
+    const read = fromMermaid(old);
+    expect(read.arrows.map((a) => [a.source, a.data!.name, a.target])).toEqual([
+      ["A", IS_PARENT_OF, "B"],
+      ["D", IS_ATTACHED_TO, "A"],
+    ]);
+  });
+
+  test("is child of is the same link read the other way", () => {
+    const arrow = (name: string) => ({ source: "A", target: "B", data: { name, curie: "" } });
+    expect(parentChild(arrow(IS_PARENT_OF))).toEqual({ parent: "A", child: "B" });
+    expect(parentChild(arrow(IS_CHILD_OF))).toEqual({ parent: "B", child: "A" });
+    expect(parentChild(arrow(IS_ATTACHED_TO))).toBeNull();
   });
 
   test("writing and reading again changes nothing", () => {
@@ -75,5 +103,45 @@ describe("BAM types", () => {
     expect(kindForType("EXPERIMENTAL_STEP.SEM")).toBe("step");
     expect(kindForType("INSTRUMENT.CAMERA.LENS")).toBe("instrument");
     expect(kindForType("SOP")).toBe("object");
+  });
+});
+
+describe("openBIS view", () => {
+  const { boxes, arrows } = fromMermaid(example);
+  const { boxes: placed, lanes } = openbisLayout(boxes, arrows);
+  const at = (id: string) => placed.find((b) => b.id === id)!.position;
+  const band = (level: string, label: string) => lanes.find((l) => l.data.level === level && l.data.label === label);
+
+  test("every object and dataset gets a place, and nothing else", () => {
+    expect(placed).toHaveLength(boxes.length);
+  });
+
+  test("the guide's order: BAM-Inventory, Lab Notebook, FB-Inventory", () => {
+    const areas = lanes.filter((l) => l.data.level === "area").sort((a, b) => a.position.x - b.position.x).map((l) => l.data.label);
+    expect(areas).toEqual(["BAM-Inventory", "Lab Notebook", "FB-Inventory"]);
+  });
+
+  test("an object sits under its Collection", () => {
+    const chemicals = band("collection", "Chemicals")!;
+    for (const id of ["Chemical1", "Chemical2", "Solution"]) {
+      expect(at(id).x).toBeGreaterThanOrEqual(chemicals.position.x);
+      expect(at(id).x).toBeLessThan(chemicals.position.x + chemicals.width!);
+      expect(at(id).y).toBeGreaterThan(chemicals.position.y);
+    }
+  });
+
+  test("a missing Space or Project shows as an open band", () => {
+    expect(lanes.some((l) => l.data.open && l.data.label === "no Space yet")).toBe(true);
+  });
+
+  test("datasets sit below all objects, in the column of their object", () => {
+    const lowest = Math.max(...placed.filter((b) => b.data.kind !== "dataset").map((b) => b.position.y));
+    const data = placed.filter((b) => b.data.kind === "dataset");
+    expect(data.every((d) => d.position.y > lowest)).toBe(true);
+    expect(Math.abs(at("DataChar1").x - at("Char1").x)).toBeLessThan(60);
+  });
+
+  test("bands are not interactive", () => {
+    expect(lanes.every((l) => l.selectable === false && l.draggable === false && l.deletable === false)).toBe(true);
   });
 });

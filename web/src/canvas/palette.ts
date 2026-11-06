@@ -122,9 +122,24 @@ export function kindForType(code: string): ShapeKind {
   return DATASTORE_SHAPES.find((s) => s.kind !== "dataset" && s.kind !== "object" && s.openbis.type === top)?.kind ?? "object";
 }
 
-/** The arrows of the Data Store section: openBIS parent-child links, and a dataset's object. */
-export const PARENT_OF = "parent of";
-export const HAS_DATASET = "has dataset";
+/**
+ * The arrows of the Data Store section, in openBIS words. Between objects: a parent-child link,
+ * written from either end ("is parent of" and "is child of" are the same link read the other
+ * way). A dataset "is attached to" the object it belongs to.
+ */
+export const IS_PARENT_OF = "is parent of";
+export const IS_CHILD_OF = "is child of";
+export const IS_ATTACHED_TO = "is attached to";
+export const DATASTORE_LINKS = new Set([IS_PARENT_OF, IS_CHILD_OF, IS_ATTACHED_TO]);
+
+/** The parent and the child of a parent-child arrow, whichever way it was drawn; null for other arrows. */
+export function parentChild(a: { source: string; target: string; data?: { name: string; curie: string } }):
+  { parent: string; child: string } | null {
+  if (!a.data || a.data.curie) return null;
+  if (a.data.name === IS_PARENT_OF) return { parent: a.source, child: a.target };
+  if (a.data.name === IS_CHILD_OF) return { parent: a.target, child: a.source };
+  return null;
+}
 
 /** Relations offered when drawing an arrow in process modelling. The user can type any other name. */
 export const PROCESS_RELATIONS: string[] = [

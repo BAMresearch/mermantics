@@ -1,8 +1,8 @@
 flowchart TB
 
-%% Example for the BAM Data Store: material synthesis and characterization. Arrows go from
-%% parent to child, and the experimental steps are linked through the samples they use and
-%% make. Datasets hang off the experimental step that made them.
+%% Example for the BAM Data Store: material synthesis and characterization. The experimental
+%% steps are linked through the samples they use and make ("is parent of"), and each dataset
+%% "is attached to" the experimental step that made it.
 
     Synthesis["<b>Material synthesis</b><br>Object type: EXPERIMENTAL_STEP<br>In: Lab Notebook<br>Space: Home space (FB username)<br>Project: Material synthesis and characterization<br>Collection: Experimental Steps"]:::dsdo
     Treatment["<b>Material treatment</b><br>Object type: EXPERIMENTAL_STEP<br>In: Lab Notebook<br>Space: Home space (FB username)<br>Project: Material synthesis and characterization<br>Collection: Experimental Steps"]:::dsdo
@@ -26,26 +26,26 @@ flowchart TB
     ExperimentalStep["<b>Characterization Parameter 1</b><br>Object type: EXPERIMENTAL_STEP<br>In: Lab Notebook<br>Collection: Experimental Steps"]:::dsdo
     Dataset["<b>Characterization Parameter 1 data</b><br>Dataset type: "]:::dsdata
 
-    Chemical1 -. "parent of" .-> Synthesis
-    Chemical2 -. "parent of" .-> Synthesis
-    Instrument1 -. "parent of" .-> Synthesis
-    Synthesis -. "parent of" .-> Synthesized
-    Synthesized -. "parent of" .-> Sample001
-    Solution -. "parent of" .-> Treatment
-    Instrument2 -. "parent of" .-> Char1
-    Instrument3 -. "parent of" .-> Char2
-    Char2 -. "parent of" .-> Analysis2
-    Char2 -. "has dataset" .-> DataChar2
-    Analysis2 -. "has dataset" .-> DataAnalysis2
-    Synthesized -. "parent of" .-> Sample
-    Sample001 -. "parent of" .-> Treatment
-    Sample -. "parent of" .-> Char1
-    Treatment -. "parent of" .-> Sample2
-    Treatment -. "parent of" .-> Sample3
-    Char1 -. "has dataset" .-> DataChar1
-    Sample3 -. "parent of" .-> Char2
-    Sample2 -. "parent of" .-> ExperimentalStep
-    ExperimentalStep -. "has dataset" .-> Dataset
+    Chemical1 -. "is parent of" .-> Synthesis
+    Chemical2 -. "is parent of" .-> Synthesis
+    Instrument1 -. "is parent of" .-> Synthesis
+    Synthesis -. "is parent of" .-> Synthesized
+    Synthesized -. "is parent of" .-> Sample001
+    Solution -. "is parent of" .-> Treatment
+    Instrument2 -. "is parent of" .-> Char1
+    Instrument3 -. "is parent of" .-> Char2
+    Char2 -. "is parent of" .-> Analysis2
+    DataChar2 -. "is attached to" .-> Char2
+    DataAnalysis2 -. "is attached to" .-> Analysis2
+    Synthesized -. "is parent of" .-> Sample
+    Sample001 -. "is parent of" .-> Treatment
+    Sample -. "is parent of" .-> Char1
+    Treatment -. "is parent of" .-> Sample2
+    Treatment -. "is parent of" .-> Sample3
+    DataChar1 -. "is attached to" .-> Char1
+    Sample3 -. "is parent of" .-> Char2
+    Sample2 -. "is parent of" .-> ExperimentalStep
+    Dataset -. "is attached to" .-> ExperimentalStep
 
     classDef base fill:#e5e7eb,stroke:#6b7280,stroke-width:2px,color:#111827
     classDef upper fill:#ffffff,stroke:#9ca3af,stroke-width:2px,color:#374151
