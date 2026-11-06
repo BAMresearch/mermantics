@@ -284,12 +284,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
   color: var(--text); background: #f8fafc; white-space: pre; user-select: text; }
 .mermaid-foot { margin: 0; padding: 8px 12px; border-top: 1px solid var(--line); }
 
-/* Sections: the switch in the top bar and the start page */
+/* Sections: the start page */
 .logo-button { border: 0 !important; background: none !important; padding: 0 !important; display: flex; cursor: pointer; }
-.switch { display: flex; flex-shrink: 0; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
-.bar .switch button { border: 0; border-radius: 0; padding: 6px 12px; background: #fff; color: var(--muted); }
-.bar .switch button + button { border-left: 1px solid var(--line); }
-.bar .switch button.on { background: #eff6ff; color: var(--accent); font-weight: 600; }
 
 .start { min-height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; padding: 40px 24px; }
 .start-logo { height: 40px; }
