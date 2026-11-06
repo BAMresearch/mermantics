@@ -17,7 +17,17 @@ export type Request =
   // `only` limits the answer to these property IDs; null tries every object property.
   | { type: "relations"; id: number; src: string[]; dst: string[]; only: string[] | null }
   // IDs of the named superclasses of each class (the class included), [] for unknown IDs.
-  | { type: "supers"; id: number; ids: string[] };
+  | { type: "supers"; id: number; ids: string[] }
+  // The classes stated under each class, as a tree (for the PMDco terms panel).
+  | { type: "tree"; id: number; ids: string[]; depth: number };
+
+/** A class and the classes stated directly under it. */
+export interface TreeNode {
+  id: string;
+  label: string;
+  deprecated: boolean;
+  children: TreeNode[];
+}
 
 export interface OntologyInfo {
   name: string; // what the reports show as the ontology file
@@ -47,4 +57,5 @@ export type Response =
   | { type: "terms"; id: number; terms: (Term | null)[] }
   | { type: "relations"; id: number; relations: RelationFit[] }
   | { type: "supers"; id: number; supers: string[][] }
+  | { type: "tree"; id: number; trees: (TreeNode | null)[] }
   | { type: "error"; id: number; request: Request["type"]; message: string };

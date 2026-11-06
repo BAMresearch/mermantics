@@ -1,0 +1,51 @@
+flowchart TB
+
+%% Option A. PMDco 3.1.2 today: terms
+%% The computing terms as they are in PMDco 3.1.2. 'axis' says what each subclass is split by.
+
+    Computing["<b>computing process</b><br>PMD_0000583 computing process"]:::local
+    Analytical["<b>analytical calculation</b><br>PMD_0025012 analytical calculation<br><br>axis: solver"]:::local
+    Simulation["<b>simulation process</b><br>PMD_0000933 simulation process"]:::local
+    AIMD["<b>ab initio molecular dynamics simulation</b><br>PMD_0000504 ab initio molecular dynamics simulation<br><br>axis: method"]:::local
+    EmpiricalMD["<b>empirical potential molecular dynamics simulation</b><br>PMD_0000631 empirical potential molecular dynamics simulation<br><br>axis: method"]:::local
+    MonteCarlo["<b>monte carlo simulation</b><br>PMD_0000862 monte carlo simulation<br><br>axis: method"]:::local
+    Multiscale["<b>multiscale simulation</b><br>PMD_0000866 multiscale simulation<br><br>axis: scale"]:::local
+    StructuralOpt["<b>structural optimization simulation</b><br>PMD_0000956 structural optimization simulation<br><br>axis: purpose"]:::local
+    HighThroughput["<b>high throughput simulation</b><br>PMD_0000783 high throughput simulation<br><br>axis: throughput"]:::local
+    MachineLearning["<b>machine learning</b><br>PMD_0000821 machine learning<br><br>axis: data-driven method"]:::local
+    DeepLearning["<b>deep learning</b><br>PMD_0000594 deep learning<br><br>axis: data-driven method"]:::local
+    AtomisticMC["<b>atomistic monte carlo simulation</b><br>PMD_0000527 atomistic monte carlo simulation<br><br>axis: scale"]:::local
+    CoarseGrained["<b>coarse grained simulation</b><br>PMD_0000562 coarse grained simulation<br><br>axis: scale"]:::local
+    MethodSpec["<b>simulation method specification</b><br>PMD_0000931 simulation method specification"]:::local
+    Continuous["<b>continuous simulation</b><br>PMD_0000585 continuous simulation<br><br>axis: time handling"]:::local
+    DiscreteEvent["<b>discrete-event simulation</b><br>PMD_0000613 discrete-event simulation<br><br>axis: time handling"]:::local
+    Deterministic["<b>deterministic simulation</b><br>PMD_0000601 deterministic simulation<br><br>axis: randomness"]:::local
+    Stochastic["<b>stochastic simulation</b><br>PMD_0000951 stochastic simulation<br><br>axis: randomness"]:::local
+    Hybrid["<b>hybrid simulation</b><br>PMD_0000786 hybrid simulation<br><br>axis: mix"]:::local
+    Physical["<b>physical simulation</b><br>PMD_0000884 physical simulation<br><br>axis: physical or computational"]:::local
+    Note["<b>What to look at</b><br>Siblings under simulation process are split by method, scale, purpose, throughput and learning.<br>There is no plain molecular dynamics, and no class for continuum or FEM calculations.<br>The method specifications are plan specifications, but their labels read like processes."]:::note
+
+    Computing --> Analytical
+    Computing --> Simulation
+    Simulation --> AIMD
+    Simulation --> EmpiricalMD
+    Simulation --> MonteCarlo
+    Simulation --> Multiscale
+    Simulation --> StructuralOpt
+    Simulation --> HighThroughput
+    Simulation --> MachineLearning
+    Simulation --> DeepLearning
+    MonteCarlo --> AtomisticMC
+    Multiscale --> CoarseGrained
+    MethodSpec --> Continuous
+    MethodSpec --> DiscreteEvent
+    MethodSpec --> Deterministic
+    MethodSpec --> Stochastic
+    MethodSpec --> Hybrid
+    MethodSpec --> Physical
+
+    classDef local fill:#dbeafe,stroke:#1d4ed8,stroke-width:2px,color:#0f172a
+    classDef note fill:#fffbeb,stroke:#d97706,color:#374151
+
+%% mermantics-layout {"Computing":[0,0],"Analytical":[26,83],"Simulation":[26,192],"AIMD":[52,275],"EmpiricalMD":[52,403],"MonteCarlo":[52,550],"AtomisticMC":[78,659],"Multiscale":[52,787],"CoarseGrained":[78,896],"StructuralOpt":[52,1024],"HighThroughput":[52,1152],"MachineLearning":[52,1280],"DeepLearning":[52,1389],"MethodSpec":[408,0],"Continuous":[434,102],"DiscreteEvent":[434,211],"Deterministic":[434,339],"Stochastic":[434,448],"Hybrid":[434,557],"Physical":[434,666],"Note":[768,0]}
+%% mermantics-kinds {"Computing":"process","Analytical":"process","Simulation":"process","AIMD":"process","EmpiricalMD":"process","MonteCarlo":"process","Multiscale":"process","StructuralOpt":"process","HighThroughput":"process","MachineLearning":"process","DeepLearning":"process","AtomisticMC":"process","CoarseGrained":"process","MethodSpec":"plan","Continuous":"plan","DiscreteEvent":"plan","Deterministic":"plan","Stochastic":"plan","Hybrid":"plan","Physical":"plan"}

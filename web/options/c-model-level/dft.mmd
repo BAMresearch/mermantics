@@ -1,0 +1,26 @@
+flowchart TB
+
+%% Option C. One axis, model level: DFT geometry optimization
+%% Materials science: a DFT geometry optimization (relaxation) of a crystal structure.
+
+    Relaxation["<b>DFT relaxation</b><br>PMD_0000933 simulation process<br><br>is a: electronic structure simulation"]:::proposed
+    Task["<b>Find the lowest-energy structure</b><br>IAO_0000005 objective specification<br><br>is a: equilibrium task"]:::proposed
+    Solver["<b>SCF and BFGS</b><br>PMD_0000931 simulation method specification<br><br>functional, cutoff, k-points in the settings"]:::local
+    Structure["<b>Starting crystal structure</b><br>IAO_0000030 information content entity"]:::local
+    Relaxed["<b>Relaxed structure and total energy</b><br>PMD_0025035 calculation datum"]:::local
+    Code["<b>DFT code</b><br>IAO_0000010 software<br><br>name, version"]:::local
+    Node["<b>Cluster node</b><br>PMD_0000582 computing device"]:::local
+    Note["<b>What to look at</b><br>The class says the level, the task is a link. Geometry optimization is a query: this class plus an equilibrium task.<br>The functional is still settings text."]:::note
+
+    Relaxation -. "executes<br>STATO_0000102" .-> Task
+    Relaxation -. "executes<br>STATO_0000102" .-> Solver
+    Relaxation -. "has specified input<br>OBI_0000293" .-> Structure
+    Relaxation -. "has specified output<br>OBI_0000299" .-> Relaxed
+    Relaxation -. "executes<br>STATO_0000102" .-> Code
+    Relaxation -. "has participant<br>RO_0000057" .-> Node
+
+    classDef local fill:#dbeafe,stroke:#1d4ed8,stroke-width:2px,color:#0f172a
+    classDef note fill:#fffbeb,stroke:#d97706,color:#374151
+    classDef proposed fill:#ecfdf5,stroke:#059669,stroke-width:2px,stroke-dasharray:6 3,color:#0f172a
+
+%% mermantics-kinds {"Relaxation":"process","Task":"plan","Solver":"plan","Structure":"information","Relaxed":"data","Code":"software","Node":"device"}

@@ -29,7 +29,9 @@ function cell(text: string): string {
 
 /** The use case as a Markdown document, with the diagram as a Mermaid block. */
 /** `checkStatus` is null when the diagram was not checked (process modelling). */
-export function toMarkdown(useCase: UseCase, boxes: Box[], mermaidText: string, checkStatus: string | null): string {
+/** With `model: false` the data model part is left out (the computations section writes its own). */
+export function toMarkdown(useCase: UseCase, boxes: Box[], mermaidText: string, checkStatus: string | null,
+                           { model = true }: { model?: boolean } = {}): string {
   const byId = new Map(boxes.map((b) => [b.id, b]));
   const out: string[] = [];
   out.push(`# Use case: ${useCase.title || "untitled"}`, "");
@@ -73,6 +75,7 @@ export function toMarkdown(useCase: UseCase, boxes: Box[], mermaidText: string, 
   }
   out.push("");
 
+  if (!model) return out.join("\n");
   const cov = coverage(useCase, boxes);
   out.push("## Data model", "");
   if (checkStatus !== null) out.push(`Checked against PMDco 3.1.2: ${checkStatus}.`);

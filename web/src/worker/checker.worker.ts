@@ -3,6 +3,7 @@
  * parsing the ontology or checking a large diagram. Loads and checks are handled one at a
  * time, in the order they arrive. Term searches are answered at once from the index of the
  * current ontology, so typing in a search field does not wait for a check or a download.
+ * Class trees wait in the queue, so they are answered once the ontology has loaded.
  */
 
 import { DataFactory } from "n3";
@@ -10,7 +11,7 @@ import { DataFactory } from "n3";
 import { checks, DEFAULT_PREFIXES, defaultConfig, mermaid, Ontology, relations, report, terms } from "../core/index.js";
 import { labels as labelUtil } from "../core/index.js";
 import { OWL, RDF } from "../core/ontology.js";
-import type { OntologyInfo, Request, Response } from "./protocol.js";
+import type { OntologyInfo, Request, Response, TreeNode } from "./protocol.js";
 
 let onto: Ontology | null = null;
 let index: terms.TermIndex | null = null;
@@ -74,6 +75,24 @@ function supersOf(id: string): string[] {
   return [...onto.superclasses(iri)].map((s) => terms.curieOf(s, DEFAULT_PREFIXES)).filter((s): s is string => !!s);
 }
 
+/** The classes under `id`, down to `depth` levels, sorted by label; null for an unknown ID. */
+function treeOf(id: string, depth: number): TreeNode | null {
+  if (onto === null) return null;
+  const o = onto;
+  const root = DataFactory.namedNode(labelUtil.curieToIri(id, DEFAULT_PREFIXES));
+  if (!o.exists(root)) return null;
+  const seen = new Set<string>();
+  const walk = (iri: ReturnType<typeof DataFactory.namedNode>, left: number): TreeNode => {
+    seen.add(iri.value);
+    const children = left <= 0 ? [] : o.subclasses(iri)
+      .filter((c) => !seen.has(c.value) && c.termType === "NamedNode")
+      .map((c) => walk(c as ReturnType<typeof DataFactory.namedNode>, left - 1))
+      .sort((a, b) => a.label.localeCompare(b.label));
+    return { id: terms.curieOf(iri.value, DEFAULT_PREFIXES) ?? iri.value, label: o.label(iri), deprecated: o.deprecated(iri), children };
+  };
+  return walk(root, depth);
+}
+
 async function handle(request: Request) {
   try {
     switch (request.type) {
@@ -99,6 +118,9 @@ async function handle(request: Request) {
         break;
       case "supers":
         post({ type: "supers", id: request.id, supers: request.ids.map((id) => supersOf(id)) });
+        break;
+      case "tree":
+        post({ type: "tree", id: request.id, trees: request.ids.map((id) => treeOf(id, request.depth)) });
         break;
     }
   } catch (exc) {

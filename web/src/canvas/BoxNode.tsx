@@ -11,6 +11,11 @@ export function worst(problems: Problem[]): Problem["level"] | null {
   return null;
 }
 
+/** A definition line (design options) is shown shortened; the full text is in the details. */
+const DEFINITION = "Definition: ";
+
+const STATUS_TAGS: Record<string, string> = { proposed: "new", changed: "changed", deprecated: "deprecated" };
+
 const SIDES = [Position.Top, Position.Right, Position.Bottom, Position.Left];
 
 function BoxNodeView({ data, selected }: NodeProps<Box>) {
@@ -20,11 +25,12 @@ function BoxNodeView({ data, selected }: NodeProps<Box>) {
   const isVocab = data.kind === "vocab";
   const shown = data.problems.filter((p) => p.level !== "note").length || data.problems.length;
   return (
-    <div className={`box kind-${data.kind}${selected ? " selected" : ""}${level ? ` has-${level}` : ""}`}>
+    <div className={`box kind-${data.kind}${selected ? " selected" : ""}${level ? ` has-${level}` : ""}${data.status ? ` status-${data.status}` : ""}`}>
       {!isNote && SIDES.map((side) => <Handle key={side} id={side} type="source" position={side} />)}
       <div className="box-caption">
         <span className="dot" />
-        {shape.title}
+        {data.caption ?? shape.title}
+        {data.status && <span className={`box-status tag-${data.status}`}>{STATUS_TAGS[data.status] ?? data.status}</span>}
       </div>
       <div className="box-name">{data.name || <em>no name</em>}</div>
       {data.openbis && (<>
@@ -45,7 +51,9 @@ function BoxNodeView({ data, selected }: NodeProps<Box>) {
       )}
       {data.lines.length > 0 && (
         <ul className="box-lines">
-          {data.lines.slice(0, 6).map((line, i) => <li key={i}>{isVocab ? line.replace(/\b[A-Z][A-Za-z]*_\d{5,9}\s*/u, "") : line}</li>)}
+          {data.lines.slice(0, 6).map((line, i) => (line.startsWith(DEFINITION)
+            ? <li key={i} className="def" title={line.slice(DEFINITION.length)}>{line.slice(DEFINITION.length)}</li>
+            : <li key={i}>{isVocab ? line.replace(/\b[A-Z][A-Za-z]*_\d{5,9}\s*/u, "") : line}</li>))}
           {data.lines.length > 6 && <li className="more">+{data.lines.length - 6} more</li>}
         </ul>
       )}

@@ -1,0 +1,92 @@
+flowchart TB
+
+%% Option F. Parts only: terms
+%% The same parts as option E, but the core names no kinds of computation. Domain ontologies or a
+%% vocabulary name them. Added for comparison.
+
+    Computing["<b>computing process</b><br>PMD_0000583 computing process<br><br>Definition: A planned process in which one or more computing devices execute software to derive information content entities (the specified outputs) from information content entities (the specified inputs)."]:::changed
+    Simulation["<b>simulation process</b><br>PMD_0000933 simulation process<br><br>Definition: A computing process that answers a computational task by solving one or more models, and post-processing the results where needed."]:::changed
+    ModelSolution["<b>model solution process</b><br>PMD_0000583 computing process<br><br>Definition: A computing process that applies a solver to a model with given conditions and produces the model's raw results."]:::proposed
+    PostProcessing["<b>post-processing</b><br>PMD_0000583 computing process<br><br>Definition: A computing process that derives results from raw results without changing the state of the modelled system."]:::proposed
+    WorkflowRun["<b>workflow run</b><br>PMD_0000016 workflow run"]:::changed
+    HighThroughput["<b>high throughput simulation</b><br>PMD_0000783 high throughput simulation<br><br>a workflow run with many simulations as parts"]:::changed
+    SimSpec["<b>simulation specification</b><br>IAO_0000104 plan specification<br><br>Definition: A plan specification that describes a simulation: its computational task, the models and solvers to use, and how they are combined."]:::proposed
+    Task["<b>computational task specification</b><br>IAO_0000005 objective specification<br><br>Definition: An objective specification that states what a computation is to determine: which quantities of a modelled system are to be computed, and under which conditions."]:::proposed
+    PropertyTask["<b>property evaluation task</b><br>IAO_0000005 objective specification<br><br>to compute quantities of a modelled system at one given state"]:::proposed
+    EquilibriumTask["<b>equilibrium task</b><br>IAO_0000005 objective specification<br><br>to find a state in which the modelled system is in equilibrium or steady state"]:::proposed
+    TimeTask["<b>time evolution task</b><br>IAO_0000005 objective specification<br><br>to compute how the state of a modelled system changes over time"]:::proposed
+    SamplingTask["<b>sampling task</b><br>IAO_0000005 objective specification<br><br>to compute averages or distributions over many states, drawn from an ensemble"]:::proposed
+    ParameterTask["<b>parameter estimation task</b><br>IAO_0000005 objective specification<br><br>to find values of a model's parameters that agree with given data"]:::proposed
+    OptimizationTask["<b>optimization task</b><br>IAO_0000005 objective specification<br><br>to find design variables that best meet an objective under constraints"]:::proposed
+    Model["<b>mathematical model</b><br>IAO_0000030 information content entity<br><br>Definition: An information content entity that represents a system by relations between quantities, so that values of some quantities can be derived from others."]:::proposed
+    PhysicsModel["<b>physics-based model</b><br>IAO_0000030 information content entity<br><br>Definition: A mathematical model made of one physics equation and one or more materials relations, together with the initial and boundary conditions needed to solve it."]:::proposed
+    DataModel["<b>data-based model</b><br>IAO_0000030 information content entity<br><br>Definition: A mathematical model whose relation between inputs and outputs is obtained by fitting a general functional form to data."]:::proposed
+    Equation["<b>physics equation</b><br>IAO_0000030 information content entity<br><br>Definition: An information content entity that states a general relation between physics quantities of one kind of entity, derived from fundamental physics and valid for all materials."]:::proposed
+    ElectronicEq["<b>electronic physics equation</b><br>IAO_0000030 information content entity<br><br>about electrons"]:::proposed
+    AtomisticEq["<b>atomistic physics equation</b><br>IAO_0000030 information content entity<br><br>about atoms"]:::proposed
+    MesoscopicEq["<b>mesoscopic physics equation</b><br>IAO_0000030 information content entity<br><br>about grains or groups of atoms"]:::proposed
+    ContinuumEq["<b>continuum physics equation</b><br>IAO_0000030 information content entity<br><br>about continuum volumes"]:::proposed
+    MaterialsRelation["<b>materials relation</b><br>IAO_0000030 information content entity<br><br>Definition: An information content entity that supplies the values or functions for the parameters of a physics equation, valid for the class of materials for which it was made or tested."]:::proposed
+    Potential["<b>interatomic potential</b><br>IAO_0000030 information content entity<br><br>Definition: A materials relation that gives the potential energy of a system of atoms as a function of their positions."]:::proposed
+    Solver["<b>solver specification</b><br>PMD_0000931 simulation method specification<br><br>relabelled<br>Definition: A plan specification that describes the analytical or numerical technique used to solve a model."]:::changed
+    AnalyticalMethod["<b>analytical solution method</b><br>PMD_0000931 simulation method specification<br><br>Definition: A solver specification that obtains the solution from closed-form expressions."]:::proposed
+    NumericalMethod["<b>numerical method</b><br>PMD_0000931 simulation method specification<br><br>Definition: A solver specification that approximates the solution by discretization or iteration."]:::proposed
+    MCMethod["<b>Monte Carlo method</b><br>PMD_0000931 simulation method specification<br><br>Definition: A numerical method that estimates results from random samples."]:::proposed
+    Stochastic["<b>stochastic simulation</b><br>PMD_0000951 stochastic simulation"]:::local
+    Physical["<b>physical simulation</b><br>PMD_0000884 physical simulation<br><br>a lab process (Gleeble), not a computation"]:::deprecated
+    Device["<b>computing device</b><br>PMD_0000582 computing device<br><br>Definition: A device that executes software."]:::changed
+    Software["<b>software</b><br>IAO_0000010 software"]:::local
+    Image["<b>execution environment image</b><br>IAO_0000010 software<br><br>a container or virtual machine image"]:::proposed
+    SimDevice["<b>simulation device</b><br>PMD_0000932 simulation device<br><br>replaced by computing device"]:::deprecated
+    SimRole["<b>simulation entity role</b><br>PMD_0000051 simulation entity role<br><br>a model can be about a specimen (is about) instead"]:::deprecated
+    Multiscale["<b>multiscale simulation</b><br>PMD_0000866 multiscale simulation<br><br>moves to a domain ontology or a vocabulary"]:::deprecated
+    CoarseGrained["<b>coarse grained simulation</b><br>PMD_0000562 coarse grained simulation<br><br>moves to a domain ontology or a vocabulary"]:::deprecated
+    StructuralOpt["<b>structural optimization simulation</b><br>PMD_0000956 structural optimization simulation<br><br>moves to a domain ontology or a vocabulary"]:::deprecated
+    AIMD["<b>ab initio molecular dynamics simulation</b><br>PMD_0000504 ab initio molecular dynamics simulation<br><br>moves to a domain ontology or a vocabulary"]:::deprecated
+    EmpiricalMD["<b>empirical potential molecular dynamics simulation</b><br>PMD_0000631 empirical potential molecular dynamics simulation<br><br>moves to a domain ontology or a vocabulary"]:::deprecated
+    MonteCarlo["<b>monte carlo simulation</b><br>PMD_0000862 monte carlo simulation<br><br>moves to a domain ontology or a vocabulary"]:::deprecated
+    AtomisticMC["<b>atomistic monte carlo simulation</b><br>PMD_0000527 atomistic monte carlo simulation<br><br>moves to a domain ontology or a vocabulary"]:::deprecated
+    Analytical["<b>analytical calculation</b><br>PMD_0025012 analytical calculation<br><br>moves to a domain ontology or a vocabulary"]:::deprecated
+    MachineLearning["<b>machine learning</b><br>PMD_0000821 machine learning<br><br>moves to a domain ontology or a vocabulary"]:::deprecated
+    DeepLearning["<b>deep learning</b><br>PMD_0000594 deep learning<br><br>moves to a domain ontology or a vocabulary"]:::deprecated
+
+    Computing --> Simulation
+    Computing --> ModelSolution
+    Computing --> PostProcessing
+    Computing --> WorkflowRun
+    WorkflowRun --> HighThroughput
+    Task --> PropertyTask
+    Task --> EquilibriumTask
+    Task --> TimeTask
+    Task --> SamplingTask
+    Task --> ParameterTask
+    Task --> OptimizationTask
+    SimSpec -. "has part<br>BFO_0000051" .-> Task
+    Model --> PhysicsModel
+    Model --> DataModel
+    Equation --> ElectronicEq
+    Equation --> AtomisticEq
+    Equation --> MesoscopicEq
+    Equation --> ContinuumEq
+    MaterialsRelation --> Potential
+    PhysicsModel -. "has part<br>BFO_0000051" .-> Equation
+    PhysicsModel -. "has part<br>BFO_0000051" .-> MaterialsRelation
+    Solver --> AnalyticalMethod
+    Solver --> NumericalMethod
+    NumericalMethod --> MCMethod
+    Stochastic --> MCMethod
+    Simulation -. "executes<br>STATO_0000102" .-> SimSpec
+    Simulation -. "has part<br>BFO_0000051" .-> ModelSolution
+    ModelSolution -. "has specified input<br>OBI_0000293" .-> Model
+    ModelSolution -. "executes<br>STATO_0000102" .-> Solver
+    Software --> Image
+    Computing -. "has participant<br>RO_0000057" .-> Device
+    Computing -. "executes<br>STATO_0000102" .-> Software
+
+    classDef local fill:#dbeafe,stroke:#1d4ed8,stroke-width:2px,color:#0f172a
+    classDef proposed fill:#ecfdf5,stroke:#059669,stroke-width:2px,stroke-dasharray:6 3,color:#0f172a
+    classDef changed fill:#fff7ed,stroke:#ea580c,stroke-width:2px,color:#0f172a
+    classDef deprecated fill:#f1f5f9,stroke:#94a3b8,stroke-dasharray:2 2,color:#64748b
+
+%% mermantics-layout {"Computing":[0,0],"ModelSolution":[26,125],"PostProcessing":[26,250],"WorkflowRun":[26,375],"HighThroughput":[52,458],"Simulation":[382,0],"Multiscale":[382,125],"CoarseGrained":[382,250],"StructuralOpt":[382,394],"AIMD":[382,538],"EmpiricalMD":[382,682],"MonteCarlo":[382,845],"AtomisticMC":[382,970],"Analytical":[382,1114],"MachineLearning":[382,1239],"DeepLearning":[382,1364],"SimSpec":[742,0],"Task":[742,125],"PropertyTask":[768,269],"EquilibriumTask":[768,394],"TimeTask":[768,535],"SamplingTask":[768,660],"ParameterTask":[768,801],"OptimizationTask":[768,945],"Model":[1102,0],"PhysicsModel":[1128,125],"DataModel":[1128,250],"Equation":[1102,375],"ElectronicEq":[1128,500],"AtomisticEq":[1128,628],"MesoscopicEq":[1128,756],"ContinuumEq":[1128,884],"MaterialsRelation":[1102,1012],"Potential":[1128,1137],"Solver":[1462,0],"AnalyticalMethod":[1488,141],"NumericalMethod":[1488,285],"MCMethod":[1514,410],"Stochastic":[1462,535],"Physical":[1462,618],"Device":[1844,0],"Software":[1844,125],"Image":[1870,208],"SimDevice":[1844,352],"SimRole":[1844,461]}
+%% mermantics-kinds {"Computing":"process","Simulation":"process","ModelSolution":"process","PostProcessing":"process","WorkflowRun":"process","HighThroughput":"process","SimSpec":"plan","Task":"plan","PropertyTask":"plan","EquilibriumTask":"plan","TimeTask":"plan","SamplingTask":"plan","ParameterTask":"plan","OptimizationTask":"plan","Model":"information","PhysicsModel":"information","DataModel":"information","Equation":"information","ElectronicEq":"information","AtomisticEq":"information","MesoscopicEq":"information","ContinuumEq":"information","MaterialsRelation":"information","Potential":"information","Solver":"plan","AnalyticalMethod":"plan","NumericalMethod":"plan","MCMethod":"plan","Stochastic":"plan","Physical":"plan","Device":"device","Software":"software","Image":"software","SimDevice":"device","SimRole":"other","Multiscale":"process","CoarseGrained":"process","StructuralOpt":"process","AIMD":"process","EmpiricalMD":"process","MonteCarlo":"process","AtomisticMC":"process","Analytical":"process","MachineLearning":"process","DeepLearning":"process"}

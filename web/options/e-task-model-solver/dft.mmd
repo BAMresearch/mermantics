@@ -1,0 +1,36 @@
+flowchart TB
+
+%% Option E. Task, model and solver as parts: DFT geometry optimization
+%% Materials science: a DFT geometry optimization (relaxation) of a crystal structure.
+
+    Relaxation["<b>DFT relaxation</b><br>PMD_0000933 simulation process"]:::local
+    Spec["<b>Relaxation settings</b><br>IAO_0000104 plan specification<br><br>is a: simulation specification"]:::proposed
+    Task["<b>Find the lowest-energy structure</b><br>IAO_0000005 objective specification<br><br>is a: equilibrium task"]:::proposed
+    Solve["<b>Solve the Kohn-Sham equations</b><br>PMD_0000583 computing process<br><br>is a: model solution process"]:::proposed
+    DFTModel["<b>DFT model</b><br>IAO_0000030 information content entity<br><br>is a: physics-based model"]:::proposed
+    KS["<b>Kohn-Sham equations</b><br>IAO_0000030 information content entity<br><br>is a: electronic physics equation"]:::proposed
+    PBE["<b>PBE functional</b><br>IAO_0000030 information content entity<br><br>is a: materials relation"]:::proposed
+    SCF["<b>SCF and BFGS</b><br>PMD_0000931 simulation method specification<br><br>is a: numerical method<br>cutoff, k-points, force threshold"]:::proposed
+    Structure["<b>Starting crystal structure</b><br>IAO_0000030 information content entity"]:::local
+    Relaxed["<b>Relaxed structure and total energy</b><br>PMD_0025035 calculation datum"]:::local
+    Code["<b>DFT code</b><br>IAO_0000010 software<br><br>name, version"]:::local
+    Node["<b>Cluster node</b><br>PMD_0000582 computing device"]:::local
+    Note["<b>What to look at</b><br>Asserted only as simulation process, with its task, model and solver.<br>A reasoner infers: electronic structure calculation (the model has an electronic equation)<br>and geometry optimization (equilibrium task)."]:::note
+
+    Relaxation -. "executes<br>STATO_0000102" .-> Spec
+    Spec -. "has part<br>BFO_0000051" .-> Task
+    Relaxation -. "has part<br>BFO_0000051" .-> Solve
+    Solve -. "has specified input<br>OBI_0000293" .-> DFTModel
+    Solve -. "executes<br>STATO_0000102" .-> SCF
+    DFTModel -. "has part<br>BFO_0000051" .-> KS
+    DFTModel -. "has part<br>BFO_0000051" .-> PBE
+    Relaxation -. "has specified input<br>OBI_0000293" .-> Structure
+    Relaxation -. "has specified output<br>OBI_0000299" .-> Relaxed
+    Relaxation -. "executes<br>STATO_0000102" .-> Code
+    Relaxation -. "has participant<br>RO_0000057" .-> Node
+
+    classDef local fill:#dbeafe,stroke:#1d4ed8,stroke-width:2px,color:#0f172a
+    classDef note fill:#fffbeb,stroke:#d97706,color:#374151
+    classDef proposed fill:#ecfdf5,stroke:#059669,stroke-width:2px,stroke-dasharray:6 3,color:#0f172a
+
+%% mermantics-kinds {"Relaxation":"process","Spec":"plan","Task":"plan","Solve":"process","DFTModel":"information","KS":"information","PBE":"information","SCF":"plan","Structure":"information","Relaxed":"data","Code":"software","Node":"device"}

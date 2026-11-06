@@ -1,0 +1,63 @@
+flowchart TB
+
+%% Option C. One axis, model level: terms
+%% simulation process split by the level of the model's physics equation (CWA 17284).
+%% Task and solver are linked, not subclasses. Added for comparison.
+
+    Computing["<b>computing process</b><br>PMD_0000583 computing process"]:::local
+    Simulation["<b>simulation process</b><br>PMD_0000933 simulation process"]:::local
+    Electronic["<b>electronic structure simulation</b><br>PMD_0000933 simulation process<br><br>model describes electrons"]:::proposed
+    Atomistic["<b>atomistic simulation</b><br>PMD_0000933 simulation process<br><br>model describes atoms"]:::proposed
+    Mesoscopic["<b>mesoscopic simulation</b><br>PMD_0000933 simulation process<br><br>model describes grains or groups of atoms"]:::proposed
+    Continuum["<b>continuum simulation</b><br>PMD_0000933 simulation process<br><br>model describes continuum volumes"]:::proposed
+    DataBased["<b>data-based simulation</b><br>PMD_0000933 simulation process<br><br>model fitted to data"]:::proposed
+    AIMD["<b>ab initio molecular dynamics simulation</b><br>PMD_0000504 ab initio molecular dynamics simulation<br><br>now under electronic and atomistic"]:::changed
+    EmpiricalMD["<b>empirical potential molecular dynamics simulation</b><br>PMD_0000631 empirical potential molecular dynamics simulation"]:::changed
+    AtomisticMC["<b>atomistic Monte Carlo simulation</b><br>PMD_0000527 atomistic monte carlo simulation"]:::changed
+    CoarseGrained["<b>coarse-grained simulation</b><br>PMD_0000562 coarse grained simulation"]:::changed
+    MachineLearning["<b>machine learning</b><br>PMD_0000821 machine learning"]:::changed
+    Multiscale["<b>multiscale simulation</b><br>PMD_0000866 multiscale simulation"]:::local
+    MonteCarlo["<b>monte carlo simulation</b><br>PMD_0000862 monte carlo simulation<br><br>becomes a solver: Monte Carlo method"]:::deprecated
+    StructuralOpt["<b>structural optimization simulation</b><br>PMD_0000956 structural optimization simulation<br><br>becomes a task: equilibrium"]:::deprecated
+    Task["<b>computational task specification</b><br>IAO_0000005 objective specification"]:::proposed
+    PropertyTask["<b>property evaluation task</b><br>IAO_0000005 objective specification<br><br>to compute quantities of a modelled system at one given state"]:::proposed
+    EquilibriumTask["<b>equilibrium task</b><br>IAO_0000005 objective specification<br><br>to find a state in which the modelled system is in equilibrium or steady state"]:::proposed
+    TimeTask["<b>time evolution task</b><br>IAO_0000005 objective specification<br><br>to compute how the state of a modelled system changes over time"]:::proposed
+    SamplingTask["<b>sampling task</b><br>IAO_0000005 objective specification<br><br>to compute averages or distributions over many states, drawn from an ensemble"]:::proposed
+    ParameterTask["<b>parameter estimation task</b><br>IAO_0000005 objective specification<br><br>to find values of a model's parameters that agree with given data"]:::proposed
+    OptimizationTask["<b>optimization task</b><br>IAO_0000005 objective specification<br><br>to find design variables that best meet an objective under constraints"]:::proposed
+    Solver["<b>simulation method specification</b><br>PMD_0000931 simulation method specification"]:::local
+    MCMethod["<b>Monte Carlo method</b><br>PMD_0000931 simulation method specification"]:::proposed
+    Note["<b>What to look at</b><br>One clear rule for the tree: the level of the model. Methods go to domain ontologies.<br>Ab initio MD and QM/MM need two parents. Multiscale does not fit one level.<br>Task and solver are there, but not used to classify."]:::note
+
+    Computing --> Simulation
+    Simulation --> Electronic
+    Simulation --> Atomistic
+    Simulation --> Mesoscopic
+    Simulation --> Continuum
+    Simulation --> DataBased
+    Electronic --> AIMD
+    Atomistic --> AIMD
+    Atomistic --> EmpiricalMD
+    Atomistic --> AtomisticMC
+    Mesoscopic --> CoarseGrained
+    DataBased --> MachineLearning
+    Simulation --> Multiscale
+    Task --> PropertyTask
+    Task --> EquilibriumTask
+    Task --> TimeTask
+    Task --> SamplingTask
+    Task --> ParameterTask
+    Task --> OptimizationTask
+    Solver --> MCMethod
+    Simulation -. "executes<br>STATO_0000102" .-> Task
+    Simulation -. "executes<br>STATO_0000102" .-> Solver
+
+    classDef local fill:#dbeafe,stroke:#1d4ed8,stroke-width:2px,color:#0f172a
+    classDef note fill:#fffbeb,stroke:#d97706,color:#374151
+    classDef proposed fill:#ecfdf5,stroke:#059669,stroke-width:2px,stroke-dasharray:6 3,color:#0f172a
+    classDef changed fill:#fff7ed,stroke:#ea580c,stroke-width:2px,color:#0f172a
+    classDef deprecated fill:#f1f5f9,stroke:#94a3b8,stroke-dasharray:2 2,color:#64748b
+
+%% mermantics-layout {"Computing":[0,0],"Simulation":[26,83],"Electronic":[52,166],"AIMD":[78,294],"Atomistic":[52,422],"EmpiricalMD":[78,531],"AtomisticMC":[78,652],"Mesoscopic":[52,754],"CoarseGrained":[78,879],"Continuum":[52,981],"DataBased":[52,1090],"MachineLearning":[78,1199],"Multiscale":[52,1282],"Task":[408,0],"PropertyTask":[434,102],"EquilibriumTask":[434,227],"TimeTask":[434,368],"SamplingTask":[434,493],"ParameterTask":[434,634],"OptimizationTask":[434,778],"Solver":[768,0],"MCMethod":[794,102],"MonteCarlo":[768,185],"StructuralOpt":[768,310],"Note":[1128,0]}
+%% mermantics-kinds {"Computing":"process","Simulation":"process","Electronic":"process","Atomistic":"process","Mesoscopic":"process","Continuum":"process","DataBased":"process","AIMD":"process","EmpiricalMD":"process","AtomisticMC":"process","CoarseGrained":"process","MachineLearning":"process","Multiscale":"process","MonteCarlo":"process","StructuralOpt":"process","Task":"plan","PropertyTask":"plan","EquilibriumTask":"plan","TimeTask":"plan","SamplingTask":"plan","ParameterTask":"plan","OptimizationTask":"plan","Solver":"plan","MCMethod":"plan"}
