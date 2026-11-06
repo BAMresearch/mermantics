@@ -28,7 +28,7 @@ function cell(text: string): string {
 }
 
 /** The use case as a Markdown document, with the diagram as a Mermaid block. */
-/** `checkStatus` is null when the diagram was not checked (process modelling). */
+/** `checkStatus` is the quick check's result ("no problems"); null when the diagram was not checked (process modelling). */
 /** With `model: false` the data model part is left out (the computations section writes its own). */
 export function toMarkdown(useCase: UseCase, boxes: Box[], mermaidText: string, checkStatus: string | null,
                            { model = true }: { model?: boolean } = {}): string {
@@ -78,7 +78,7 @@ export function toMarkdown(useCase: UseCase, boxes: Box[], mermaidText: string, 
   if (!model) return out.join("\n");
   const cov = coverage(useCase, boxes);
   out.push("## Data model", "");
-  if (checkStatus !== null) out.push(`Checked against PMDco 3.1.2: ${checkStatus}.`);
+  if (checkStatus !== null) out.push(`Quick check against PMDco 3.1.2 (no reasoner): ${checkStatus}.`);
   if (useCase.questions.length) {
     out.push(`${cov.linked} of ${useCase.questions.length} competency questions are linked to the model.`);
   }

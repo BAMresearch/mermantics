@@ -235,7 +235,7 @@ function quote(text: string): string {
 
 /**
  * The workshop's results as one Markdown file: the use case notes, then each option with the
- * group's notes and its diagrams. `checks` gives the check result per option and view, when known.
+ * group's notes and its diagrams. `checks` gives the quick check's result per option and view, when known.
  */
 export function resultsMarkdown(useCase: UseCase, options: DesignOption[],
                                 checks: Record<string, Partial<Record<ViewId, string>>> = {}): string {
@@ -261,7 +261,7 @@ export function resultsMarkdown(useCase: UseCase, options: DesignOption[],
       if (!text || text === EMPTY_VIEW.trim()) continue;
       out.push(`#### ${v.title}`, "");
       const status = checks[o.id]?.[v.id];
-      if (status) out.push(`Checked against PMDco 3.1.2: ${status}.`, "");
+      if (status) out.push(`Quick check against PMDco 3.1.2 (no reasoner): ${status}.`, "");
       out.push("```mermaid", text, "```", "");
     }
   }

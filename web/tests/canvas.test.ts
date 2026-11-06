@@ -145,7 +145,8 @@ test("coverage and the Markdown export", () => {
   expect(cov.linked).toBe(2);
   expect(cov.unlinked).toEqual(["q3"]);
   expect(cov.unusedBoxes.sort()).toEqual(["Curve", "TensileTest", "TestingMachine"]);
-  const md = toMarkdown(useCase, boxes, toMermaid(boxes, arrows, useCase), "No problems found");
+  const md = toMarkdown(useCase, boxes, toMermaid(boxes, arrows, useCase), "no problems");
+  expect(md).toContain("Quick check against PMDco 3.1.2 (no reasoner): no problems.");
   expect(md).toContain("| 1 | materials engineer | to trace which heat treatment a test piece received |");
   expect(md).toContain("   - Furnace (heat treatment device, PMD_0000780)");
   expect(md).toContain("   - not linked to the data model yet");
