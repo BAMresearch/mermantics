@@ -54,6 +54,46 @@ export const MSE_EXTRA_SHAPES: Shape[] = [
 
 const NOTE = MSE_EXTRA_SHAPES.find((s) => s.kind === "note")!;
 
+/**
+ * PMD Hackathon - Computations: the parts of a computation, each with a PMDco 3.1.2 class to
+ * start from. New terms that a design option proposes are boxes aligned to their nearest
+ * existing parent (see TERM_STATUSES).
+ */
+export const COMP_SHAPES: Shape[] = [
+  { kind: "process", title: "Computation", hint: "A calculation, a simulation, a step of a workflow",
+    classId: "PMD_0000583", classLabel: "computing process" },
+  { kind: "information", title: "Model or input", hint: "A model, its equations, a structure, a mesh",
+    classId: "IAO_0000030", classLabel: "information content entity" },
+  { kind: "data", title: "Result", hint: "Values or files that the computation produces",
+    classId: "PMD_0025035", classLabel: "calculation datum" },
+  { kind: "plan", title: "Method or settings", hint: "A task, a solver, input settings, a workflow definition",
+    classId: "IAO_0000104", classLabel: "plan specification" },
+  { kind: "software", title: "Software", hint: "A program, a code, a container image",
+    classId: "IAO_0000010", classLabel: "software" },
+  { kind: "device", title: "Computer", hint: "A workstation, a cluster node, a GPU",
+    classId: "PMD_0000582", classLabel: "computing device" },
+  { kind: "other", title: "Something else", hint: "Pick the kind of thing from the ontology",
+    classId: "", classLabel: "" },
+];
+
+/**
+ * What a box is in a design option: an existing PMDco term as it is, a new term the option
+ * proposes, an existing term the option changes (new label, new place, new definition), or an
+ * existing term the option deprecates. Written as the box's Mermaid style class.
+ */
+export const TERM_STATUSES = [
+  { css: "", title: "Existing term", hint: "As it is in PMDco" },
+  { css: "proposed", title: "Proposed new term", hint: "Not in PMDco yet; placed under its nearest existing parent" },
+  { css: "changed", title: "Existing term, changed", hint: "New label, place or definition" },
+  { css: "deprecated", title: "Existing term, deprecated", hint: "Taken out in this design" },
+] as const;
+
+export type TermStatus = (typeof TERM_STATUSES)[number]["css"];
+
+export function statusOf(css: string[]): TermStatus {
+  return (TERM_STATUSES.find((s) => s.css && css.includes(s.css))?.css ?? "") as TermStatus;
+}
+
 export const PROCESS_SHAPES: Shape[] = [
   { kind: "process", title: "Process step", hint: "Something that happens", classId: "", classLabel: "" },
   { kind: "thing", title: "Object", hint: "Something that is used, changed or made", classId: "", classLabel: "" },
@@ -146,7 +186,7 @@ export const PROCESS_RELATIONS: string[] = [
   "has input", "has output", "comes before", "has step", "carried out by", "uses", "has part", "is about",
 ];
 
-const ALL_SHAPES: Shape[] = [...MSE_SHAPES, ...MSE_EXTRA_SHAPES, ...PROCESS_SHAPES, ...DATASTORE_SHAPES];
+const ALL_SHAPES: Shape[] = [...MSE_SHAPES, ...MSE_EXTRA_SHAPES, ...PROCESS_SHAPES, ...DATASTORE_SHAPES, ...COMP_SHAPES];
 const FALLBACK = MSE_SHAPES.find((s) => s.kind === "other")!;
 
 export function shapeOf(kind: ShapeKind): Shape {

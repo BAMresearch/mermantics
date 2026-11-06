@@ -2,7 +2,7 @@
 
 import type { RelationFit } from "../core/relations.js";
 import type { SearchResult, Term } from "../core/terms.js";
-import type { Checked, OntologyInfo, Request, Response } from "../worker/protocol.js";
+import type { Checked, OntologyInfo, Request, Response, TreeNode } from "../worker/protocol.js";
 
 type Pending = { resolve: (r: Response) => void; reject: (e: Error) => void };
 type Body<T extends Request["type"]> = Omit<Extract<Request, { type: T }>, "id">;
@@ -74,4 +74,11 @@ export async function supers(ids: string[]): Promise<string[][]> {
   const r = await ask<"supers">({ type: "supers", ids });
   if (r.type !== "supers") throw new Error("unexpected answer");
   return r.supers;
+}
+
+/** The classes under each ID, as trees, `depth` levels down; null for unknown IDs. */
+export async function trees(ids: string[], depth = 6): Promise<(TreeNode | null)[]> {
+  const r = await ask<"tree">({ type: "tree", ids, depth });
+  if (r.type !== "tree") throw new Error("unexpected answer");
+  return r.trees;
 }

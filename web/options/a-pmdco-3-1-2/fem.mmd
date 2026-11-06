@@ -1,0 +1,23 @@
+flowchart TB
+
+%% Option A. PMDco 3.1.2 today: static FEM analysis
+%% Engineering: a static finite element analysis of a loaded steel bracket.
+
+    Analysis["<b>Static analysis of a bracket</b><br>PMD_0000933 simulation process"]:::local
+    Settings["<b>Linear static FE settings</b><br>PMD_0000585 continuous simulation<br><br>also: deterministic simulation"]:::local
+    Mesh["<b>Mesh of the bracket, loads and supports</b><br>IAO_0000030 information content entity"]:::local
+    Stress["<b>Stress and displacement fields</b><br>PMD_0025035 calculation datum"]:::local
+    Code["<b>FE solver</b><br>IAO_0000010 software<br><br>name, version"]:::local
+    Node["<b>Workstation</b><br>PMD_0000582 computing device"]:::local
+    Note["<b>What to look at</b><br>No class for continuum, FEM or structural analysis: only simulation process.<br>The closest terms are plan specifications (continuous, deterministic)."]:::note
+
+    Analysis -. "concretizes<br>RO_0000059" .-> Settings
+    Analysis -. "has specified input<br>OBI_0000293" .-> Mesh
+    Analysis -. "has specified output<br>OBI_0000299" .-> Stress
+    Analysis -. "concretizes<br>RO_0000059" .-> Code
+    Analysis -. "has participant<br>RO_0000057" .-> Node
+
+    classDef local fill:#dbeafe,stroke:#1d4ed8,stroke-width:2px,color:#0f172a
+    classDef note fill:#fffbeb,stroke:#d97706,color:#374151
+
+%% mermantics-kinds {"Analysis":"process","Settings":"plan","Mesh":"information","Stress":"data","Code":"software","Node":"device"}

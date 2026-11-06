@@ -20,6 +20,8 @@ import valueUnit from "../../patterns/value-with-unit.mmd?raw";
 import composition from "../../patterns/chemical-composition.mmd?raw";
 import objectMaterial from "../../patterns/object-and-material.mmd?raw";
 import deviceIdentifier from "../../patterns/device-identifier.mmd?raw";
+import taskModelSolver from "../../patterns/computation-task-model-solver.mmd?raw";
+import workflowStep from "../../patterns/workflow-step-assignments.mmd?raw";
 
 const META_PREFIX = "%% mermantics-pattern ";
 
@@ -36,6 +38,12 @@ export interface Pattern extends PatternMeta {
   text: string; // the pattern diagram, Mermaid
   builtIn: boolean;
 }
+
+/** The built-in patterns each section offers: materials science the PMDco ones, computations its own as well. */
+export const MSE_PATTERNS = ["pmdco-process-inputs-outputs", "pmdco-process-chain", "pmdco-measurement", "pmdco-role-in-process",
+                             "pmdco-property-with-value", "pmdco-simulation-inputs-outputs", "pmdco-value-with-unit",
+                             "pmdco-chemical-composition", "pmdco-object-and-material", "pmdco-device-identifier"];
+export const COMP_PATTERNS = ["pmdco-simulation-inputs-outputs", "computation-task-model-solver", "workflow-step-assignments"];
 
 /** One arrow the pattern requires, between two of its parts. */
 export interface PatternArrow {
@@ -98,7 +106,7 @@ export function parsePattern(text: string, builtIn = false): Pattern | null {
 }
 
 export const BUILT_IN: Pattern[] = [inputsOutputs, processChain, measurement, role, propertyValue, simulationIO, valueUnit,
-                                    composition, objectMaterial, deviceIdentifier]
+                                    composition, objectMaterial, deviceIdentifier, taskModelSolver, workflowStep]
   .map((t) => parsePattern(t, true)).filter((p): p is Pattern => p !== null);
 
 // ---- my patterns, kept in this browser ----------------------------------------------------

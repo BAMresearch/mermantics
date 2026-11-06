@@ -1,0 +1,31 @@
+flowchart TB
+
+%% Computation with task, model and solver: A simulation that executes a specification with its task, and has a model solution process with a model as input and a solver. The task, the model and the solver are what kinds of simulation are told apart by. From design option E; the proposed terms are placed under their nearest PMDco class.
+
+    Simulation["<b>Simulation</b><br>PMD_0000933 simulation process"]:::local
+    Specification["<b>Specification</b><br>IAO_0000104 plan specification<br><br>is a: simulation specification"]:::proposed
+    Task["<b>Task</b><br>IAO_0000005 objective specification<br><br>is a: computational task specification"]:::proposed
+    ModelSolution["<b>Model solution</b><br>PMD_0000583 computing process<br><br>is a: model solution process"]:::proposed
+    Model["<b>Model</b><br>IAO_0000030 information content entity<br><br>is a: mathematical model"]:::proposed
+    Solver["<b>Solver</b><br>PMD_0000931 simulation method specification<br><br>relabelled: solver specification"]:::changed
+    Input["<b>Input data</b><br>IAO_0000030 information content entity"]:::local
+    Result["<b>Result</b><br>PMD_0025035 calculation datum"]:::local
+    Software["<b>Software</b><br>IAO_0000010 software"]:::local
+    Computer["<b>Computer</b><br>PMD_0000582 computing device"]:::local
+
+    Simulation -. "executes<br>STATO_0000102" .-> Specification
+    Specification -. "has part<br>BFO_0000051" .-> Task
+    Simulation -. "has part<br>BFO_0000051" .-> ModelSolution
+    ModelSolution -. "has specified input<br>OBI_0000293" .-> Model
+    ModelSolution -. "executes<br>STATO_0000102" .-> Solver
+    Simulation -. "has specified input<br>OBI_0000293" .-> Input
+    Simulation -. "has specified output<br>OBI_0000299" .-> Result
+    Simulation -. "executes<br>STATO_0000102" .-> Software
+    Simulation -. "has participant<br>RO_0000057" .-> Computer
+
+    classDef local fill:#dbeafe,stroke:#1d4ed8,stroke-width:2px,color:#0f172a
+    classDef proposed fill:#ecfdf5,stroke:#059669,stroke-width:2px,stroke-dasharray:6 3,color:#0f172a
+    classDef changed fill:#fff7ed,stroke:#ea580c,stroke-width:2px,color:#0f172a
+
+%% mermantics-kinds {"Simulation":"process","Specification":"plan","Task":"plan","ModelSolution":"process","Model":"information","Solver":"plan","Input":"information","Result":"data","Software":"software","Computer":"device"}
+%% mermantics-pattern {"id":"computation-task-model-solver","title":"Computation with task, model and solver","version":"0.1.0","description":"A simulation that executes a specification with its task, and has a model solution process with a model as input and a solver. The task, the model and the solver are what kinds of simulation are told apart by. From design option E; the proposed terms are placed under their nearest PMDco class.","source":"Draft proposal for the PMD Hackathon - Computations (design option E), not reviewed. Builds on CWA 17284 and MathModDB; new terms sit under PMDco 3.1.2 classes.","questions":["What was this simulation meant to determine?","Which model, with which equations and materials relations, was solved?","Which solver was used?","Which software ran it, on which computer?"]}

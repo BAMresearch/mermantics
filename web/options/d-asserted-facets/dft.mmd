@@ -1,0 +1,24 @@
+flowchart TB
+
+%% Option D. Several axes, asserted: DFT geometry optimization
+%% Materials science: a DFT geometry optimization (relaxation) of a crystal structure.
+
+    Relaxation["<b>DFT relaxation</b><br>PMD_0000956 structural optimization simulation<br><br>is a: geometry optimization<br>is a: electronic structure simulation"]:::changed
+    Settings["<b>PBE, plane waves, BFGS</b><br>IAO_0000104 plan specification<br><br>functional, cutoff, k-points, force threshold"]:::local
+    Structure["<b>Starting crystal structure</b><br>IAO_0000030 information content entity"]:::local
+    Relaxed["<b>Relaxed structure and total energy</b><br>PMD_0025035 calculation datum"]:::local
+    Code["<b>DFT code</b><br>IAO_0000010 software<br><br>name, version"]:::local
+    Node["<b>Cluster node</b><br>PMD_0000582 computing device"]:::local
+    Note["<b>What to look at</b><br>Two asserted types, both written by hand.<br>If someone asserts continuum simulation here instead, nothing notices."]:::note
+
+    Relaxation -. "executes<br>STATO_0000102" .-> Settings
+    Relaxation -. "has specified input<br>OBI_0000293" .-> Structure
+    Relaxation -. "has specified output<br>OBI_0000299" .-> Relaxed
+    Relaxation -. "executes<br>STATO_0000102" .-> Code
+    Relaxation -. "has participant<br>RO_0000057" .-> Node
+
+    classDef local fill:#dbeafe,stroke:#1d4ed8,stroke-width:2px,color:#0f172a
+    classDef note fill:#fffbeb,stroke:#d97706,color:#374151
+    classDef changed fill:#fff7ed,stroke:#ea580c,stroke-width:2px,color:#0f172a
+
+%% mermantics-kinds {"Relaxation":"process","Settings":"plan","Structure":"information","Relaxed":"data","Code":"software","Node":"device"}

@@ -26,8 +26,11 @@ import { NARROW, TOUCH, useMedia } from "./media.js";
 import { emptyUseCase, fromMermaid, makeId, toMermaid, type Arrow, type ArrowData, type Box, type BoxData, type Problem,
          type UseCase } from "./model.js";
 import { MODES, type Mode, type ModeId } from "./mode.js";
-import { DATASTORE_LINKS, IS_ATTACHED_TO, IS_CHILD_OF, IS_PARENT_OF, KIND_BY_ANCESTOR, openbisFor, shapeOf, type Shape,
-         type ShapeKind } from "./palette.js";
+import { checkStatus, Compare, OptionBar, OptionPanel, TermsTree } from "./Options.js";
+import { EMPTY_VIEW, newOptionId, nextLetter, originalView, readState, resultsMarkdown, VIEWS, type DesignOption,
+         type OptionsState, type ViewId } from "./options.js";
+import { DATASTORE_LINKS, IS_ATTACHED_TO, IS_CHILD_OF, IS_PARENT_OF, KIND_BY_ANCESTOR, openbisFor, shapeOf, statusOf,
+         type Shape, type ShapeKind } from "./palette.js";
 import { BUILT_IN, checkUses, instantiate, loadMine, parsePattern, patternFromSelection, readUses, saveMine, slug,
          type Pattern, type PatternUse } from "./patterns.js";
 import { loadOwnRelations, PlainRelationMenu, RelationMenu, saveOwnRelations, type Choice,
@@ -100,7 +103,29 @@ interface PendingArrow {
  */
 export function App({ mode, onSwitch, onHome }: { mode: Mode; onSwitch: (id: ModeId) => void; onHome: () => void }) {
   const EXAMPLES = mode.examples;
-  const store = useCallback((text: string) => storeIn(mode.storageKey, text), [mode.storageKey]);
+  // Design options (computations section): all options, which one is on the canvas, the workshop's use case.
+  const [opts, setOpts] = useState<OptionsState | null>(() => (mode.options ? readState(storedIn(mode.storageKey)) : null));
+  const optsRef = useRef(opts);
+  optsRef.current = opts;
+  // The option view whose diagram is on the canvas now; null while another one is being opened,
+  // so a save that fires in between cannot write one view's boxes into another.
+  const holding = useRef<{ option: string; view: ViewId } | null>(null);
+  const [comparing, setComparing] = useState(false);
+  useEffect(() => { if (mode.options && opts) storeIn(mode.storageKey, JSON.stringify(opts)); }, [opts, mode.options, mode.storageKey]);
+  const store = useCallback((text: string) => {
+    if (!mode.options) {
+      storeIn(mode.storageKey, text);
+      return;
+    }
+    const h = holding.current;
+    if (!h) return;
+    setOpts((s) => {
+      if (!s) return s;
+      const o = s.options.find((x) => x.id === h.option);
+      if (!o || o.views[h.view] === text) return s;
+      return { ...s, options: s.options.map((x) => (x.id === h.option ? { ...x, views: { ...x.views, [h.view]: text } } : x)) };
+    });
+  }, [mode.options, mode.storageKey]);
   const [boxes, setBoxes, onBoxesChange] = useNodesState<Box>([]);
   const [arrows, setArrows, onArrowsChange] = useEdgesState<Arrow>([]);
   const [docName, setDocName] = useState("model.mmd");
@@ -116,8 +141,8 @@ export function App({ mode, onSwitch, onHome }: { mode: Mode; onSwitch: (id: Mod
   const openbis = mode.datastore && view === "openbis";
   const [linking, setLinking] = useState<{ source: string; target: string; x: number; y: number } | null>(null);
   const [notice, setNotice] = useState("");
-  const [useCase, setUseCase] = useState<UseCase>(emptyUseCase);
-  const [tab, setTab] = useState<"model" | "usecase">("model");
+  const [useCase, setUseCase] = useState<UseCase>(() => opts?.useCase ?? emptyUseCase());
+  const [tab, setTab] = useState<"model" | "usecase" | "option">("model");
   const [workshop, setWorkshop] = useState(false);
   const [showMermaid, setShowMermaid] = useState(false);
   const [focused, setFocused] = useState<string | null>(null); // competency question shown on the canvas
@@ -158,26 +183,65 @@ export function App({ mode, onSwitch, onHome }: { mode: Mode; onSwitch: (id: Mod
   useCaseRef.current = useCase;
   const usesRef = useRef(patternUses);
   usesRef.current = patternUses;
+  /** The canvas as Mermaid. In the computations section the use case is kept with the workshop, not in each diagram. */
+  const textNow = useCallback(() => toMermaid(boxesRef.current, arrowsRef.current,
+                                              mode.options ? emptyUseCase() : useCaseRef.current, usesRef.current),
+                              [mode.options]);
+  useEffect(() => {
+    if (mode.options) setOpts((s) => (s && s.useCase !== useCase ? { ...s, useCase } : s));
+  }, [useCase, mode.options]);
 
   // ---- loading --------------------------------------------------------------------------
 
-  const open = useCallback(async (text: string, name: string) => {
+  const open = useCallback(async (text: string, name: string, target?: { option: string; view: ViewId }) => {
     const imported = fromMermaid(text);
     let placed = mode.ontology ? await classify(imported.boxes) : imported.boxes;
     if (!imported.positioned) placed = await layout(placed, imported.arrows);
     setBoxes(placed);
     setArrows(imported.arrows);
-    setUseCase(imported.useCase);
+    if (!mode.options) setUseCase(imported.useCase);
+    if (target) holding.current = target;
     setPatternUses(readUses(imported.patternUses));
     setFocused(null);
     setDocName(name);
     setNotice(imported.warnings.length ? `Some lines could not be read: ${imported.warnings.join("; ")}` : "");
     requestAnimationFrame(() => flow.fitView({ padding: 0.15, duration: 300, maxZoom: 1.2 }));
-  }, [flow, mode.ontology, setArrows, setBoxes]);
+  }, [flow, mode.ontology, mode.options, setArrows, setBoxes]);
+
+  /** Computations section: put another option view on the canvas, after saving the one there now. */
+  const viewName = (o: DesignOption | undefined, view: ViewId) => `${o?.letter ?? "option"}-${view}.mmd`;
+  const goTo = useCallback((option: string, view: ViewId) => {
+    const s = optsRef.current;
+    if (!s) return;
+    if (holding.current) store(textNow());
+    holding.current = null;
+    const o = s.options.find((x) => x.id === option);
+    setOpts((cur) => (cur ? { ...cur, current: { option, view } } : cur));
+    setPending(null);
+    setComparing(false);
+    void open(o?.views[view] || EMPTY_VIEW, viewName(o, view), { option, view });
+  }, [open, store, textNow]);
+
+  /** The options with the canvas saved into them, for compare and export. */
+  const flushedOptions = (): DesignOption[] => {
+    const s = optsRef.current!;
+    const h = holding.current;
+    if (!h) return s.options;
+    const text = textNow();
+    store(text);
+    return s.options.map((x) => (x.id === h.option ? { ...x, views: { ...x.views, [h.view]: text } } : x));
+  };
 
   useEffect(() => {
     const start = () => {
       setReady(true);
+      if (mode.options) {
+        const s = optsRef.current!;
+        const o = s.options.find((x) => x.id === s.current.option);
+        holding.current = null;
+        void open(o?.views[s.current.view] || EMPTY_VIEW, viewName(o, s.current.view), s.current);
+        return;
+      }
       const saved = storedIn(mode.storageKey);
       const example = mode.examples[0]!;
       void open(saved ?? example.text, saved ? "model.mmd" : example.name);
@@ -204,7 +268,7 @@ export function App({ mode, onSwitch, onHome }: { mode: Mode; onSwitch: (id: Mod
     if (!ready) return;
     if (!mode.ontology) {
       // Nothing to check: only save the diagram.
-      const timer = setTimeout(() => store(toMermaid(boxesRef.current, arrowsRef.current, useCaseRef.current, usesRef.current)), 300);
+      const timer = setTimeout(() => store(textNow()), 300);
       return () => clearTimeout(timer);
     }
     const mine = ++run.current;
@@ -213,7 +277,7 @@ export function App({ mode, onSwitch, onHome }: { mode: Mode; onSwitch: (id: Mod
       const snapBoxes = boxesRef.current;
       const snapArrows = arrowsRef.current;
       const snapUses = usesRef.current;
-      const text = toMermaid(snapBoxes, snapArrows, useCaseRef.current, snapUses);
+      const text = toMermaid(snapBoxes, snapArrows, mode.options ? emptyUseCase() : useCaseRef.current, snapUses);
       store(text);
       try {
         const checked = await check(text);
@@ -262,14 +326,14 @@ export function App({ mode, onSwitch, onHome }: { mode: Mode; onSwitch: (id: Mod
       }
     }, 300);
     return () => clearTimeout(timer);
-  }, [key, ready, mode.ontology, store, setArrows, setBoxes]);
+  }, [key, ready, mode.ontology, mode.options, store, textNow, setArrows, setBoxes]);
 
   // Positions and use case notes are saved too, a little later, as they change.
   useEffect(() => {
     if (!ready) return;
-    const timer = setTimeout(() => store(toMermaid(boxesRef.current, arrowsRef.current, useCaseRef.current, usesRef.current)), 800);
+    const timer = setTimeout(() => store(textNow()), 800);
     return () => clearTimeout(timer);
-  }, [boxes, useCase, patternUses, ready, store]);
+  }, [boxes, useCase, patternUses, ready, store, textNow]);
 
   // ---- adding boxes ---------------------------------------------------------------------
 
@@ -284,7 +348,8 @@ export function App({ mode, onSwitch, onHome }: { mode: Mode; onSwitch: (id: Mod
     setArrows((as) => as.map((a) => ({ ...a, selected: false })));
   }, [flow, mode.datastore, setArrows, setBoxes]);
 
-  const allPatterns = useMemo(() => [...BUILT_IN, ...myPatterns], [myPatterns]);
+  const allPatterns = useMemo(() => [...BUILT_IN.filter((p) => !mode.patternIds || mode.patternIds.includes(p.id)), ...myPatterns],
+                              [myPatterns, mode.patternIds]);
 
   const insertPattern = useCallback(async (pattern: Pattern, at?: { x: number; y: number }) => {
     // Clicked (not dropped): place it to the right of the model, so it does not cover any box.
@@ -495,9 +560,11 @@ export function App({ mode, onSwitch, onHome }: { mode: Mode; onSwitch: (id: Mod
     return boxes.map((b) => ({
       ...b,
       className: focus ? (lit.has(b.id) ? "lit" : "dimmed") : undefined,
-      data: { ...b.data, tags: tags.get(b.id) ?? [], plain: !mode.ontology },
+      data: { ...b.data, tags: tags.get(b.id) ?? [], plain: !mode.ontology,
+              caption: mode.options ? mode.shapes.find((s) => s.kind === b.data.kind)?.title : undefined,
+              status: mode.options ? statusOf(b.data.css) || undefined : undefined },
     }));
-  }, [boxes, useCase.questions, focused, mode.ontology]);
+  }, [boxes, useCase.questions, focused, mode.ontology, mode.options, mode.shapes]);
 
   // The openBIS view: the same boxes, placed by their Space, Project and Collection.
   const viewNodes = useMemo(() => {
@@ -537,13 +604,63 @@ export function App({ mode, onSwitch, onHome }: { mode: Mode; onSwitch: (id: Mod
   };
 
   const download = () => {
-    save(toMermaid(boxes, arrows, useCase, patternUses), docName.endsWith(".mmd") ? docName : `${docName}.mmd`);
+    save(textNow(), docName.endsWith(".mmd") ? docName : `${docName}.mmd`);
+  };
+
+  const exportResults = async () => {
+    const options = flushedOptions();
+    const checks: Record<string, Partial<Record<ViewId, string>>> = {};
+    for (const o of options) {
+      checks[o.id] = {};
+      for (const v of VIEWS) {
+        const text = o.views[v.id];
+        if (text.trim() && text.trim() !== EMPTY_VIEW.trim()) checks[o.id]![v.id] = await checkStatus(text).catch(() => "");
+      }
+    }
+    const md = resultsMarkdown(useCase, options, checks);
+    const base = (useCase.title || "pmd-hackathon-computations").replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-|-$/g, "") || "results";
+    save(md, `${base}.md`);
   };
 
   const exportUseCase = () => {
+    if (mode.options) {
+      void exportResults();
+      return;
+    }
     const md = toMarkdown(useCase, boxes, toMermaid(boxes, arrows, useCase), mode.ontology ? checkState.status : null);
     const base = (useCase.title || docName.replace(/\.mmd$/, "")).replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-|-$/g, "") || "use-case";
     save(md, `${base}.md`);
+  };
+
+  const currentOption = opts?.options.find((o) => o.id === opts.current.option);
+
+  /** A new option: a copy of `from`, or empty. It opens on the same view. */
+  const addOption = (from: DesignOption | null) => {
+    const s = optsRef.current;
+    if (!s) return;
+    const options = flushedOptions();
+    const letter = nextLetter(options);
+    const id = newOptionId(options, letter);
+    const made: DesignOption = from
+      ? { ...from, ...options.find((o) => o.id === from.id)!, id, letter, title: `Copy of ${from.letter}. ${from.title}`,
+          verdict: "", why: "", builtIn: false, source: `Started from option ${from.letter}.` }
+      : { id, letter, title: "New option", summary: "", kinds: "", gains: "", costs: "", verdict: "", why: "", source: "",
+          builtIn: false, views: { terms: EMPTY_VIEW, dft: EMPTY_VIEW, fem: EMPTY_VIEW } };
+    holding.current = null;
+    setOpts({ ...s, options: [...options, made], current: { option: id, view: s.current.view } });
+    void open(made.views[s.current.view], viewName(made, s.current.view), { option: id, view: s.current.view });
+  };
+
+  const deleteOption = (id: string) => {
+    const s = optsRef.current;
+    if (!s) return;
+    const o = s.options.find((x) => x.id === id);
+    if (!o || o.builtIn) return;
+    const rest = s.options.filter((x) => x.id !== id);
+    const next = rest[0]!;
+    holding.current = null;
+    setOpts({ ...s, options: rest, current: { option: next.id, view: s.current.view } });
+    void open(next.views[s.current.view] || EMPTY_VIEW, viewName(next, s.current.view), { option: next.id, view: s.current.view });
   };
 
   const tidy = async () => {
@@ -558,7 +675,7 @@ export function App({ mode, onSwitch, onHome }: { mode: Mode; onSwitch: (id: Mod
           <img className="logo" src={logo} alt="mermantics" />
         </button>
         <div className="switch" role="tablist" aria-label="Section">
-          {(Object.values(MODES)).map((m) => (
+          {(Object.values(MODES)).filter((m) => !m.hidden || m.id === mode.id).map((m) => (
             <button type="button" role="tab" key={m.id} aria-selected={m.id === mode.id} className={m.id === mode.id ? "on" : ""}
                     title={m.title} onClick={() => m.id !== mode.id && onSwitch(m.id)}>
               {m.short}
@@ -566,14 +683,19 @@ export function App({ mode, onSwitch, onHome }: { mode: Mode; onSwitch: (id: Mod
           ))}
         </div>
         <div className="bar-group">
-          <select value="" onChange={(e) => {
-            const ex = EXAMPLES.find((x) => x.name === e.target.value);
-            if (ex) void open(ex.text, ex.name);
-          }}>
-            <option value="">Examples...</option>
-            {EXAMPLES.map((ex) => <option key={ex.name} value={ex.name}>{ex.title}</option>)}
-          </select>
-          <button type="button" onClick={() => { setBoxes([]); setArrows([]); setUseCase(emptyUseCase()); setPatternUses([]); setFocused(null); setDocName("model.mmd"); }}>New</button>
+          {EXAMPLES.length > 0 && (
+            <select value="" onChange={(e) => {
+              const ex = EXAMPLES.find((x) => x.name === e.target.value);
+              if (ex) void open(ex.text, ex.name);
+            }}>
+              <option value="">Examples...</option>
+              {EXAMPLES.map((ex) => <option key={ex.name} value={ex.name}>{ex.title}</option>)}
+            </select>
+          )}
+          <button type="button" title={mode.options ? "Empty this view of the option" : undefined}
+                  onClick={() => { setBoxes([]); setArrows([]); if (!mode.options) setUseCase(emptyUseCase()); setPatternUses([]); setFocused(null); if (!mode.options) setDocName("model.mmd"); }}>
+            {mode.options ? "Clear" : "New"}
+          </button>
           <button type="button" onClick={() => fileInput.current?.click()}>Open...</button>
           <button type="button" onClick={download}>Download .mmd</button>
           <button type="button" className={showMermaid ? "toggle on" : "toggle"} aria-pressed={showMermaid}
@@ -603,12 +725,19 @@ export function App({ mode, onSwitch, onHome }: { mode: Mode; onSwitch: (id: Mod
               Workshop view
             </button>
           )}
-          <button type="button" onClick={exportUseCase} title="The use case, its questions and the diagram as one Markdown file">
-            Export use case
+          <button type="button" onClick={exportUseCase}
+                  title={mode.options ? "The use case notes and every option with its notes and diagrams, as one Markdown file"
+                    : "The use case, its questions and the diagram as one Markdown file"}>
+            {mode.options ? "Export results" : "Export use case"}
           </button>
         </div>
         <div className="bar-spacer" />
       </header>
+
+      {mode.options && opts && (
+        <OptionBar options={opts.options} current={opts.current} onGo={goTo}
+                   onCompare={() => { flushedOptions(); setComparing(true); }} />
+      )}
 
       <div className={`body${drawer ? ` open-${drawer}` : ""}`}>
         {/* Phone: tapping a shape adds it and closes the drawer. */}
@@ -630,7 +759,7 @@ export function App({ mode, onSwitch, onHome }: { mode: Mode; onSwitch: (id: Mod
                       onDragStart={(e) => { e.dataTransfer.setData("application/mermantics-pattern", p.id); e.dataTransfer.effectAllowed = "copy"; }}
                       onClick={() => void insertPattern(p)}>
                 <span className="pattern-icon" aria-hidden="true"><i /><i /><i /></span>
-                <span className="shape-text"><b>{p.title}</b><small>{p.builtIn ? "from PMDco" : "my pattern"}{p.version ? ` · ${p.version}` : ""}</small></span>
+                <span className="shape-text"><b>{p.title}</b><small>{p.builtIn ? (p.id.startsWith("pmdco-") ? "from PMDco" : "for this workshop") : "my pattern"}{p.version ? ` · ${p.version}` : ""}</small></span>
               </button>
               {!p.builtIn && (
                 <span className="pattern-actions">
@@ -694,7 +823,8 @@ export function App({ mode, onSwitch, onHome }: { mode: Mode; onSwitch: (id: Mod
             <button type="button" onClick={() => setDrawer((d) => (d === "details" ? null : "details"))}>Details</button>
           </div>
           {boxes.length === 0 && ready && (
-            <div className="empty">{narrow ? "Tap \"+ Add\" to start, or open an example." : "Drag a shape from the left to start, or open an example."}</div>
+            <div className="empty">{(narrow ? "Tap \"+ Add\" to start" : "Drag a shape from the left to start")
+              + (EXAMPLES.length ? ", or open an example." : ".")}</div>
           )}
           {mode.ontology && <button type="button" className={`status ${checkState.findings.some((f) => f.level === "error") ? "bad"
             : checkState.findings.some((f) => f.level === "warning") ? "warn" : "good"}`}
@@ -723,9 +853,14 @@ export function App({ mode, onSwitch, onHome }: { mode: Mode; onSwitch: (id: Mod
                                onChoose={(name) => { addLink(linking.source, linking.target, name); setLinking(null); }} />
           )}
           {showMermaid && (
-            <MermaidPanel text={toMermaid(boxes, arrows, useCase, patternUses)} onClose={() => setShowMermaid(false)} />
+            <MermaidPanel text={toMermaid(boxes, arrows, mode.options ? emptyUseCase() : useCase, patternUses)} onClose={() => setShowMermaid(false)} />
           )}
         </main>
+        {comparing && opts && (
+          <Compare options={opts.options} view={opts.current.view} shapes={mode.shapes}
+                   initial={[...new Set([opts.current.option, opts.options.find((o) => o.id !== opts.current.option)?.id ?? ""])].filter((x) => x)}
+                   onClose={() => setComparing(false)} onOpen={goTo} />
+        )}
 
         {drawer === "shapes" && <div className="drawer-backdrop" onClick={() => setDrawer(null)} />}
         <aside className="details">
@@ -736,9 +871,27 @@ export function App({ mode, onSwitch, onHome }: { mode: Mode; onSwitch: (id: Mod
                     onClick={() => setTab("usecase")}>
               Use case{useCase.questions.length ? ` · ${useCase.questions.length} Q` : ""}
             </button>
+            {mode.options && (
+              <button type="button" role="tab" aria-selected={tab === "option"} className={tab === "option" ? "on" : ""}
+                      onClick={() => setTab("option")}>Option</button>
+            )}
             <button type="button" className="sheet-close" aria-label="Close" onClick={() => setDrawer(null)}>Close</button>
           </div>
-          {tab === "usecase" ? (
+          {tab === "option" && opts && currentOption ? (
+            <OptionPanel option={currentOption} view={opts.current.view}
+                         onChange={(patch) => setOpts((s) => (s ? { ...s, options: s.options.map((o) => (o.id === currentOption.id ? { ...o, ...patch } : o)) } : s))}
+                         onCopy={() => addOption(currentOption)} onNew={() => addOption(null)}
+                         onDelete={() => deleteOption(currentOption.id)}
+                         canReset={!!originalView(currentOption.id, opts.current.view) && currentOption.builtIn}
+                         onReset={() => {
+                           const text = originalView(currentOption.id, opts.current.view);
+                           if (text === null) return;
+                           holding.current = null;
+                           setOpts((s) => (s ? { ...s, options: s.options.map((o) => (o.id === currentOption.id
+                             ? { ...o, views: { ...o.views, [s.current.view]: text } } : o)) } : s));
+                           void open(text, viewName(currentOption, opts.current.view), opts.current);
+                         }} />
+          ) : tab === "usecase" ? (
             <UseCasePanel useCase={useCase} onChange={setUseCase} boxes={boxes}
                           selectedBoxes={boxes.filter((b) => b.selected).map((b) => b.id)}
                           focused={focused} onFocus={showQuestion} />
@@ -750,6 +903,7 @@ export function App({ mode, onSwitch, onHome }: { mode: Mode; onSwitch: (id: Mod
                             onDownload={(meta) => save(patternText(meta), `${slug(meta.title)}.mmd`)} />
           ) : selectedBox ? (
             <BoxDetails box={selectedBox} shapes={mode.shapes} ontology={mode.ontology} datastore={mode.datastore} boxes={boxes}
+                        termStatus={!!mode.options}
                         onChange={(p) => patchBox(selectedBox.id, p)}
                         questions={useCase.questions.map((q, i) => ({ id: q.id, label: `Q${i + 1}`, text: q.text,
                                                                       linked: q.boxes.includes(selectedBox.id) }))}
@@ -779,6 +933,11 @@ export function App({ mode, onSwitch, onHome }: { mode: Mode; onSwitch: (id: Mod
                       onForget={(id) => setPatternUses((us) => us.filter((u) => u.id !== id))}
                       ownRelations={ownRelations} onForgetRelation={forgetRelation}>
               {mode.datastore && <WhereThingsGo boxes={boxes} onSelect={(id) => select({ box: id })} />}
+              {mode.options && opts && currentOption && (
+                <TermsTree option={currentOption}
+                           termsText={opts.current.view === "terms" ? toMermaid(boxes, arrows) : currentOption.views.terms}
+                           onSelect={opts.current.view === "terms" ? (id) => select({ box: id }) : undefined} />
+              )}
             </Overview>
           )}
 </>)}

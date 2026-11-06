@@ -30,6 +30,8 @@ export interface BoxData extends Record<string, unknown> {
   problems: Problem[];
   tags?: string[]; // only for drawing: the competency questions that use this box ("Q1")
   plain?: boolean; // only for drawing: process modelling, so no "kind of thing not chosen yet"
+  caption?: string; // only for drawing: the section's name for the box's shape
+  status?: string; // only for drawing: design options, "proposed", "changed" or "deprecated"
   openbis?: OpenbisInfo; // BAM Data Store boxes: object or dataset type, and where the object lives
 }
 
@@ -132,6 +134,12 @@ const DATASTORE_CLASS_DEFS: Record<string, string> = {
   dsdata: "classDef dsdata fill:#f8cecc,stroke:#b85450,color:#0f172a",
   dsobject: "classDef dsobject fill:#f1f5f9,stroke:#64748b,color:#0f172a",
 };
+// Design options (PMD Hackathon - Computations): what a box is in the design; only written when used.
+const TERM_CLASS_DEFS: Record<string, string> = {
+  proposed: "classDef proposed fill:#ecfdf5,stroke:#059669,stroke-width:2px,stroke-dasharray:6 3,color:#0f172a",
+  changed: "classDef changed fill:#fff7ed,stroke:#ea580c,stroke-width:2px,color:#0f172a",
+  deprecated: "classDef deprecated fill:#f1f5f9,stroke:#94a3b8,stroke-dasharray:2 2,color:#64748b",
+};
 const DATASTORE_CSS: Partial<Record<ShapeKind, string>> = {
   step: "dsdo", sample: "dsmake", chemical: "dsuse", instrument: "dsuse", dataset: "dsdata", object: "dsobject",
 };
@@ -220,7 +228,8 @@ export function toMermaid(boxes: Box[], arrows: Arrow[], useCase: UseCase = empt
     }
   }
   const used = new Set(boxes.map((b) => styleClass(b.data)));
-  const defs = [...CLASS_DEFS, ...Object.entries(DATASTORE_CLASS_DEFS).filter(([c]) => used.has(c)).map(([, d]) => d)];
+  const defs = [...CLASS_DEFS, ...Object.entries({ ...DATASTORE_CLASS_DEFS, ...TERM_CLASS_DEFS })
+    .filter(([c]) => used.has(c)).map(([, d]) => d)];
   out.push("", ...defs.map((c) => `    ${c}`), "");
   const pos: Record<string, [number, number]> = {};
   for (const b of boxes) pos[b.id] = [Math.round(b.position.x), Math.round(b.position.y)];

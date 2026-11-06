@@ -297,6 +297,30 @@ export class Ontology {
     }
   }
 
+  /**
+   * Named classes stated directly under `cls`: `C subClassOf cls`, or `C subClassOf (cls and
+   * ...)`, the two forms `namedParents` reads. Equivalences are left out, so a defined class
+   * does not appear under every class in its definition. Deprecated classes are included.
+   */
+  subclasses(cls: Term): Term[] {
+    const out = new Map<string, Term>();
+    for (const s of this.subjects(RDFS.subClassOf, cls)) if (s.termType === "NamedNode") out.set(s.value, s);
+    // cls as a member of an intersection: walk from its list cell back to the head of the list.
+    for (const cell of this.subjects(RDF.first, cls)) {
+      let head: Term = cell;
+      const seen = new Set([termKey(head)]);
+      for (let prev = this.subjects(RDF.rest, head)[0]; prev; prev = this.subjects(RDF.rest, head)[0]) {
+        if (seen.has(termKey(prev))) break;
+        seen.add(termKey(prev));
+        head = prev;
+      }
+      for (const expr of this.subjects(OWL.intersectionOf, head)) {
+        for (const s of this.subjects(RDFS.subClassOf, expr)) if (s.termType === "NamedNode") out.set(s.value, s);
+      }
+    }
+    return [...out.values()];
+  }
+
   /** IRIs of all named superclasses, including the class itself. */
   superclasses(cls: Term): Set<string> {
     const cached = this.supersCache.get(cls.value);

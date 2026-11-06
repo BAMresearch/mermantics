@@ -4,7 +4,7 @@
 import { beforeAll, describe, expect, test } from "vitest";
 
 import { fromMermaid, toMermaid, type Box } from "../src/canvas/model.js";
-import { BUILT_IN, checkUses, instantiate, parsePattern, patternFromSelection, readMeta, readUses,
+import { BUILT_IN, COMP_PATTERNS, MSE_PATTERNS, checkUses, instantiate, parsePattern, patternFromSelection, readMeta, readUses,
          type PatternUse } from "../src/canvas/patterns.js";
 import { checks, defaultConfig, mermaid, type Ontology } from "../src/core/index.js";
 import { PMDCO_ENABLED, PMDCO_FILE, loadOntology } from "./helpers.js";
@@ -17,13 +17,22 @@ test("the built-in patterns read cleanly and say what they are for", () => {
                                               "pmdco-role-in-process", "pmdco-property-with-value",
                                               "pmdco-simulation-inputs-outputs", "pmdco-value-with-unit",
                                               "pmdco-chemical-composition",
-                                              "pmdco-object-and-material", "pmdco-device-identifier"]);
+                                              "pmdco-object-and-material", "pmdco-device-identifier",
+                                              "computation-task-model-solver", "workflow-step-assignments"]);
   for (const p of BUILT_IN) {
     expect(mermaid.parse(p.text).findings, p.id).toEqual([]);
     expect(p.title && p.description && p.version && p.source.includes("PMDco"), p.id).toBeTruthy();
     expect(p.questions.length, p.id).toBeGreaterThan(0);
     expect(fromMermaid(p.text).boxes.every((b) => b.data.classId), p.id).toBe(true);
   }
+});
+
+test("each section offers built-in patterns that exist; materials science keeps its PMDco ones", () => {
+  const ids = new Set(BUILT_IN.map((p) => p.id));
+  for (const id of [...MSE_PATTERNS, ...COMP_PATTERNS]) expect(ids.has(id), id).toBe(true);
+  expect(MSE_PATTERNS.every((id) => id.startsWith("pmdco-"))).toBe(true);
+  expect(MSE_PATTERNS).toHaveLength(10);
+  expect(COMP_PATTERNS).toEqual(["pmdco-simulation-inputs-outputs", "computation-task-model-solver", "workflow-step-assignments"]);
 });
 
 test("inserting a pattern gives free box ids and remembers which box plays which part", () => {

@@ -1,0 +1,62 @@
+flowchart TB
+
+%% Option D. Several axes, asserted: terms
+%% Two parallel asserted trees under simulation process: by model level and by task. A specific kind
+%% is asserted under one class of each. Added for comparison.
+
+    Computing["<b>computing process</b><br>PMD_0000583 computing process"]:::local
+    Simulation["<b>simulation process</b><br>PMD_0000933 simulation process"]:::local
+    ByLevel["<b>simulation by model level</b><br>PMD_0000933 simulation process<br><br>grouping class"]:::proposed
+    ByTask["<b>simulation by task</b><br>PMD_0000933 simulation process<br><br>grouping class"]:::proposed
+    Electronic["<b>electronic structure simulation</b><br>PMD_0000933 simulation process"]:::proposed
+    Atomistic["<b>atomistic simulation</b><br>PMD_0000933 simulation process"]:::proposed
+    Mesoscopic["<b>mesoscopic simulation</b><br>PMD_0000933 simulation process"]:::proposed
+    Continuum["<b>continuum simulation</b><br>PMD_0000933 simulation process"]:::proposed
+    DataBased["<b>data-based simulation</b><br>PMD_0000933 simulation process"]:::proposed
+    EquilibriumSim["<b>equilibrium simulation</b><br>PMD_0000933 simulation process"]:::proposed
+    TimeSim["<b>time evolution simulation</b><br>PMD_0000933 simulation process"]:::proposed
+    SamplingSim["<b>sampling simulation</b><br>PMD_0000933 simulation process"]:::proposed
+    PropertySim["<b>property evaluation</b><br>PMD_0000933 simulation process"]:::proposed
+    ParameterEst["<b>parameter estimation</b><br>PMD_0000933 simulation process"]:::proposed
+    OptimizationSim["<b>design optimization</b><br>PMD_0000933 simulation process"]:::proposed
+    GeometryOpt["<b>geometry optimization</b><br>PMD_0000956 structural optimization simulation<br><br>relabelled; under equilibrium"]:::changed
+    AIMD["<b>ab initio molecular dynamics simulation</b><br>PMD_0000504 ab initio molecular dynamics simulation<br><br>three parents"]:::changed
+    EmpiricalMD["<b>empirical potential molecular dynamics simulation</b><br>PMD_0000631 empirical potential molecular dynamics simulation"]:::changed
+    AtomisticMC["<b>atomistic Monte Carlo simulation</b><br>PMD_0000527 atomistic monte carlo simulation"]:::changed
+    MachineLearning["<b>machine learning model training</b><br>PMD_0000821 machine learning"]:::changed
+    CoarseGrained["<b>coarse-grained simulation</b><br>PMD_0000562 coarse grained simulation"]:::changed
+    Note["<b>What to look at</b><br>Each kind is asserted by hand under one class per axis.<br>With two axes of 5 and 6 classes, up to 30 combined classes; a third axis multiplies again.<br>Nothing checks that a computation's model and task match the classes asserted."]:::note
+
+    Computing --> Simulation
+    Simulation --> ByLevel
+    Simulation --> ByTask
+    ByLevel --> Electronic
+    ByLevel --> Atomistic
+    ByLevel --> Mesoscopic
+    ByLevel --> Continuum
+    ByLevel --> DataBased
+    ByTask --> EquilibriumSim
+    ByTask --> TimeSim
+    ByTask --> SamplingSim
+    ByTask --> PropertySim
+    ByTask --> ParameterEst
+    ByTask --> OptimizationSim
+    EquilibriumSim --> GeometryOpt
+    Electronic --> AIMD
+    Atomistic --> AIMD
+    TimeSim --> AIMD
+    Atomistic --> EmpiricalMD
+    TimeSim --> EmpiricalMD
+    Atomistic --> AtomisticMC
+    SamplingSim --> AtomisticMC
+    DataBased --> MachineLearning
+    ParameterEst --> MachineLearning
+    Mesoscopic --> CoarseGrained
+
+    classDef local fill:#dbeafe,stroke:#1d4ed8,stroke-width:2px,color:#0f172a
+    classDef note fill:#fffbeb,stroke:#d97706,color:#374151
+    classDef proposed fill:#ecfdf5,stroke:#059669,stroke-width:2px,stroke-dasharray:6 3,color:#0f172a
+    classDef changed fill:#fff7ed,stroke:#ea580c,stroke-width:2px,color:#0f172a
+
+%% mermantics-layout {"Computing":[0,0],"Simulation":[26,83],"ByLevel":[52,166],"Electronic":[78,294],"AIMD":[104,396],"Atomistic":[78,524],"EmpiricalMD":[104,607],"AtomisticMC":[104,728],"Mesoscopic":[78,830],"CoarseGrained":[104,913],"Continuum":[78,1015],"DataBased":[78,1098],"MachineLearning":[104,1181],"ByTask":[434,0],"EquilibriumSim":[460,109],"GeometryOpt":[486,192],"TimeSim":[460,301],"SamplingSim":[460,403],"PropertySim":[460,486],"ParameterEst":[460,569],"OptimizationSim":[460,652],"Note":[816,0]}
+%% mermantics-kinds {"Computing":"process","Simulation":"process","ByLevel":"process","ByTask":"process","Electronic":"process","Atomistic":"process","Mesoscopic":"process","Continuum":"process","DataBased":"process","EquilibriumSim":"process","TimeSim":"process","SamplingSim":"process","PropertySim":"process","ParameterEst":"process","OptimizationSim":"process","GeometryOpt":"process","AIMD":"process","EmpiricalMD":"process","AtomisticMC":"process","MachineLearning":"process","CoarseGrained":"process"}

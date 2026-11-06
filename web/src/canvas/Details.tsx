@@ -4,7 +4,7 @@ import type { Term } from "../core/terms.js";
 import { lookup } from "./checker.js";
 import { DatastoreArrowSection, DatastoreBoxSection } from "./DatastorePanel.js";
 import type { Arrow, ArrowData, Box, BoxData, Problem } from "./model.js";
-import { shapeOf, type Shape, type ShapeKind } from "./palette.js";
+import { shapeOf, statusOf, TERM_STATUSES, type Shape, type ShapeKind } from "./palette.js";
 import type { OwnRelation } from "./RelationMenu.js";
 import { TermSearch } from "./TermSearch.js";
 
@@ -49,7 +49,8 @@ export interface QuestionLink {
 }
 
 export function BoxDetails({ box, shapes, ontology, datastore = false, boxes = [], onChange, onDelete, questions = [],
-                            onToggleQuestion, parts = [] }: {
+                            onToggleQuestion, parts = [], termStatus = false }: {
+  termStatus?: boolean; // design options: is this box an existing, proposed, changed or deprecated term?
   box: Box;
   shapes: Shape[]; // the shapes a box can be shown as in this section
   ontology: boolean; // false in process modelling: no ontology class to pick
@@ -65,8 +66,15 @@ export function BoxDetails({ box, shapes, ontology, datastore = false, boxes = [
   const term = useTerm(d.classId);
   const [changing, setChanging] = useState(false);
   useEffect(() => setChanging(false), [box.id]);
-  const shape = shapeOf(d.kind);
+  const shape = shapes.find((s) => s.kind === d.kind) ?? shapeOf(d.kind);
   const special = d.kind === "note" || d.kind === "vocab";
+  const status = statusOf(d.css);
+  const DEF = "Definition: ";
+  const definition = d.lines.find((l) => l.startsWith(DEF))?.slice(DEF.length) ?? "";
+  const setDefinition = (text: string) => {
+    const rest = d.lines.filter((l) => !l.startsWith(DEF));
+    onChange({ lines: text.trim() ? [`${DEF}${text.replace(/\s*\n\s*/g, " ")}`, ...rest] : rest });
+  };
 
   return (
     <div className="panel">
@@ -78,6 +86,29 @@ export function BoxDetails({ box, shapes, ontology, datastore = false, boxes = [
         Name
         <input value={d.name} onChange={(e) => onChange({ name: e.target.value })} />
       </label>
+
+      {!special && termStatus && (
+        <section className="panel-section">
+          <label className="field">
+            In this design option
+            <select value={status} onChange={(e) => {
+              const css = d.css.filter((c) => !TERM_STATUSES.some((t) => t.css && t.css === c));
+              onChange({ css: e.target.value ? [e.target.value] : css.filter((c) => c !== "local").length ? css : [] });
+            }}>
+              {TERM_STATUSES.map((t) => <option key={t.css} value={t.css}>{t.title}</option>)}
+            </select>
+          </label>
+          <p className="muted">{TERM_STATUSES.find((t) => t.css === status)?.hint}
+            {status === "proposed" && ". Below, pick that parent as the kind of thing."}</p>
+          {status && (
+            <label className="field">
+              Definition
+              <textarea rows={3} value={definition} placeholder="A ... that ..."
+                        onChange={(e) => setDefinition(e.target.value)} />
+            </label>
+          )}
+        </section>
+      )}
 
       {!special && datastore && <DatastoreBoxSection data={d} boxes={boxes} onChange={onChange} />}
 

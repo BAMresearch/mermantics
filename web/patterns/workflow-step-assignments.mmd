@@ -1,0 +1,32 @@
+flowchart TB
+
+%% Workflow step with input and output assignments: One step of a workflow run: it executes a workflow function, and its input and output assignments say which parameter of the function each piece of data fills. Uses the PMDco 3.1.2 workflow terms; 'fills parameter' is a proposed relation.
+
+    Run["<b>Workflow run</b><br>PMD_0000016 workflow run"]:::local
+    Definition["<b>Workflow definition</b><br>PMD_0000012 workflow definition"]:::local
+    Step["<b>Workflow step</b><br>PMD_0000011 workflow node"]:::local
+    Function["<b>Function</b><br>PMD_0000010 workflow function"]:::local
+    InputParameter["<b>Input parameter</b><br>PMD_0000014 input specification"]:::local
+    OutputParameter["<b>Output parameter</b><br>PMD_0000015 output specification"]:::local
+    InputAssignment["<b>Input assignment</b><br>PMD_0000066 input assignment"]:::local
+    OutputAssignment["<b>Output assignment</b><br>PMD_0000067 output assignment"]:::local
+    InputData["<b>Input data</b><br>IAO_0000030 information content entity"]:::local
+    OutputData["<b>Output data</b><br>PMD_0025035 calculation datum"]:::local
+
+    Run -. "executes<br>STATO_0000102" .-> Definition
+    Definition -. "has part<br>BFO_0000051" .-> Function
+    Run -. "has part<br>BFO_0000051" .-> Step
+    Step -. "executes<br>STATO_0000102" .-> Function
+    Function -. "has part<br>BFO_0000051" .-> InputParameter
+    Function -. "has part<br>BFO_0000051" .-> OutputParameter
+    Step -. "has part<br>BFO_0000051" .-> InputAssignment
+    Step -. "has part<br>BFO_0000051" .-> OutputAssignment
+    InputAssignment -. "fills parameter" .-> InputParameter
+    OutputAssignment -. "fills parameter" .-> OutputParameter
+    InputAssignment -. "has participant<br>RO_0000057" .-> InputData
+    OutputAssignment -. "has participant<br>RO_0000057" .-> OutputData
+
+    classDef local fill:#dbeafe,stroke:#1d4ed8,stroke-width:2px,color:#0f172a
+
+%% mermantics-kinds {"Run":"process","Definition":"plan","Step":"process","Function":"software","InputParameter":"plan","OutputParameter":"plan","InputAssignment":"process","OutputAssignment":"process","InputData":"information","OutputData":"data"}
+%% mermantics-pattern {"id":"workflow-step-assignments","title":"Workflow step with input and output assignments","version":"0.1.0","description":"One step of a workflow run: it executes a workflow function, and its input and output assignments say which parameter of the function each piece of data fills. Uses the PMDco 3.1.2 workflow terms; 'fills parameter' is a proposed relation.","source":"Draft proposal for the PMD Hackathon - Computations (design option E), not reviewed. Based on the PMDco workflow terms and the pattern 'simulation inout simple' (https://github.com/materialdigital/core-ontology/tree/v3.1.2/patterns, CC BY 4.0).","questions":["Which function did this step call, as part of which workflow?","Which value went into which parameter?","Which data did the step produce?"]}

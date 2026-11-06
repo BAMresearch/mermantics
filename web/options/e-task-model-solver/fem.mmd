@@ -1,0 +1,36 @@
+flowchart TB
+
+%% Option E. Task, model and solver as parts: static FEM analysis
+%% Engineering: a static finite element analysis of a loaded steel bracket.
+
+    Analysis["<b>Static analysis of a bracket</b><br>PMD_0000933 simulation process"]:::local
+    Spec["<b>Load case settings</b><br>IAO_0000104 plan specification<br><br>is a: simulation specification"]:::proposed
+    Task["<b>Find the stresses under load</b><br>IAO_0000005 objective specification<br><br>is a: equilibrium task"]:::proposed
+    Solve["<b>Solve the elasticity problem</b><br>PMD_0000583 computing process<br><br>is a: model solution process"]:::proposed
+    ElasticModel["<b>Linear elastic model</b><br>IAO_0000030 information content entity<br><br>is a: physics-based model"]:::proposed
+    Balance["<b>Momentum balance</b><br>IAO_0000030 information content entity<br><br>is a: continuum physics equation"]:::proposed
+    Hooke["<b>Hooke's law for the steel</b><br>IAO_0000030 information content entity<br><br>is a: materials relation"]:::proposed
+    FEMethod["<b>Finite element method</b><br>PMD_0000931 simulation method specification<br><br>is a: numerical method<br>element type, mesh size"]:::proposed
+    Mesh["<b>Mesh of the bracket, loads and supports</b><br>IAO_0000030 information content entity"]:::local
+    Stress["<b>Stress and displacement fields</b><br>PMD_0025035 calculation datum"]:::local
+    Code["<b>FE solver</b><br>IAO_0000010 software<br><br>name, version"]:::local
+    Node["<b>Workstation</b><br>PMD_0000582 computing device"]:::local
+    Note["<b>What to look at</b><br>Same pattern as the DFT case.<br>A reasoner infers: continuum simulation. Not geometry optimization: the task is equilibrium,<br>but the model has no electronic or atomistic equation."]:::note
+
+    Analysis -. "executes<br>STATO_0000102" .-> Spec
+    Spec -. "has part<br>BFO_0000051" .-> Task
+    Analysis -. "has part<br>BFO_0000051" .-> Solve
+    Solve -. "has specified input<br>OBI_0000293" .-> ElasticModel
+    Solve -. "executes<br>STATO_0000102" .-> FEMethod
+    ElasticModel -. "has part<br>BFO_0000051" .-> Balance
+    ElasticModel -. "has part<br>BFO_0000051" .-> Hooke
+    Analysis -. "has specified input<br>OBI_0000293" .-> Mesh
+    Analysis -. "has specified output<br>OBI_0000299" .-> Stress
+    Analysis -. "executes<br>STATO_0000102" .-> Code
+    Analysis -. "has participant<br>RO_0000057" .-> Node
+
+    classDef local fill:#dbeafe,stroke:#1d4ed8,stroke-width:2px,color:#0f172a
+    classDef note fill:#fffbeb,stroke:#d97706,color:#374151
+    classDef proposed fill:#ecfdf5,stroke:#059669,stroke-width:2px,stroke-dasharray:6 3,color:#0f172a
+
+%% mermantics-kinds {"Analysis":"process","Spec":"plan","Task":"plan","Solve":"process","ElasticModel":"information","Balance":"information","Hooke":"information","FEMethod":"plan","Mesh":"information","Stress":"data","Code":"software","Node":"device"}
