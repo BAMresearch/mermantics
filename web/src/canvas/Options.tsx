@@ -3,7 +3,8 @@
  * the panel with an option's notes, the compare view, and the tree of terms.
  */
 
-import { ConnectionMode, MarkerType, ReactFlow, ReactFlowProvider, useReactFlow, type EdgeTypes, type NodeTypes } from "@xyflow/react";
+import { ConnectionMode, MarkerType, ReactFlow, ReactFlowProvider, useNodesInitialized, useReactFlow, type EdgeTypes,
+         type NodeTypes } from "@xyflow/react";
 import { useEffect, useMemo, useState } from "react";
 
 import { BoxNode } from "./BoxNode.js";
@@ -124,7 +125,7 @@ export function OptionPanel({ option, view, onChange, onCopy, onNew, onDelete, o
 // ---- a small read-only diagram ------------------------------------------------------------
 
 function useDiagram(text: string, shapes: Shape[]) {
-  const [state, setState] = useState<{ boxes: Box[]; arrows: Arrow[] } | null>(null);
+  const [state, setState] = useState<{ boxes: Box[]; arrows: Arrow[]; guessed: boolean } | null>(null);
   useEffect(() => {
     let live = true;
     const imported = fromMermaid(text);
@@ -132,6 +133,7 @@ function useDiagram(text: string, shapes: Shape[]) {
       if (!live) return;
       const caption = (b: Box) => shapes.find((s) => s.kind === b.data.kind)?.title;
       setState({
+        guessed: !imported.positioned,
         boxes: boxes.map((b) => ({ ...b, draggable: false, selectable: false,
                                    data: { ...b.data, caption: caption(b), status: statusOf(b.data.css) } })),
         arrows: imported.arrows.map((a) => {
@@ -150,15 +152,29 @@ function useDiagram(text: string, shapes: Shape[]) {
     else void layout(imported.boxes, imported.arrows).then(done);
     return () => { live = false; };
   }, [text, shapes]);
-  return state;
+  return [state, setState] as const;
 }
 
 function MiniFlow({ text, shapes }: { text: string; shapes: Shape[] }) {
-  const d = useDiagram(text, shapes);
-  const flow = useReactFlow();
+  const [d, setD] = useDiagram(text, shapes);
+  const flow = useReactFlow<Box, Arrow>();
+  const ready = useNodesInitialized();
   useEffect(() => {
     if (d) requestAnimationFrame(() => flow.fitView({ padding: 0.08, maxZoom: 1 }));
   }, [d, flow]);
+  // Laid out with a guessed box size: lay it out again with the boxes' real sizes.
+  useEffect(() => {
+    if (!d?.guessed || !ready) return;
+    const measured = flow.getNodes();
+    if (!measured.length || !measured.every((n) => n.measured?.width)) return;
+    let live = true;
+    void layout(measured, d.arrows).then((placed) => {
+      if (!live) return;
+      const at = new Map(placed.map((b) => [b.id, b.position]));
+      setD((cur) => (cur ? { ...cur, guessed: false, boxes: cur.boxes.map((b) => ({ ...b, position: at.get(b.id) ?? b.position })) } : cur));
+    });
+    return () => { live = false; };
+  }, [d, ready, flow, setD]);
   if (!d) return <div className="mini-empty">Laying out...</div>;
   if (!d.boxes.length) return <div className="mini-empty">Nothing drawn yet.</div>;
   return (

@@ -7,7 +7,8 @@
  */
 
 import {
-  Background, ConnectionMode, SelectionMode, MarkerType, MiniMap, ReactFlow, useEdgesState, useNodesState, useReactFlow,
+  Background, ConnectionMode, SelectionMode, MarkerType, MiniMap, ReactFlow, useEdgesState, useNodesInitialized, useNodesState,
+  useReactFlow,
   type Connection, type EdgeTypes, type IsValidConnection, type NodeTypes, type OnConnectEnd,
 } from "@xyflow/react";
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
@@ -193,10 +194,28 @@ export function App({ mode, onSwitch, onHome }: { mode: Mode; onSwitch: (id: Mod
 
   // ---- loading --------------------------------------------------------------------------
 
+  // A diagram without stored positions is laid out before its boxes are drawn, with a guessed
+  // box size; once the boxes have their real sizes it is laid out once more, like "Tidy up".
+  const relayout = useRef(false);
+  const nodesReady = useNodesInitialized();
+  useEffect(() => {
+    if (!relayout.current || !nodesReady) return;
+    const snap = boxesRef.current;
+    if (!snap.length || !snap.every((b) => b.measured?.width && b.measured.height)) return;
+    relayout.current = false;
+    void layout(snap, arrowsRef.current).then((placed) => {
+      const at = new Map(placed.map((b) => [b.id, b.position]));
+      setBoxes((bs) => bs.map((b) => ({ ...b, position: at.get(b.id) ?? b.position })));
+      requestAnimationFrame(() => flow.fitView({ padding: 0.15, duration: 300, maxZoom: 1.2 }));
+    });
+  }, [nodesReady, boxes, flow, setBoxes]);
+
   const open = useCallback(async (text: string, name: string, target?: { option: string; view: ViewId }) => {
     const imported = fromMermaid(text);
+    relayout.current = false;
     let placed = mode.ontology ? await classify(imported.boxes) : imported.boxes;
     if (!imported.positioned) placed = await layout(placed, imported.arrows);
+    relayout.current = !imported.positioned && placed.length > 0;
     setBoxes(placed);
     setArrows(imported.arrows);
     if (!mode.options) setUseCase(imported.useCase);

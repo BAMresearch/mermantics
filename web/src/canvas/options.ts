@@ -143,7 +143,7 @@ export function originalView(optionId: string, view: ViewId): string | null {
 // ---- kept in the browser ----------------------------------------------------------------
 
 /** Changed when the built-in diagrams change, so the browser picks up the new ones. */
-export const BUILT_IN_VERSION = 1;
+export const BUILT_IN_VERSION = 2;
 
 export interface OptionsState {
   version: number;
