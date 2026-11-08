@@ -9,7 +9,8 @@ import { describe, expect, test } from "vitest";
 import { BAM_DATASET_TYPES, BAM_OBJECT_TYPES } from "../src/canvas/bamTypes.js";
 import { fromMermaid, toMermaid } from "../src/canvas/model.js";
 import { openbisLayout } from "../src/canvas/openbisLayout.js";
-import { DATASTORE_SHAPES, IS_ATTACHED_TO, IS_CHILD_OF, IS_PARENT_OF, kindForType, parentChild } from "../src/canvas/palette.js";
+import { DATASTORE_SHAPES, INVENTORY_SPACES, IS_ATTACHED_TO, IS_CHILD_OF, IS_PARENT_OF, kindForType, LAB_NOTEBOOK_SPACE, parentChild,
+         spaceAfterMove, spacesFor } from "../src/canvas/palette.js";
 import { WEB } from "./helpers.js";
 
 const example = readFileSync(join(WEB, "examples", "datastore-example.mmd"), "utf8");
@@ -28,7 +29,7 @@ describe("Data Store boxes in Mermaid", () => {
     const chem = first.boxes.find((b) => b.id === "Chemical1")!;
     expect(chem.data.kind).toBe("chemical");
     expect(chem.data.lines).toEqual([]);
-    expect(chem.data.openbis).toEqual({ type: "CHEMICAL", area: "FB-Inventory", space: "MATERIALS", project: "CONSUMABLES",
+    expect(chem.data.openbis).toEqual({ type: "CHEMICAL", area: "FB-Inventory", space: "FB Materials", project: "CONSUMABLES",
                                         collection: "Chemicals" });
     const data = first.boxes.find((b) => b.id === "DataAnalysis2")!;
     expect(data.data.kind).toBe("dataset");
@@ -143,5 +144,38 @@ describe("openBIS view", () => {
 
   test("bands are not interactive", () => {
     expect(lanes.every((l) => l.selectable === false && l.draggable === false && l.deletable === false)).toBe(true);
+  });
+});
+
+describe("Data Store Spaces", () => {
+  test("the Inventory Spaces are the built-in ones, with FB for the division", () => {
+    expect(spacesFor("BAM-Inventory")).toEqual(["Bam Equipment", "Bam Global", "Bam Materials", "Bam Methods", "Bam Publications"]);
+    expect(spacesFor("FB-Inventory")).toEqual(["FB Equipment", "FB Materials", "FB Methods", "FB Publications"]);
+    expect(spacesFor("Lab Notebook")).toEqual([LAB_NOTEBOOK_SPACE]);
+    expect(spacesFor("")).toEqual([]);
+  });
+
+  test("new boxes start in one of these Spaces", () => {
+    for (const s of DATASTORE_SHAPES) {
+      if (!s.openbis.area) continue;
+      expect(spacesFor(s.openbis.area)).toContain(s.openbis.space);
+    }
+  });
+
+  test("the example only uses Data Store Spaces", () => {
+    const { boxes } = fromMermaid(example);
+    for (const b of boxes) {
+      const o = b.data.openbis;
+      if (o?.area && o.space) expect(spacesFor(o.area)).toContain(o.space);
+    }
+  });
+
+  test("moving to another Inventory empties the Space: BAM and FB Spaces are different Spaces", () => {
+    expect(spaceAfterMove("FB Materials", "BAM-Inventory")).toBe("");
+    expect(spaceAfterMove("Bam Equipment", "FB-Inventory")).toBe("");
+    expect(spaceAfterMove("FB Materials", "FB-Inventory")).toBe("FB Materials");
+    expect(spaceAfterMove("FB Materials", "Lab Notebook")).toBe(LAB_NOTEBOOK_SPACE);
+    expect(spaceAfterMove("FB Materials", "")).toBe("");
+    expect(Object.keys(INVENTORY_SPACES)).toEqual(["BAM-Inventory", "FB-Inventory"]);
   });
 });

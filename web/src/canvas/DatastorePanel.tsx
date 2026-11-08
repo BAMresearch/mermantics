@@ -7,7 +7,8 @@ import { useEffect, useMemo, useState } from "react";
 
 import { BAM_DATASET_TYPES, BAM_OBJECT_TYPES, BAM_TYPES_SOURCE, type BamType } from "./bamTypes.js";
 import type { Box, BoxData } from "./model.js";
-import { AREAS, DATASTORE_KINDS, IS_ATTACHED_TO, IS_CHILD_OF, IS_PARENT_OF, kindForType, openbisFor, type OpenbisInfo,
+import { AREAS, DATASTORE_KINDS, IS_ATTACHED_TO, IS_CHILD_OF, IS_PARENT_OF, kindForType, openbisFor, spaceAfterMove, spacesFor,
+         type OpenbisInfo,
          type ShapeKind } from "./palette.js";
 
 const MAX_HITS = 25;
@@ -144,17 +145,26 @@ export function DatastoreBoxSection({ data, boxes, onChange }: {
           <h3>Where it lives</h3>
           <label className="field">
             Lab Notebook or Inventory
-            <select value={o.area} onChange={(e) => set({ area: e.target.value })}>
+            <select value={o.area} onChange={(e) => set({ area: e.target.value, space: spaceAfterMove(o.space, e.target.value) })}>
               <option value="">not decided yet</option>
               {AREAS.map((a) => <option key={a} value={a}>{a}</option>)}
               {o.area && !AREAS.includes(o.area) && <option value={o.area}>{o.area}</option>}
             </select>
           </label>
-          {field("space", "Space", "e.g. MATERIALS")}
+          <label className="field">
+            Space
+            {/* The Spaces are given by the Data Store; a name from an older file is kept, but marked. */}
+            <select value={o.space} disabled={!o.area} onChange={(e) => set({ space: e.target.value })}>
+              <option value="">{o.area ? "not decided yet" : "choose Lab Notebook or Inventory first"}</option>
+              {spacesFor(o.area).map((sp) => <option key={sp} value={sp}>{sp}</option>)}
+              {o.space && !spacesFor(o.area).includes(o.space) && <option value={o.space}>{o.space} (not a Data Store Space)</option>}
+            </select>
+          </label>
           {field("project", "Project", "e.g. CONSUMABLES")}
           {field("collection", "Collection", "e.g. Chemicals")}
           <p className="muted-inline">Things you do go in the Lab Notebook; things you have or use go in an Inventory
-            (BAM-Inventory: shared across divisions; FB-Inventory: within your division). Agree on the names with your group.</p>
+            (BAM-Inventory: shared across divisions; FB-Inventory: within your division, where FB stands for your division's
+            code). The Spaces are given by the Data Store; agree on the Project and Collection names with your group.</p>
         </section>
       )}
     </>
