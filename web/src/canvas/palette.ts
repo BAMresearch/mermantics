@@ -120,6 +120,33 @@ export interface OpenbisInfo {
 export const AREAS = ["Lab Notebook", "FB-Inventory", "BAM-Inventory"];
 
 /**
+ * The Spaces are given by the Data Store, users do not make their own. The Inventory Spaces are
+ * the built-in ones; in the Data Store "FB" is the division's code (e.g. X.1). In the Lab
+ * Notebook, things go into each user's own home space.
+ */
+export const INVENTORY_SPACES: Record<string, string[]> = {
+  "BAM-Inventory": ["Bam Equipment", "Bam Global", "Bam Materials", "Bam Methods", "Bam Publications"],
+  "FB-Inventory": ["FB Equipment", "FB Materials", "FB Methods", "FB Publications"],
+};
+export const LAB_NOTEBOOK_SPACE = "Home space (FB username)";
+
+/** The Spaces offered for a Lab Notebook or Inventory. */
+export function spacesFor(area: string): string[] {
+  return area === "Lab Notebook" ? [LAB_NOTEBOOK_SPACE] : INVENTORY_SPACES[area] ?? [];
+}
+
+/**
+ * The Space after moving to another Lab Notebook or Inventory. The Spaces of BAM-Inventory and
+ * FB-Inventory are different Spaces, so the user picks again; only the Lab Notebook, which has a
+ * single Space, fills it in.
+ */
+export function spaceAfterMove(space: string, area: string): string {
+  const offered = spacesFor(area);
+  if (offered.includes(space)) return space;
+  return offered.length === 1 ? offered[0]! : "";
+}
+
+/**
  * The shapes of the Data Store section, following the guide: things you do (experimental
  * steps), things you generate (samples), things you have or use (chemicals, instruments) and
  * datasets. Where each one goes first is taken from the guide's example; the group then agrees on
@@ -128,16 +155,17 @@ export const AREAS = ["Lab Notebook", "FB-Inventory", "BAM-Inventory"];
 export const DATASTORE_SHAPES: (Shape & { openbis: OpenbisInfo })[] = [
   { kind: "step", title: "Experimental step", hint: "Something you do: synthesis, treatment, measurement, analysis",
     classId: "", classLabel: "",
-    openbis: { type: "EXPERIMENTAL_STEP", area: "Lab Notebook", space: "", project: "", collection: "Experimental Steps" } },
+    openbis: { type: "EXPERIMENTAL_STEP", area: "Lab Notebook", space: "Home space (FB username)", project: "",
+               collection: "Experimental Steps" } },
   { kind: "sample", title: "Sample", hint: "Something you generate: a sample, a synthesized material",
     classId: "", classLabel: "",
-    openbis: { type: "SAMPLE", area: "FB-Inventory", space: "MATERIALS", project: "MATERIALS", collection: "Samples" } },
+    openbis: { type: "SAMPLE", area: "FB-Inventory", space: "FB Materials", project: "MATERIALS", collection: "Samples" } },
   { kind: "chemical", title: "Chemical", hint: "Something you have or use: a chemical, a solution",
     classId: "", classLabel: "",
-    openbis: { type: "CHEMICAL", area: "FB-Inventory", space: "MATERIALS", project: "CONSUMABLES", collection: "Chemicals" } },
+    openbis: { type: "CHEMICAL", area: "FB-Inventory", space: "FB Materials", project: "CONSUMABLES", collection: "Chemicals" } },
   { kind: "instrument", title: "Instrument", hint: "Something you have or use: an instrument, a machine",
     classId: "", classLabel: "",
-    openbis: { type: "INSTRUMENT", area: "FB-Inventory", space: "EQUIPMENT", project: "INSTRUMENTS", collection: "Instruments" } },
+    openbis: { type: "INSTRUMENT", area: "FB-Inventory", space: "FB Equipment", project: "INSTRUMENTS", collection: "Instruments" } },
   { kind: "dataset", title: "Dataset", hint: "Files from a step: raw data, images, code, results",
     classId: "", classLabel: "",
     openbis: { type: "", area: "", space: "", project: "", collection: "" } },
