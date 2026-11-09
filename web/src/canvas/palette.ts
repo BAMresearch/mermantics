@@ -5,7 +5,8 @@
  * Materials science and engineering: each shape starts with an ontology class (PMDco
  * 3.1.2); the user can make it more specific later. The IDs were checked against PMDco 3.1.2.
  *
- * Process modelling: plain shapes and relations with no ontology behind them.
+ * Process modelling: plain shapes and relations with no ontology behind them. For anything
+ * else, "Something else" lets the user name the kind of thing in their own words.
  *
  * BAM Data Store: the object types of openBIS that the Data Store guide starts from
  * ("Represent research data in the Data Store"), plus datasets. No ontology.
@@ -100,6 +101,9 @@ export const PROCESS_SHAPES: Shape[] = [
   { kind: "agent", title: "Agent", hint: "Who or what carries out a step: a person, a team, a machine",
     classId: "", classLabel: "" },
   { kind: "information", title: "Information", hint: "Data, a document, a result, instructions",
+    classId: "", classLabel: "" },
+  // No ontology here, so the user names the kind of thing (BoxData.kindName).
+  { kind: "other", title: "Something else", hint: "Any other kind of thing: name the kind yourself",
     classId: "", classLabel: "" },
 ];
 
