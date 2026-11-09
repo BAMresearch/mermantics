@@ -59,6 +59,30 @@ test("process model arrows are plain words, not linked to an ontology", () => {
   expect(meaning(toMermaid(imported.boxes, imported.arrows))).toEqual(meaning(example("coffee-example.mmd")));
 });
 
+test("own kinds of thing ('something else' boxes) survive a round trip", () => {
+  const imported = fromMermaid(example("coffee-example.mmd"));
+  const box = imported.boxes.find((b) => b.id === "Beans")!;
+  box.data = { ...box.data, kind: "other", kindName: " Location " };
+  const text = toMermaid(imported.boxes, imported.arrows);
+  expect(text).toContain('%% mermantics-kind-names {"Beans":"Location"}');
+  const back = fromMermaid(text).boxes.find((b) => b.id === "Beans")!;
+  expect(back.data).toMatchObject({ kind: "other", kindName: "Location" });
+  // What the checker sees does not change: the kind name is only a comment line.
+  expect(meaning(text)).toEqual(meaning(toMermaid(fromMermaid(example("coffee-example.mmd")).boxes, imported.arrows)));
+});
+
+test("an own kind name is only kept for 'something else' boxes", () => {
+  const text = [
+    "flowchart TB",
+    '    A["<b>A</b>"]:::local',
+    '    B["<b>B</b>"]:::local',
+    '%% mermantics-kinds {"A":"agent","B":"other"}',
+    '%% mermantics-kind-names {"A":"Location","B":"Condition"}',
+  ].join("\n");
+  const names = fromMermaid(text).boxes.map((b) => [b.id, b.data.kind, b.data.kindName]);
+  expect(names).toEqual([["A", "agent", undefined], ["B", "other", "Condition"]]);
+});
+
 test("a stored kind does not override a note or a list of options", () => {
   const text = [
     "flowchart TB",

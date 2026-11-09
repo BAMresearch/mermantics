@@ -29,7 +29,7 @@ function BoxNodeView({ data, selected }: NodeProps<Box>) {
       {!isNote && SIDES.map((side) => <Handle key={side} id={side} type="source" position={side} />)}
       <div className="box-caption">
         <span className="dot" />
-        {data.caption ?? shape.title}
+        {data.caption ?? (data.kind === "other" && data.kindName?.trim() ? data.kindName : shape.title)}
         {data.status && <span className={`box-status tag-${data.status}`}>{STATUS_TAGS[data.status] ?? data.status}</span>}
       </div>
       <div className="box-name">{data.name || <em>no name</em>}</div>

@@ -69,6 +69,9 @@ export function BoxDetails({ box, shapes, ontology, datastore = false, boxes = [
   useEffect(() => setChanging(false), [box.id]);
   const shape = shapes.find((s) => s.kind === d.kind) ?? shapeOf(d.kind);
   const special = d.kind === "note" || d.kind === "vocab";
+  // Kinds the user already named on other boxes, offered again so the same word is reused.
+  const ownKinds = [...new Set(boxes.filter((b) => b.id !== box.id && b.data.kind === "other")
+    .map((b) => b.data.kindName?.trim() ?? "").filter((k) => k))].sort();
   const status = statusOf(d.css);
   const DEF = "Definition: ";
   const definition = d.lines.find((l) => l.startsWith(DEF))?.slice(DEF.length) ?? "";
@@ -79,7 +82,8 @@ export function BoxDetails({ box, shapes, ontology, datastore = false, boxes = [
 
   return (
     <div className="panel">
-      <div className={`panel-kind kind-${d.kind}`}><span className="dot" />{shape.title}</div>
+      <div className={`panel-kind kind-${d.kind}`}><span className="dot" />
+        {d.kind === "other" && d.kindName?.trim() ? d.kindName : shape.title}</div>
       {parts.map((p, i) => (
         <div key={i} className="part-note">Part of the pattern <b>{p.pattern}</b>, as <b>{p.part}</b></div>
       ))}
@@ -121,6 +125,14 @@ export function BoxDetails({ box, shapes, ontology, datastore = false, boxes = [
               {shapes.map((s) => <option key={s.kind} value={s.kind}>{s.title}</option>)}
             </select>
           </label>
+          {d.kind === "other" && (
+            <label className="field">
+              What kind of thing is it?
+              <input value={d.kindName ?? ""} list="own-kinds" placeholder="e.g. Location, Condition, Requirement"
+                     onChange={(e) => onChange({ kindName: e.target.value })} />
+              <datalist id="own-kinds">{ownKinds.map((k) => <option key={k} value={k} />)}</datalist>
+            </label>
+          )}
         </section>
       )}
 

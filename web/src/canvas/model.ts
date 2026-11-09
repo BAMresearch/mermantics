@@ -31,6 +31,7 @@ export interface BoxData extends Record<string, unknown> {
   tags?: string[]; // only for drawing: the competency questions that use this box ("Q1")
   plain?: boolean; // only for drawing: process modelling, so no "kind of thing not chosen yet"
   caption?: string; // only for drawing: the section's name for the box's shape
+  kindName?: string; // process modelling: the user's own kind for a "something else" box, e.g. "Location"
   status?: string; // only for drawing: design options, "proposed", "changed" or "deprecated"
   openbis?: OpenbisInfo; // BAM Data Store boxes: object or dataset type, and where the object lives
 }
@@ -115,6 +116,7 @@ export type Arrow = FlowEdge<ArrowData>;
 
 const LAYOUT_PREFIX = "%% mermantics-layout ";
 const KINDS_PREFIX = "%% mermantics-kinds ";
+const KIND_NAMES_PREFIX = "%% mermantics-kind-names ";
 const USE_CASE_PREFIX = "%% mermantics-usecase ";
 const PATTERN_USES_PREFIX = "%% mermantics-pattern-uses ";
 
@@ -238,6 +240,10 @@ export function toMermaid(boxes: Box[], arrows: Arrow[], useCase: UseCase = empt
   const kinds: Record<string, ShapeKind> = {};
   for (const b of boxes) if (b.data.kind !== "note" && b.data.kind !== "vocab") kinds[b.id] = b.data.kind;
   if (Object.keys(kinds).length) out.push(KINDS_PREFIX + JSON.stringify(kinds));
+  // The user's own kinds of thing for "something else" boxes (process modelling).
+  const kindNames: Record<string, string> = {};
+  for (const b of boxes) if (b.data.kind === "other" && b.data.kindName?.trim()) kindNames[b.id] = b.data.kindName.trim();
+  if (Object.keys(kindNames).length) out.push(KIND_NAMES_PREFIX + JSON.stringify(kindNames));
   if (!isEmptyUseCase(useCase)) {
     // Links to boxes that no longer exist are dropped.
     const ids = new Set(boxes.map((b) => b.id));
@@ -302,6 +308,7 @@ export function fromMermaid(text: string): Imported {
   const warnings = diagram.findings.map((f) => `${f.where ? `${f.where}: ` : ""}${f.message}`);
   let pos: Record<string, [number, number]> = {};
   let kinds: Record<string, unknown> = {};
+  let kindNames: Record<string, unknown> = {};
   let useCase = emptyUseCase();
   let patternUses: unknown = [];
   for (const line of text.split(/\r?\n/)) {
@@ -328,6 +335,14 @@ export function fromMermaid(text: string): Imported {
         warnings.push("the stored box kinds could not be read");
       }
     }
+    if (t.startsWith(KIND_NAMES_PREFIX)) {
+      try {
+        const raw = JSON.parse(t.slice(KIND_NAMES_PREFIX.length)) as unknown;
+        if (raw && typeof raw === "object" && !Array.isArray(raw)) kindNames = raw as Record<string, unknown>;
+      } catch {
+        warnings.push("the names of your own kinds of thing could not be read");
+      }
+    }
     if (t.startsWith(LAYOUT_PREFIX.trim())) {
       try {
         pos = JSON.parse(t.slice(LAYOUT_PREFIX.trim().length));
@@ -343,6 +358,8 @@ export function fromMermaid(text: string): Imported {
     const kind = kinds[node.id];
     if (data.kind === "other" && isShapeKind(kind) && kind !== "note" && kind !== "vocab") data.kind = kind;
     const extra: Partial<BoxData> = {};
+    const kindName = kindNames[node.id];
+    if (data.kind === "other" && typeof kindName === "string" && kindName.trim()) extra.kindName = kindName.trim();
     if (DATASTORE_KINDS.has(data.kind)) {
       const { openbis, rest } = readOpenbis(data.lines);
       extra.openbis = openbis;
