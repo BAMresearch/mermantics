@@ -1,5 +1,5 @@
 # Build the web version (web/) and publish it on GitHub Pages:
-# https://ebb2675.github.io/mermantics/
+# https://bamresearch.github.io/mermantics/
 name: Web version on GitHub Pages
 
 on:

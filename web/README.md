@@ -1,7 +1,7 @@
 # mermantics web
 
 The web version of mermantics: the same checks as the Python tool, ported to TypeScript,
-running entirely in the browser. It is published at **https://ebb2675.github.io/mermantics/**.
+running entirely in the browser. It is published at **https://bamresearch.github.io/mermantics/**.
 
 For now it runs the fast checks (IDs, labels, domain and range, vocabularies), the same as
 `mermantics --fast`. The reasoner checks (schema and example data) are not ported yet.
