@@ -73,6 +73,15 @@ function structureKey(boxes: Box[], arrows: Arrow[]): string {
   ]);
 }
 
+/** Six dots on the right of a palette item: it can be dragged onto the canvas. */
+function Grip() {
+  return (
+    <svg className="grip" width="10" height="16" viewBox="0 0 10 16" aria-hidden="true">
+      {[2, 8, 14].flatMap((y) => [2, 8].map((x) => <circle key={`${x}-${y}`} cx={x} cy={y} r="1.5" />))}
+    </svg>
+  );
+}
+
 /** Class IDs of a box and of the boxes it is a kind of. */
 function classIdsOf(boxes: Box[], arrows: Arrow[], id: string): string[] {
   const out: string[] = [];
@@ -753,12 +762,14 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
         {/* Phone: tapping a shape adds it and closes the drawer. */}
         <aside className="palette" onClick={(e) => { if (narrow && (e.target as Element).closest(".shape")) setDrawer(null); }}>
           <h2>Add to the model</h2>
+          <p className="palette-hint palette-how">{narrow ? "Tap to add." : "Drag onto the canvas, or click to add."}</p>
           {mode.shapes.map((s) => (
             <button type="button" key={s.kind} className={`shape kind-${s.kind}`} draggable
                     onDragStart={(e) => { e.dataTransfer.setData("application/mermantics-shape", s.kind); e.dataTransfer.effectAllowed = "move"; }}
                     onClick={() => addBox(s)}>
               <span className="dot" />
               <span className="shape-text"><b>{s.title}</b><small>{s.hint}</small></span>
+              <Grip />
             </button>
           ))}
           {mode.patterns && (<>
@@ -770,6 +781,7 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
                       onClick={() => void insertPattern(p)}>
                 <span className="pattern-icon" aria-hidden="true"><i /><i /><i /></span>
                 <span className="shape-text"><b>{p.title}</b><small>{p.builtIn ? (p.id.startsWith("pmdco-") ? "from PMDco" : "for this workshop") : "my pattern"}{p.version ? ` · ${p.version}` : ""}</small></span>
+                <Grip />
               </button>
               {!p.builtIn && (
                 <span className="pattern-actions">
@@ -802,6 +814,7 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
                     onClick={() => addBox(s)}>
               <span className="dot" />
               <span className="shape-text"><b>{s.title}</b><small>{s.hint}</small></span>
+              <Grip />
             </button>
           ))}
         </aside>
