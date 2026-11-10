@@ -34,8 +34,11 @@ grounded step by step.
 ## Install
 
 ```bash
-pip install mermantics
+pip install git+https://github.com/BAMresearch/mermantics
 ```
+
+To always get the same version, add a commit or tag at the end, e.g.
+`pip install git+https://github.com/BAMresearch/mermantics@5f47f4b`.
 
 The reasoner checks (3 and 6) need **Java 11 or newer**. On first use, `mermantics`
 downloads [ROBOT](https://robot.obolibrary.org) (v1.9.11) and the ontology into a cache
@@ -114,7 +117,7 @@ jobs:
         with: { python-version: "3.12" }
       - uses: actions/cache@v4
         with: { path: ~/.cache/mermantics, key: mermantics-${{ runner.os }} }
-      - run: pip install mermantics
+      - run: pip install git+https://github.com/BAMresearch/mermantics
       - run: mermantics docs/data-model.mmd --report report.md
 ```
 
