@@ -7,8 +7,7 @@
 
 mermantics is a small tool for drawing data models together with the people who know the
 data. You put boxes and arrows on a canvas in the browser, and what you keep is a plain
-Mermaid flowchart. When the model is ready for it, the same file can be checked against an
-ontology.
+Mermaid flowchart that you can share, review and build on.
 
 **Open the canvas: https://ebb2675.github.io/mermantics/**
 
