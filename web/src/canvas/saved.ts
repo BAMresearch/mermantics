@@ -27,11 +27,29 @@ export function forgetOldDiagrams() {
   try { for (const m of Object.values(MODES)) localStorage.removeItem(m.storageKey); } catch { /* storage can be off */ }
 }
 
+/**
+ * The section on screen, told when the tab is about to be left: it saves what has not been
+ * saved yet and returns whether it holds work. Returns the function that stops this.
+ */
+const leaving = new Set<() => boolean>();
+export function onLeaving(f: () => boolean): () => void {
+  leaving.add(f);
+  return () => { leaving.delete(f); };
+}
+
+function saveBeforeLeaving(): boolean {
+  let work = false;
+  for (const f of leaving) if (f()) work = true;
+  return work;
+}
+
 /** Ask before the tab is closed or left while it holds work. Browsers show their own wording. */
 export function warnBeforeLeaving() {
   window.addEventListener("beforeunload", (e) => {
-    if (!hasWork()) return;
+    if (!saveBeforeLeaving() && !hasWork()) return;
     e.preventDefault();
     e.returnValue = ""; // older browsers need this as well
   });
+  // Some browsers (on phones especially) leave without beforeunload; save then too.
+  window.addEventListener("pagehide", () => { saveBeforeLeaving(); });
 }

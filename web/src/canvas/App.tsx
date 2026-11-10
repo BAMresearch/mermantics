@@ -27,7 +27,7 @@ import { NARROW, TOUCH, useMedia } from "./media.js";
 import { emptyUseCase, fromMermaid, makeId, toMermaid, type Arrow, type ArrowData, type Box, type BoxData, type Problem,
          type UseCase } from "./model.js";
 import type { Mode } from "./mode.js";
-import { saveDiagram, savedDiagram } from "./saved.js";
+import { onLeaving, saveDiagram, savedDiagram } from "./saved.js";
 import { checkStatus, Compare, OptionBar, OptionPanel, TermsTree } from "./Options.js";
 import { EMPTY_VIEW, newOptionId, nextLetter, originalView, readState, resultsMarkdown, VIEWS, type DesignOption,
          type OptionsState, type ViewId } from "./options.js";
@@ -68,9 +68,18 @@ function structureKey(boxes: Box[], arrows: Arrow[]): string {
   ]);
 }
 
-/** What counts as a change to an opened diagram: its structure, patterns and use case, not where the boxes are. */
+/**
+ * What counts as a change to an opened diagram: everything it is saved with (its Mermaid text),
+ * except where the boxes are, which changes when a diagram is laid out after opening.
+ */
 function contentKey(boxes: Box[], arrows: Arrow[], uses: PatternUse[], useCase: UseCase | null): string {
-  return structureKey(boxes, arrows) + JSON.stringify(uses) + JSON.stringify(useCase);
+  return toMermaid(boxes, arrows, useCase ?? emptyUseCase(), uses).split("\n")
+    .filter((line) => !line.startsWith("%% mermantics-layout ")).join("\n");
+}
+
+/** The design options without the view that is open: only looking at another view is not a change. */
+function optionsKey(s: OptionsState): string {
+  return JSON.stringify({ ...s, current: null });
 }
 
 /** Six dots on the right of a palette item: it can be dragged onto the canvas. */
@@ -129,14 +138,13 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
   const changed = useRef(false);
   const opened = useRef<string | null>(null);
   const opening = useRef<{ boxes: Box[]; key: string } | null>(null);
-  const optsAtStart = useRef(opts ? JSON.stringify(opts) : "");
+  const optsAtStart = useRef(opts ? optionsKey(opts) : "");
   const optsChanged = useRef(false);
   useEffect(() => {
     if (!mode.options || !opts) return;
-    const text = JSON.stringify(opts);
-    if (!optsChanged.current && text === optsAtStart.current) return;
+    if (!optsChanged.current && optionsKey(opts) === optsAtStart.current) return;
     optsChanged.current = true;
-    saveDiagram(mode.storageKey, text);
+    saveDiagram(mode.storageKey, JSON.stringify(opts));
   }, [opts, mode.options, mode.storageKey]);
   const store = useCallback((text: string) => {
     if (opened.current === null) return;
@@ -406,6 +414,23 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
     const timer = setTimeout(() => store(textNow()), 800);
     return () => clearTimeout(timer);
   }, [boxes, useCase, patternUses, ready, store, textNow]);
+
+  // When the tab is closed or left, save what is still waiting for its timer, and say whether
+  // there is work here, even if the browser did not let it be saved.
+  useEffect(() => onLeaving(() => {
+    if (opened.current !== null) {
+      const text = textNow();
+      store(text); // finds out whether the canvas was changed; saves it if not in design options
+      const s = optsRef.current;
+      const h = holding.current;
+      if (mode.options && s && (changed.current || optsChanged.current)) {
+        const options = changed.current && h
+          ? s.options.map((x) => (x.id === h.option ? { ...x, views: { ...x.views, [h.view]: text } } : x)) : s.options;
+        saveDiagram(mode.storageKey, JSON.stringify({ ...s, options }));
+      }
+    }
+    return changed.current || optsChanged.current;
+  }), [mode.options, mode.storageKey, store, textNow]);
 
   // ---- adding boxes ---------------------------------------------------------------------
 
