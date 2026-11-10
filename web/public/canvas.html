@@ -4,16 +4,14 @@
     <meta charset="utf-8" />
     <title>mermantics</title>
     <!-- The canvas used to live here (canvas.html); it is now the main page. Old links land here
-         and are sent on to the materials science section, which is what this page used to show. -->
-    <meta http-equiv="refresh" content="0; url=./?mode=mse" />
-    <link rel="canonical" href="./?mode=mse" />
+         and are sent on to the start page, where people pick a section. -->
+    <meta http-equiv="refresh" content="0; url=./" />
+    <link rel="canonical" href="./" />
     <script>
-      const params = new URLSearchParams(location.search);
-      if (!params.has("mode")) params.set("mode", "mse");
-      location.replace(`./?${params}${location.hash}`);
+      location.replace(`./${location.search}${location.hash}`);
     </script>
   </head>
   <body>
-    <p>The canvas has moved to the <a href="./?mode=mse">main page</a>.</p>
+    <p>The canvas has moved to the <a href="./">main page</a>.</p>
   </body>
 </html>
