@@ -26,6 +26,17 @@ result is a text file that GitHub and GitLab render as a diagram, that shows cha
 normal diff, and that a script can check. You can start with plain words on the arrows and
 link things to an ontology later, or never.
 
+## What it is, and what it isn't
+
+Taking part in data modelling usually means setting up a stack of technical tools and
+learning a new notation first. Many domain experts stop there, and the model gets built
+without them. With mermantics, they open a link and start drawing.
+
+It is neither a replacement for formal data modelling or ontology engineering tools, nor
+does it try to become one. Rather, it complements existing workflows by providing a
+lightweight, accessible interface for creating and exchanging structured and
+machine-readable representations.
+
 ## What you can model
 
 The start page has a few sections. Each keeps its own diagram, and all of them save the

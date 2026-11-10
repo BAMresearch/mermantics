@@ -308,6 +308,11 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .start-datastore { --kc: var(--k-dataset); }
 .start-comp { --kc: var(--k-data); }
 .start-foot { color: var(--muted); font-size: 13px; margin: 0; }
+.start-scope { width: 100%; max-width: 700px; box-sizing: border-box; padding: 16px 20px; border: 1px solid var(--line);
+  border-radius: 12px; background: var(--panel); color: var(--muted); font-size: 13px; line-height: 1.5; }
+.start-scope h2 { margin: 0 0 6px; font-size: 14px; font-weight: 600; color: inherit; }
+.start-scope p { margin: 0; }
+.start-scope p + p { margin-top: 8px; }
 
 /* ---- zoom bar (bottom left of the canvas) ---- */
 .zoombar { display: flex; align-items: center; gap: 2px; background: #fff; border: 1px solid var(--line); border-radius: 10px;
