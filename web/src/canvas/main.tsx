@@ -7,10 +7,9 @@ import { createRoot } from "react-dom/client";
 
 import { App } from "./App.js";
 import { initialMode, MODES, rememberMode, type ModeId } from "./mode.js";
-import { forgetOldDiagrams, warnBeforeLeaving } from "./saved.js";
+import { warnBeforeLeaving } from "./saved.js";
 import { Start } from "./Start.js";
 
-forgetOldDiagrams();
 warnBeforeLeaving();
 
 /** The start page until a section is chosen, then the canvas for that section. */

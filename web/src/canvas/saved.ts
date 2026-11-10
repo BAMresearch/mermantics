@@ -22,11 +22,6 @@ export function hasWork(): boolean {
   try { return Object.values(MODES).some((m) => sessionStorage.getItem(m.storageKey) !== null); } catch { return false; }
 }
 
-/** Earlier versions kept the diagrams in localStorage, for every later visit; they are cleared. */
-export function forgetOldDiagrams() {
-  try { for (const m of Object.values(MODES)) localStorage.removeItem(m.storageKey); } catch { /* storage can be off */ }
-}
-
 /**
  * The section on screen, told when the tab is about to be left: it saves what has not been
  * saved yet and returns whether it holds work. Returns the function that stops this.

@@ -168,9 +168,9 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
   }, [mode.options, mode.storageKey]);
   const [boxes, setBoxes, onBoxesChange] = useNodesState<Box>([]);
   const [arrows, setArrows, onArrowsChange] = useEdgesState<Arrow>([]);
-  /** Moving a box is a change to keep, though it does not change what the diagram says. */
+  /** Moving a box (dragging it, or with the arrow keys) is a change to keep, though it does not change what the diagram says. */
   const onBoxesChangeByUser = useCallback((changes: NodeChange<Box>[]) => {
-    if (changes.some((c) => c.type === "position" && c.dragging)) changed.current = true;
+    if (changes.some((c) => c.type === "position" && (c.dragging || c.position))) changed.current = true;
     onBoxesChange(changes);
   }, [onBoxesChange]);
   const [docName, setDocName] = useState("model.mmd");
@@ -415,9 +415,10 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
     return () => clearTimeout(timer);
   }, [boxes, useCase, patternUses, ready, store, textNow]);
 
-  // When the tab is closed or left, save what is still waiting for its timer, and say whether
-  // there is work here, even if the browser did not let it be saved.
-  useEffect(() => onLeaving(() => {
+  // Save what is still waiting for its timer, and say whether there is work here, even if the
+  // browser did not let it be saved. Called when the tab is closed or left, and when the canvas
+  // goes away inside the page (back to the start page).
+  const saveNow = useCallback((): boolean => {
     if (opened.current !== null) {
       const text = textNow();
       store(text); // finds out whether the canvas was changed; saves it if not in design options
@@ -430,7 +431,16 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
       }
     }
     return changed.current || optsChanged.current;
-  }), [mode.options, mode.storageKey, store, textNow]);
+  }, [mode.options, mode.storageKey, store, textNow]);
+  const saveNowRef = useRef(saveNow);
+  saveNowRef.current = saveNow;
+  useEffect(() => {
+    const stop = onLeaving(() => saveNowRef.current());
+    return () => {
+      stop();
+      saveNowRef.current();
+    };
+  }, []);
 
   // ---- adding boxes ---------------------------------------------------------------------
 
