@@ -131,8 +131,16 @@ describe("openBIS view", () => {
     }
   });
 
+  test("every object in the example has its Space, Project and Collection", () => {
+    expect(lanes.some((l) => l.data.open)).toBe(false);
+  });
+
   test("a missing Space or Project shows as an open band", () => {
-    expect(lanes.some((l) => l.data.open && l.data.label === "no Space yet")).toBe(true);
+    const step = boxes.find((b) => b.id === "Char1")!;
+    const open = { ...step, id: "Open", data: { ...step.data, openbis: { ...step.data.openbis!, space: "", project: "" } } };
+    const { lanes: withOpen } = openbisLayout([...boxes, open], arrows);
+    expect(withOpen.some((l) => l.data.open && l.data.label === "no Space yet")).toBe(true);
+    expect(withOpen.some((l) => l.data.open && l.data.label === "no Project yet")).toBe(true);
   });
 
   test("datasets sit below all objects, in the column of their object", () => {

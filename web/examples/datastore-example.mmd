@@ -16,15 +16,15 @@ flowchart TB
     Instrument2["<b>Instrument 2</b><br>Object type: INSTRUMENT<br>In: BAM-Inventory<br>Space: Bam Equipment<br>Project: INSTRUMENTS<br>Collection: Instruments"]:::dsuse
     Instrument3["<b>Instrument 3</b><br>Object type: INSTRUMENT<br>In: BAM-Inventory<br>Space: Bam Equipment<br>Project: INSTRUMENTS<br>Collection: Instruments"]:::dsuse
     Synthesized["<b>Synthesized material</b><br>Object type: SAMPLE<br>In: FB-Inventory<br>Space: FB Materials<br>Project: MATERIALS<br>Collection: Samples"]:::dsmake
-    Sample001["<b>Material Sample 002</b><br>Object type: SAMPLE<br>In: FB-Inventory<br>Space: FB Materials<br>Project: MATERIALS<br>Collection: Samples"]:::dsmake
+    Sample001["<b>Material Sample 001</b><br>Object type: SAMPLE<br>In: FB-Inventory<br>Space: FB Materials<br>Project: MATERIALS<br>Collection: Samples"]:::dsmake
     DataChar1["<b>Characterization parameter 1 data</b><br>Dataset type: RAW_DATA"]:::dsdata
     DataChar2["<b>Characterization parameter 2 data</b><br>Dataset type: RAW_DATA"]:::dsdata
     DataAnalysis2["<b>Analysis of characterization parameter 2</b><br>Dataset type: ANALYZED_DATA"]:::dsdata
-    Sample["<b>Material Sample 001</b><br>Object type: SAMPLE<br>In: FB-Inventory<br>Space: FB Materials<br>Project: MATERIALS<br>Collection: Samples"]:::dsmake
+    Sample002["<b>Material Sample 002</b><br>Object type: SAMPLE<br>In: FB-Inventory<br>Space: FB Materials<br>Project: MATERIALS<br>Collection: Samples"]:::dsmake
     Sample2["<b>Treated Sample 001</b><br>Object type: SAMPLE<br>In: FB-Inventory<br>Space: FB Materials<br>Project: MATERIALS<br>Collection: Samples"]:::dsmake
     Sample3["<b>Treated Sample 002</b><br>Object type: SAMPLE<br>In: FB-Inventory<br>Space: FB Materials<br>Project: MATERIALS<br>Collection: Samples"]:::dsmake
-    ExperimentalStep["<b>Characterization Parameter 1</b><br>Object type: EXPERIMENTAL_STEP<br>In: Lab Notebook<br>Collection: Experimental Steps"]:::dsdo
-    Dataset["<b>Characterization Parameter 1 data</b><br>Dataset type: "]:::dsdata
+    Char1Treated["<b>Characterization parameter 1, treated sample</b><br>Object type: EXPERIMENTAL_STEP<br>In: Lab Notebook<br>Space: Home space (FB username)<br>Project: Material synthesis and characterization<br>Collection: Experimental Steps"]:::dsdo
+    DataChar1Treated["<b>Characterization parameter 1 data, treated sample</b><br>Dataset type: RAW_DATA"]:::dsdata
 
     Chemical1 -. "is parent of" .-> Synthesis
     Chemical2 -. "is parent of" .-> Synthesis
@@ -37,15 +37,15 @@ flowchart TB
     Char2 -. "is parent of" .-> Analysis2
     DataChar2 -. "is attached to" .-> Char2
     DataAnalysis2 -. "is attached to" .-> Analysis2
-    Synthesized -. "is parent of" .-> Sample
+    Synthesized -. "is parent of" .-> Sample002
     Sample001 -. "is parent of" .-> Treatment
-    Sample -. "is parent of" .-> Char1
+    Sample002 -. "is parent of" .-> Char1
     Treatment -. "is parent of" .-> Sample2
     Treatment -. "is parent of" .-> Sample3
     DataChar1 -. "is attached to" .-> Char1
     Sample3 -. "is parent of" .-> Char2
-    Sample2 -. "is parent of" .-> ExperimentalStep
-    Dataset -. "is attached to" .-> ExperimentalStep
+    Sample2 -. "is parent of" .-> Char1Treated
+    DataChar1Treated -. "is attached to" .-> Char1Treated
 
     classDef base fill:#e5e7eb,stroke:#6b7280,stroke-width:2px,color:#111827
     classDef upper fill:#ffffff,stroke:#9ca3af,stroke-width:2px,color:#374151
@@ -57,5 +57,5 @@ flowchart TB
     classDef dsuse fill:#e1d5e7,stroke:#9673a6,color:#0f172a
     classDef dsdata fill:#f8cecc,stroke:#b85450,color:#0f172a
 
-%% mermantics-layout {"Synthesis":[529,174],"Treatment":[863,582],"Char1":[197,595],"Char2":[1073,852],"Analysis2":[1101,1069],"Chemical1":[797,12],"Chemical2":[529,12],"Solution":[1151,506],"Instrument1":[261,12],"Instrument2":[56,444],"Instrument3":[1448,786],"Synthesized":[606,296],"Sample001":[907,437],"DataChar1":[456,706],"DataChar2":[1326,942],"DataAnalysis2":[1313,1166],"Sample":[423,436],"Sample2":[817,720],"Sample3":[1077,711],"ExperimentalStep":[697,856],"Dataset":[791,970]}
-%% mermantics-kinds {"Synthesis":"step","Treatment":"step","Char1":"step","Char2":"step","Analysis2":"step","Chemical1":"chemical","Chemical2":"chemical","Solution":"chemical","Instrument1":"instrument","Instrument2":"instrument","Instrument3":"instrument","Synthesized":"sample","Sample001":"sample","DataChar1":"dataset","DataChar2":"dataset","DataAnalysis2":"dataset","Sample":"sample","Sample2":"sample","Sample3":"sample","ExperimentalStep":"step","Dataset":"dataset"}
+%% mermantics-layout {"Synthesis":[529,174],"Treatment":[863,582],"Char1":[197,595],"Char2":[1073,852],"Analysis2":[1101,1069],"Chemical1":[797,12],"Chemical2":[529,12],"Solution":[1151,506],"Instrument1":[261,12],"Instrument2":[56,444],"Instrument3":[1448,786],"Synthesized":[606,296],"Sample001":[907,437],"DataChar1":[456,706],"DataChar2":[1326,942],"DataAnalysis2":[1313,1166],"Sample002":[423,436],"Sample2":[817,720],"Sample3":[1077,711],"Char1Treated":[697,856],"DataChar1Treated":[791,970]}
+%% mermantics-kinds {"Synthesis":"step","Treatment":"step","Char1":"step","Char2":"step","Analysis2":"step","Chemical1":"chemical","Chemical2":"chemical","Solution":"chemical","Instrument1":"instrument","Instrument2":"instrument","Instrument3":"instrument","Synthesized":"sample","Sample001":"sample","DataChar1":"dataset","DataChar2":"dataset","DataAnalysis2":"dataset","Sample002":"sample","Sample2":"sample","Sample3":"sample","Char1Treated":"step","DataChar1Treated":"dataset"}
