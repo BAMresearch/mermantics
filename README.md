@@ -75,7 +75,7 @@ the model does not contradict the ontology. It works with any OWL ontology; PMDc
 default.
 
 ```bash
-pip install mermantics
+pip install git+https://github.com/BAMresearch/mermantics
 mermantics model.mmd --fast          # the quick checks, about a second
 mermantics model.mmd -o my-onto.ttl  # all checks against your own ontology (needs Java 11+)
 ```
