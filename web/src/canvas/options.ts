@@ -8,7 +8,7 @@
  * the same computation across options shows what each structure costs and gains.
  *
  * The built-in options are diagrams in web/options/. The workshop works on copies kept in the
- * browser; the group's notes (gains, costs, verdict) are kept with each option. The use case
+ * browser tab; the group's notes (gains, costs, verdict) are kept with each option. The use case
  * notes (stories, questions, open points) belong to the whole workshop, not to one diagram.
  */
 

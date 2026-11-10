@@ -9,7 +9,7 @@
 import {
   Background, ConnectionMode, SelectionMode, MarkerType, MiniMap, ReactFlow, useEdgesState, useNodesInitialized, useNodesState,
   useReactFlow,
-  type Connection, type EdgeTypes, type IsValidConnection, type NodeTypes, type OnConnectEnd,
+  type Connection, type EdgeTypes, type NodeChange, type IsValidConnection, type NodeTypes, type OnConnectEnd,
 } from "@xyflow/react";
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 
@@ -27,6 +27,7 @@ import { NARROW, TOUCH, useMedia } from "./media.js";
 import { emptyUseCase, fromMermaid, makeId, toMermaid, type Arrow, type ArrowData, type Box, type BoxData, type Problem,
          type UseCase } from "./model.js";
 import type { Mode } from "./mode.js";
+import { onLeaving, saveDiagram, savedDiagram } from "./saved.js";
 import { checkStatus, Compare, OptionBar, OptionPanel, TermsTree } from "./Options.js";
 import { EMPTY_VIEW, newOptionId, nextLetter, originalView, readState, resultsMarkdown, VIEWS, type DesignOption,
          type OptionsState, type ViewId } from "./options.js";
@@ -44,12 +45,6 @@ import { loadWheelMode, saveWheelMode, ZoomBar, type WheelMode } from "./ZoomBar
 const nodeTypes: NodeTypes = { box: BoxNode, lane: LaneNode };
 const edgeTypes: EdgeTypes = { floating: FloatingEdge };
 
-function storeIn(key: string, text: string) {
-  try { localStorage.setItem(key, text); } catch { /* storage can be off */ }
-}
-function storedIn(key: string): string | null {
-  try { return localStorage.getItem(key); } catch { return null; }
-}
 
 /** Shapes for imported boxes, from their classes' superclasses. */
 async function classify(boxes: Box[]): Promise<Box[]> {
@@ -71,6 +66,20 @@ function structureKey(boxes: Box[], arrows: Arrow[]): string {
     boxes.map((b) => [b.id, b.data.name, b.data.kind, b.data.classId, b.data.classLabel, b.data.lines, b.data.css, b.data.openbis]),
     arrows.map((a) => [a.id, a.source, a.target, a.data?.kind, a.data?.name, a.data?.curie]),
   ]);
+}
+
+/**
+ * What counts as a change to an opened diagram: everything it is saved with (its Mermaid text),
+ * except where the boxes are, which changes when a diagram is laid out after opening.
+ */
+function contentKey(boxes: Box[], arrows: Arrow[], uses: PatternUse[], useCase: UseCase | null): string {
+  return toMermaid(boxes, arrows, useCase ?? emptyUseCase(), uses).split("\n")
+    .filter((line) => !line.startsWith("%% mermantics-layout ")).join("\n");
+}
+
+/** The design options without the view that is open: only looking at another view is not a change. */
+function optionsKey(s: OptionsState): string {
+  return JSON.stringify({ ...s, current: null });
 }
 
 /** Six dots on the right of a palette item: it can be dragged onto the canvas. */
@@ -115,17 +124,37 @@ interface PendingArrow {
 export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
   const EXAMPLES = mode.examples;
   // Design options (computations section): all options, which one is on the canvas, the workshop's use case.
-  const [opts, setOpts] = useState<OptionsState | null>(() => (mode.options ? readState(storedIn(mode.storageKey)) : null));
+  const [opts, setOpts] = useState<OptionsState | null>(() => (mode.options ? readState(savedDiagram(mode.storageKey)) : null));
   const optsRef = useRef(opts);
   optsRef.current = opts;
   // The option view whose diagram is on the canvas now; null while another one is being opened,
   // so a save that fires in between cannot write one view's boxes into another.
   const holding = useRef<{ option: string; view: ViewId } | null>(null);
   const [comparing, setComparing] = useState(false);
-  useEffect(() => { if (mode.options && opts) storeIn(mode.storageKey, JSON.stringify(opts)); }, [opts, mode.options, mode.storageKey]);
+  // Nothing is saved until something is changed, so only looking at an example never keeps it
+  // (see saved.ts). changed: the diagram on the canvas was changed since it was opened, judged
+  // against opened (its content then); a box being dragged counts too. opened is null while a
+  // diagram is still being opened, and nothing is saved then: the canvas does not show it yet.
+  const changed = useRef(false);
+  const opened = useRef<string | null>(null);
+  const opening = useRef<{ boxes: Box[]; key: string } | null>(null);
+  const optsAtStart = useRef(opts ? optionsKey(opts) : "");
+  const optsChanged = useRef(false);
+  useEffect(() => {
+    if (!mode.options || !opts) return;
+    if (!optsChanged.current && optionsKey(opts) === optsAtStart.current) return;
+    optsChanged.current = true;
+    saveDiagram(mode.storageKey, JSON.stringify(opts));
+  }, [opts, mode.options, mode.storageKey]);
   const store = useCallback((text: string) => {
+    if (opened.current === null) return;
+    if (!changed.current) {
+      const now = contentKey(boxesRef.current, arrowsRef.current, usesRef.current, mode.options ? null : useCaseRef.current);
+      if (now === opened.current) return;
+      changed.current = true;
+    }
     if (!mode.options) {
-      storeIn(mode.storageKey, text);
+      saveDiagram(mode.storageKey, text);
       return;
     }
     const h = holding.current;
@@ -139,6 +168,11 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
   }, [mode.options, mode.storageKey]);
   const [boxes, setBoxes, onBoxesChange] = useNodesState<Box>([]);
   const [arrows, setArrows, onArrowsChange] = useEdgesState<Arrow>([]);
+  /** Moving a box (dragging it, or with the arrow keys) is a change to keep, though it does not change what the diagram says. */
+  const onBoxesChangeByUser = useCallback((changes: NodeChange<Box>[]) => {
+    if (changes.some((c) => c.type === "position" && (c.dragging || c.position))) changed.current = true;
+    onBoxesChange(changes);
+  }, [onBoxesChange]);
   const [docName, setDocName] = useState("model.mmd");
   const [ontoStatus, setOntoStatus] = useState(mode.ontology ? "Loading PMDco 3.1.2..." : "");
   const [ready, setReady] = useState(false);
@@ -221,17 +255,27 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
     });
   }, [nodesReady, boxes, flow, setBoxes]);
 
-  const open = useCallback(async (text: string, name: string, target?: { option: string; view: ViewId }) => {
+  /**
+   * Put a diagram on the canvas. One the user opened (an example, a file) is theirs and saved
+   * right away; the example shown on arrival (untouched) and option views (target, already
+   * kept with the options) are saved only once they are changed.
+   */
+  const open = useCallback(async (text: string, name: string, target?: { option: string; view: ViewId },
+                                  untouched = false) => {
     const imported = fromMermaid(text);
     relayout.current = false;
     let placed = mode.ontology ? await classify(imported.boxes) : imported.boxes;
     if (!imported.positioned) placed = await layout(placed, imported.arrows);
     relayout.current = !imported.positioned && placed.length > 0;
+    const uses = readUses(imported.patternUses);
+    opened.current = null;
+    opening.current = { boxes: placed, key: contentKey(placed, imported.arrows, uses, mode.options ? null : imported.useCase) };
+    changed.current = !(untouched || target);
     setBoxes(placed);
     setArrows(imported.arrows);
     if (!mode.options) setUseCase(imported.useCase);
     if (target) holding.current = target;
-    setPatternUses(readUses(imported.patternUses));
+    setPatternUses(uses);
     setFocused(null);
     setDocName(name);
     setNotice(imported.warnings.length ? `Some lines could not be read: ${imported.warnings.join("; ")}` : "");
@@ -272,9 +316,10 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
         void open(o?.views[s.current.view] || EMPTY_VIEW, viewName(o, s.current.view), s.current);
         return;
       }
-      const saved = storedIn(mode.storageKey);
+      const saved = savedDiagram(mode.storageKey);
       const example = mode.examples[0]!;
-      void open(saved ?? example.text, saved ? "model.mmd" : example.name);
+      if (saved !== null) void open(saved, "model.mmd");
+      else void open(example.text, example.name, undefined, true);
     };
     if (!mode.ontology) {
       start();
@@ -355,12 +400,47 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
     return () => clearTimeout(timer);
   }, [key, ready, mode.ontology, mode.options, store, textNow, setArrows, setBoxes]);
 
+  // The boxes that open() put on the canvas are drawn: from now on changes are judged and saved.
+  useEffect(() => {
+    if (opening.current && boxes === opening.current.boxes) {
+      opened.current = opening.current.key;
+      opening.current = null;
+    }
+  }, [boxes]);
+
   // Positions and use case notes are saved too, a little later, as they change.
   useEffect(() => {
     if (!ready) return;
     const timer = setTimeout(() => store(textNow()), 800);
     return () => clearTimeout(timer);
   }, [boxes, useCase, patternUses, ready, store, textNow]);
+
+  // Save what is still waiting for its timer, and say whether there is work here, even if the
+  // browser did not let it be saved. Called when the tab is closed or left, and when the canvas
+  // goes away inside the page (back to the start page).
+  const saveNow = useCallback((): boolean => {
+    if (opened.current !== null) {
+      const text = textNow();
+      store(text); // finds out whether the canvas was changed; saves it if not in design options
+      const s = optsRef.current;
+      const h = holding.current;
+      if (mode.options && s && (changed.current || optsChanged.current)) {
+        const options = changed.current && h
+          ? s.options.map((x) => (x.id === h.option ? { ...x, views: { ...x.views, [h.view]: text } } : x)) : s.options;
+        saveDiagram(mode.storageKey, JSON.stringify({ ...s, options }));
+      }
+    }
+    return changed.current || optsChanged.current;
+  }, [mode.options, mode.storageKey, store, textNow]);
+  const saveNowRef = useRef(saveNow);
+  saveNowRef.current = saveNow;
+  useEffect(() => {
+    const stop = onLeaving(() => saveNowRef.current());
+    return () => {
+      stop();
+      saveNowRef.current();
+    };
+  }, []);
 
   // ---- adding boxes ---------------------------------------------------------------------
 
@@ -691,6 +771,7 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
   };
 
   const tidy = async () => {
+    changed.current = true;
     setBoxes(await layout(boxesRef.current, arrowsRef.current));
     requestAnimationFrame(() => flow.fitView({ padding: 0.15, duration: 300, maxZoom: 1.2 }));
   };
@@ -822,7 +903,7 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
         <main className={`canvas${openbis ? " openbis-view" : ""}`} ref={wrapper} onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }} onDrop={onDrop}>
           <ReactFlow<Box, Arrow>
             nodes={viewNodes} edges={viewArrows} nodeTypes={nodeTypes} edgeTypes={edgeTypes} nodesDraggable={!openbis}
-            onNodesChange={onBoxesChange} onEdgesChange={onArrowsChange}
+            onNodesChange={onBoxesChangeByUser} onEdgesChange={onArrowsChange}
             onConnect={onConnect} onConnectEnd={onConnectEnd} isValidConnection={isValidConnection}
             connectionMode={ConnectionMode.Loose} connectionRadius={40}
             deleteKeyCode={["Backspace", "Delete"]} onPaneClick={() => { setPending(null); setLinking(null); if (narrow) setDrawer(null); }} multiSelectionKeyCode={["Shift", "Meta", "Control"]}

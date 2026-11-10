@@ -65,12 +65,14 @@ shapes and relations, no ontology, no checks), materials science and engineering
 checked as you draw), BAM Data Store (openBIS object types, no ontology) and PMD Hackathon -
 Computations (PMDco, with design options). The start page picks one; `?mode=process`,
 `?mode=mse`, `?mode=datastore` or `?mode=comp` in the URL opens a section directly. Each
-section keeps its own diagram in the browser.
+section keeps its own diagram in the browser tab (`src/canvas/saved.ts`): reloading or going
+back to the page keeps it, a new tab starts from the current examples, and nothing is kept
+until something is changed. Closing a tab that holds work asks first.
 
 The computations section works with design options instead of one diagram: each option in
 `options/` has three diagrams (its terms, a DFT geometry optimization and a static FEM
 analysis), and the section shows them one at a time or side by side (`src/canvas/options.ts`,
 `Options.tsx`). Boxes have the style class `proposed`, `changed` or `deprecated` when an option
 adds, changes or removes a term; `termsTree.ts` places them in the PMDco class tree. The
-group's notes and the use case are kept with the options in the browser, and "Export results"
+group's notes and the use case are kept with the options in the browser tab, and "Export results"
 writes all of it as one Markdown file.

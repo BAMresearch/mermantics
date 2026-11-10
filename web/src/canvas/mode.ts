@@ -12,7 +12,8 @@
  *   you draw), but the diagrams are design options for computations: each option has the
  *   terms it proposes and two example computations, and options can be compared side by side.
  *
- * Each section keeps its own diagram and its own relations in the browser. All write the
+ * Each section keeps its own diagram in the browser tab and its own relations in the browser
+ * (see saved.ts). All write the
  * same kind of Mermaid file, so a file from one section opens in the other.
  */
 
@@ -45,7 +46,7 @@ export interface Mode {
   shapes: Shape[];
   extraShapes: Shape[];
   examples: Example[];
-  storageKey: string; // the diagram, kept in the browser
+  storageKey: string; // the diagram, kept in the browser tab
   relationsKey: string; // the user's own relations
 }
 
@@ -80,7 +81,7 @@ export const MODES: Record<ModeId, Mode> = {
       { name: "simulation.mmd", title: "Simulation data model", text: simulation },
       { name: "wrong-relation.mmd", title: "A model with a mistake", text: brokenC },
     ],
-    // The keys from before there were two sections, so earlier work is still there.
+    // The keys from before there were two sections.
     storageKey: "mermantics-canvas",
     relationsKey: "mermantics-my-relations",
   },
