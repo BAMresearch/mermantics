@@ -10,7 +10,7 @@ data. You put boxes and arrows on a canvas in the browser, and what you keep is 
 Mermaid flowchart that you can share, review and build on. When you want more structure,
 you can link boxes to ontology terms and build from ready-made semantic patterns.
 
-**Open the canvas: https://ebb2675.github.io/mermantics/**
+**Open the canvas: https://bamresearch.github.io/mermantics/**
 
 ![The mermantics canvas with a simple process model: brewing coffee](assets/screenshots/process.png)
 
