@@ -153,11 +153,11 @@ export function DatastoreBoxSection({ data, boxes, onChange }: {
           </label>
           <label className="field">
             Space
-            {/* The Spaces are given by the Data Store; a name from an older file is kept, but marked. */}
+            {/* The Spaces are given by the Data Store; a name from an older file is kept and shown as it is. */}
             <select value={o.space} disabled={!o.area} onChange={(e) => set({ space: e.target.value })}>
               <option value="">{o.area ? "not decided yet" : "choose Lab Notebook or Inventory first"}</option>
               {spacesFor(o.area).map((sp) => <option key={sp} value={sp}>{sp}</option>)}
-              {o.space && !spacesFor(o.area).includes(o.space) && <option value={o.space}>{o.space} (not a Data Store Space)</option>}
+              {o.space && !spacesFor(o.area).includes(o.space) && <option value={o.space}>{o.space}</option>}
             </select>
           </label>
           {field("project", "Project", "e.g. CONSUMABLES")}
