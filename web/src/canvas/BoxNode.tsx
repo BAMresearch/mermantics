@@ -63,6 +63,8 @@ function BoxNodeView({ data, selected }: NodeProps<Box>) {
                  if (e.key === "Enter" || e.key === "Escape") {
                    e.preventDefault();
                    finish(e.key === "Enter");
+                   // Keep keyboard navigation on the node; ordinary blur keeps its new focus target.
+                   e.currentTarget.closest<HTMLElement>(".react-flow__node")?.focus({ preventScroll: true });
                  }
                }} />
       )}</div>
