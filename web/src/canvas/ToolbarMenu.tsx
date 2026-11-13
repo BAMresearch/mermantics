@@ -38,7 +38,9 @@ export function ToolbarMenu({ label, icon, children }: {
       document.removeEventListener("keydown", escape);
     };
   }, []);
-  return <details ref={ref} className="toolbar-menu" name="editor-toolbar">
+  return <details ref={ref} className="toolbar-menu" name="editor-toolbar" onBlur={(event) => {
+    if (!event.currentTarget.contains(event.relatedTarget)) event.currentTarget.open = false;
+  }}>
     <summary><ToolbarIcon name={icon} />{label}<svg className="toolbar-chevron" viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4" /></svg></summary>
     <div className="toolbar-dropdown" onClick={(event) => {
       if ((event.target as Element).closest("button") && ref.current) {
