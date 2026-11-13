@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 /**
  * The diagram as Mermaid text, read-only, to see or copy what the canvas writes. The
  * mermantics comment lines (box positions, use case, patterns) are left out, so the text is
- * short enough to paste into a README; "Download .mmd" keeps them.
+ * short enough to paste into a README; "Export → Mermaid diagram" keeps them.
  */
 export function MermaidPanel({ text, onClose }: { text: string; onClose: () => void }) {
   const [copied, setCopied] = useState(false);
@@ -36,7 +36,7 @@ export function MermaidPanel({ text, onClose }: { text: string; onClose: () => v
         <button type="button" className="link" onClick={onClose}>Close</button>
       </div>
       <pre className="mermaid-text">{shown}</pre>
-      <p className="muted-inline mermaid-foot">What the canvas saves, updated as you draw. Box positions and other mermantics notes are left out here; Download .mmd keeps them.</p>
+      <p className="muted-inline mermaid-foot">What the canvas saves, updated as you draw. Box positions and other mermantics notes are left out here; Export → Mermaid diagram keeps them.</p>
     </div>
   );
 }

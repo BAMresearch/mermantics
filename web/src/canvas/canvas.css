@@ -45,9 +45,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .logo { height: 26px; }
 .bar-group { display: flex; gap: 6px; align-items: center; }
 .bar-spacer { flex: 1; }
-.bar button, .bar select { border: 1px solid var(--line); background: #fff; border-radius: 8px; padding: 6px 12px; cursor: pointer; }
-.bar select { max-width: 170px; }
-.bar button:hover, .bar select:hover { border-color: #cbd5e1; background: #f8fafc; }
+.bar button { border: 1px solid var(--line); background: #fff; border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+.bar button:hover { border-color: #cbd5e1; background: #f8fafc; }
 
 .body { flex: 1; display: grid; grid-template-columns: 236px 1fr 340px; min-height: 0; }
 
@@ -191,7 +190,6 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .react-flow__attribution { font-size: 10px; }
 
 /* ---- use case workshop ---- */
-.bar .toggle.on { background: #eff6ff; border-color: var(--accent); color: var(--accent); font-weight: 600; }
 .details { display: flex; flex-direction: column; }
 .tabs { display: flex; gap: 4px; padding: 10px 12px 0; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--panel); z-index: 2; }
 .tabs button { border: 0; background: none; padding: 8px 12px; border-bottom: 2px solid transparent; cursor: pointer; color: var(--muted); font-weight: 600; }
@@ -280,7 +278,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .menu input[type="checkbox"] { width: auto; margin: 0; flex: none; }
 .menu { max-height: calc(100% - 16px); overflow-y: auto; }
 
-/* Show Mermaid: the diagram as text, read-only */
+/* Mermaid code: the diagram as text, read-only */
 .mermaid-panel { position: absolute; z-index: 15; top: 12px; right: 12px; bottom: 12px; width: min(460px, calc(100% - 24px));
   display: flex; flex-direction: column; background: #fff; border: 1px solid var(--line); border-radius: 12px;
   box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12); }
@@ -372,7 +370,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 /* ---- phones and narrow windows: the canvas gets the whole width ---- */
 .phone-buttons, .sheet-close { display: none; }
 @media (max-width: 900px) {
-  .bar { flex-wrap: nowrap; overflow-x: auto; padding: 6px 10px; gap: 8px; -webkit-overflow-scrolling: touch; }
+  .bar { flex-wrap: wrap; padding: 8px 10px; gap: 8px; }
   .bar-spacer { display: none; }
   .body { display: block; position: relative; overflow: hidden; }
   .canvas { height: 100%; }
@@ -520,3 +518,40 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .tt-list details > summary { display: flex; align-items: baseline; }
 .tt-list details > summary > .tt { flex: 1; min-width: 0; }
 .box-lines li.def { font-style: italic; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+/* Grouped editor actions and their disclosures. */
+.editor-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; min-width: 0; }
+.editor-toolbar .bar-group { gap: 4px; }
+.editor-toolbar button, .toolbar-menu > summary {
+  display: flex; align-items: center; justify-content: center; gap: 7px; min-height: 36px;
+  padding: 7px 10px; border: 1px solid transparent; border-radius: 8px;
+  background: transparent; font-size: 13px; font-weight: 500; color: #334155; cursor: pointer;
+}
+.editor-toolbar button:hover, .toolbar-menu > summary:hover, .toolbar-menu[open] > summary {
+  background: #f1f5f9; border-color: var(--line); color: var(--text);
+}
+.editor-toolbar button:focus-visible, .toolbar-menu > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.editor-toolbar button:disabled { opacity: .45; cursor: default; }
+.toolbar-icon { width: 17px; height: 17px; flex: none; color: var(--muted); }
+.toolbar-chevron { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.5; }
+.toolbar-menu { position: relative; }
+.toolbar-menu > summary { list-style: none; }
+.toolbar-menu > summary::-webkit-details-marker { display: none; }
+.toolbar-dropdown {
+  position: absolute; top: calc(100% + 8px); left: 0; z-index: 50;
+  width: max-content; min-width: 210px; max-width: min(340px, calc(100vw - 24px));
+  max-height: 60vh; overflow-y: auto; padding: 5px; background: var(--panel);
+  border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 12px 32px rgb(15 23 42 / .12);
+}
+.toolbar-dropdown button { width: 100%; justify-content: flex-start; text-align: left; white-space: normal; }
+.toolbar-dropdown button[aria-pressed="true"] { color: var(--accent); }
+.toolbar-check { width: 16px; flex: none; font-weight: 600; }
+.toolbar-format { margin-left: auto; padding-left: 16px; color: var(--muted); font-size: 12px; font-weight: 400; }
+@media (max-width: 760px) {
+  .editor-toolbar { position: relative; width: 100%; flex-wrap: nowrap; gap: 8px; }
+  .editor-toolbar .bar-group { gap: 0; }
+  .editor-toolbar .bar-group > button, .toolbar-menu > summary { width: 44px; min-height: 44px; padding: 8px; }
+  .toolbar-label, .toolbar-chevron { display: none; }
+  .toolbar-menu { position: static; }
+  .toolbar-dropdown { top: 100%; left: 0; max-width: 100%; }
+}

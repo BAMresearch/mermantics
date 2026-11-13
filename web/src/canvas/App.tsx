@@ -39,6 +39,7 @@ import { loadOwnRelations, PlainRelationMenu, RelationMenu, saveOwnRelations, ty
          type OwnRelation } from "./RelationMenu.js";
 import { toMarkdown } from "./usecase.js";
 import { QUICK_CHECK, QUICK_CHECK_HINT, resultLine } from "./quickcheck.js";
+import { ToolbarIcon, ToolbarMenu } from "./ToolbarMenu.js";
 import { UseCasePanel } from "./UseCasePanel.js";
 import { loadWheelMode, saveWheelMode, ZoomBar, type WheelMode } from "./ZoomBar.js";
 
@@ -783,55 +784,55 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
         <button type="button" className="logo-button" title="Back to the start page" onClick={onHome}>
           <img className="logo" src={logo} alt="mermantics" />
         </button>
-        <div className="bar-group">
-          {EXAMPLES.length > 0 && (
-            <select value="" onChange={(e) => {
-              const ex = EXAMPLES.find((x) => x.name === e.target.value);
-              if (ex) void open(ex.text, ex.name);
-            }}>
-              <option value="">Examples...</option>
-              {EXAMPLES.map((ex) => <option key={ex.name} value={ex.name}>{ex.title}</option>)}
-            </select>
-          )}
-          <button type="button" title={mode.options ? "Empty this view of the option" : undefined}
-                  onClick={() => { setBoxes([]); setArrows([]); if (!mode.options) setUseCase(emptyUseCase()); setPatternUses([]); setFocused(null); if (!mode.options) setDocName("model.mmd"); }}>
-            {mode.options ? "Clear" : "New"}
-          </button>
-          <button type="button" onClick={() => fileInput.current?.click()}>Open...</button>
-          <button type="button" onClick={download}>Download .mmd</button>
-          <button type="button" className={showMermaid ? "toggle on" : "toggle"} aria-pressed={showMermaid}
-                  title="See the diagram as Mermaid text, the format mermantics saves"
-                  onClick={() => setShowMermaid((s) => !s)}>
-            Show Mermaid
-          </button>
-          <input ref={fileInput} type="file" accept=".mmd,.md,.txt" hidden onChange={async (e) => {
-            const file = e.target.files?.[0];
-            if (file) await open(await file.text(), file.name);
-            e.target.value = "";
-          }} />
-        </div>
-        <div className="bar-group">
-          {mode.datastore && (
-            <button type="button" className={openbis ? "toggle on" : "toggle"} aria-pressed={openbis}
-                    title="See where everything goes in openBIS: Lab Notebook and Inventories, Space, Project, Collection"
-                    onClick={() => setView((v) => (v === "openbis" ? "model" : "openbis"))}>
-              openBIS view
+        <nav className="editor-toolbar nokey" aria-label="Diagram actions"
+             onKeyDown={(event) => { if (event.key !== "Escape" && !event.ctrlKey && !event.metaKey && !event.shiftKey) event.stopPropagation(); }}>
+          <div className="bar-group">
+            <button type="button" aria-label={mode.options ? "Clear" : "New"} title={mode.options ? "Empty this view of the option" : "Start a new diagram"}
+                    onClick={() => { setBoxes([]); setArrows([]); if (!mode.options) setUseCase(emptyUseCase()); setPatternUses([]); setFocused(null); if (!mode.options) setDocName("model.mmd"); }}>
+              <ToolbarIcon name="new" /><span className="toolbar-label">{mode.options ? "Clear" : "New"}</span>
             </button>
-          )}
-          {!openbis && <button type="button" onClick={() => void tidy()}>Tidy up</button>}
-          {mode.ontology && (
-            <button type="button" className={workshop ? "toggle on" : "toggle"} aria-pressed={workshop}
-                    title="A calmer view for workshops: hides the check results while you draw with domain experts"
-                    onClick={() => setWorkshop((w) => !w)}>
-              Workshop view
-            </button>
-          )}
-          <button type="button" onClick={exportUseCase}
-                  title={mode.options ? "The use case notes and every option with its notes and diagrams, as one Markdown file"
-                    : "The use case, its questions and the diagram as one Markdown file"}>
-            {mode.options ? "Export results" : "Export use case"}
-          </button>
-        </div>
+            {EXAMPLES.length > 0 && <ToolbarMenu label="Examples" icon="examples">
+              {EXAMPLES.map((ex) => <button type="button" key={ex.name} onClick={() => void open(ex.text, ex.name)}>{ex.title}</button>)}
+            </ToolbarMenu>}
+          </div>
+          <div className="bar-group">
+            <button type="button" aria-label="Import" title="Import" onClick={() => fileInput.current?.click()}><ToolbarIcon name="import" /><span className="toolbar-label">Import</span></button>
+            <ToolbarMenu label="Export" icon="export">
+              <button type="button" onClick={download}>Mermaid diagram <span className="toolbar-format">.mmd</span></button>
+              <button type="button" onClick={exportUseCase}
+                      title={mode.options ? "The use case notes and every option with its notes and diagrams, as one Markdown file"
+                        : "The use case, its questions and the diagram as one Markdown file"}>
+                {mode.options ? "Workshop results" : "Use case"}<span className="toolbar-format">.md</span>
+              </button>
+            </ToolbarMenu>
+          </div>
+          <div className="bar-group">
+            <ToolbarMenu label="View" icon="view">
+              <button type="button" aria-pressed={showMermaid} onClick={() => setShowMermaid((s) => !s)}>
+                <span className="toolbar-check" aria-hidden="true">{showMermaid ? "✓" : ""}</span>Mermaid code
+              </button>
+              {mode.datastore && <button type="button" aria-pressed={openbis}
+                  title="See where everything goes in openBIS: Lab Notebook and Inventories, Space, Project, Collection"
+                  onClick={() => setView((v) => (v === "openbis" ? "model" : "openbis"))}>
+                <span className="toolbar-check" aria-hidden="true">{openbis ? "✓" : ""}</span>openBIS view
+              </button>}
+              {mode.ontology && <button type="button" aria-pressed={workshop}
+                  title="Hides the check results while you draw with domain experts"
+                  onClick={() => setWorkshop((w) => !w)}>
+                <span className="toolbar-check" aria-hidden="true">{workshop ? "✓" : ""}</span>Workshop view
+              </button>}
+            </ToolbarMenu>
+          </div>
+          <div className="bar-group">
+            <button type="button" aria-label="Tidy up" disabled={openbis} title={openbis ? "Switch to model view to tidy the diagram" : "Arrange the diagram automatically"}
+                    onClick={() => void tidy()}><ToolbarIcon name="tidy" /><span className="toolbar-label">Tidy up</span></button>
+          </div>
+        </nav>
+        <input ref={fileInput} type="file" accept=".mmd,.md,.txt" hidden onChange={async (e) => {
+          const file = e.target.files?.[0];
+          if (file) await open(await file.text(), file.name);
+          e.target.value = "";
+        }} />
         <div className="bar-spacer" />
       </header>
 
@@ -884,7 +885,7 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
             if (!file) return;
             const pattern = parsePattern(await file.text());
             if (pattern) keepPattern(pattern);
-            else setNotice(`${file.name} is not a pattern file: it has no pattern name. Use "Open..." at the top to open it as a model.`);
+            else setNotice(`${file.name} is not a pattern file: it has no pattern name. Use "Import" at the top to open it as a model.`);
           }} />
           <p className="palette-hint">Select several boxes to save them as your own pattern.</p>
           </>)}
