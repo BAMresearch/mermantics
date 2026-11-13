@@ -785,18 +785,18 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
           <img className="logo" src={logo} alt="mermantics" />
         </button>
         <nav className="editor-toolbar nokey" aria-label="Diagram actions"
-             onKeyDown={(event) => { if (event.key !== "Escape") event.stopPropagation(); }}>
+             onKeyDown={(event) => { if (event.key !== "Escape" && !event.ctrlKey && !event.metaKey && !event.shiftKey) event.stopPropagation(); }}>
           <div className="bar-group">
-            <button type="button" title={mode.options ? "Empty this view of the option" : "Start a new diagram"}
+            <button type="button" aria-label={mode.options ? "Clear" : "New"} title={mode.options ? "Empty this view of the option" : "Start a new diagram"}
                     onClick={() => { setBoxes([]); setArrows([]); if (!mode.options) setUseCase(emptyUseCase()); setPatternUses([]); setFocused(null); if (!mode.options) setDocName("model.mmd"); }}>
-              <ToolbarIcon name="new" />{mode.options ? "Clear" : "New"}
+              <ToolbarIcon name="new" /><span className="toolbar-label">{mode.options ? "Clear" : "New"}</span>
             </button>
             {EXAMPLES.length > 0 && <ToolbarMenu label="Examples" icon="examples">
               {EXAMPLES.map((ex) => <button type="button" key={ex.name} onClick={() => void open(ex.text, ex.name)}>{ex.title}</button>)}
             </ToolbarMenu>}
           </div>
           <div className="bar-group">
-            <button type="button" onClick={() => fileInput.current?.click()}><ToolbarIcon name="import" />Import</button>
+            <button type="button" aria-label="Import" title="Import" onClick={() => fileInput.current?.click()}><ToolbarIcon name="import" /><span className="toolbar-label">Import</span></button>
             <ToolbarMenu label="Export" icon="export">
               <button type="button" onClick={download}>Mermaid diagram <span className="toolbar-format">.mmd</span></button>
               <button type="button" onClick={exportUseCase}
@@ -824,8 +824,8 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
             </ToolbarMenu>
           </div>
           <div className="bar-group">
-            <button type="button" disabled={openbis} title={openbis ? "Switch to model view to tidy the diagram" : "Arrange the diagram automatically"}
-                    onClick={() => void tidy()}><ToolbarIcon name="tidy" />Tidy up</button>
+            <button type="button" aria-label="Tidy up" disabled={openbis} title={openbis ? "Switch to model view to tidy the diagram" : "Arrange the diagram automatically"}
+                    onClick={() => void tidy()}><ToolbarIcon name="tidy" /><span className="toolbar-label">Tidy up</span></button>
           </div>
         </nav>
         <input ref={fileInput} type="file" accept=".mmd,.md,.txt" hidden onChange={async (e) => {

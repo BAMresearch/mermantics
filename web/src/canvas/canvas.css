@@ -45,9 +45,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .logo { height: 26px; }
 .bar-group { display: flex; gap: 6px; align-items: center; }
 .bar-spacer { flex: 1; }
-.bar button, .bar select { border: 1px solid var(--line); background: #fff; border-radius: 8px; padding: 6px 12px; cursor: pointer; }
-.bar select { max-width: 170px; }
-.bar button:hover, .bar select:hover { border-color: #cbd5e1; background: #f8fafc; }
+.bar button { border: 1px solid var(--line); background: #fff; border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+.bar button:hover { border-color: #cbd5e1; background: #f8fafc; }
 
 .body { flex: 1; display: grid; grid-template-columns: 236px 1fr 340px; min-height: 0; }
 
@@ -191,7 +190,6 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .react-flow__attribution { font-size: 10px; }
 
 /* ---- use case workshop ---- */
-.bar .toggle.on { background: #eff6ff; border-color: var(--accent); color: var(--accent); font-weight: 600; }
 .details { display: flex; flex-direction: column; }
 .tabs { display: flex; gap: 4px; padding: 10px 12px 0; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--panel); z-index: 2; }
 .tabs button { border: 0; background: none; padding: 8px 12px; border-bottom: 2px solid transparent; cursor: pointer; color: var(--muted); font-weight: 600; }
@@ -280,7 +278,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .menu input[type="checkbox"] { width: auto; margin: 0; flex: none; }
 .menu { max-height: calc(100% - 16px); overflow-y: auto; }
 
-/* Show Mermaid: the diagram as text, read-only */
+/* Mermaid code: the diagram as text, read-only */
 .mermaid-panel { position: absolute; z-index: 15; top: 12px; right: 12px; bottom: 12px; width: min(460px, calc(100% - 24px));
   display: flex; flex-direction: column; background: #fff; border: 1px solid var(--line); border-radius: 12px;
   box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12); }
@@ -550,8 +548,10 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .toolbar-check { width: 16px; flex: none; font-weight: 600; }
 .toolbar-format { margin-left: auto; padding-left: 16px; color: var(--muted); font-size: 12px; font-weight: 400; }
 @media (max-width: 760px) {
-  .editor-toolbar { width: 100%; gap: 4px 8px; }
+  .editor-toolbar { position: relative; width: 100%; flex-wrap: nowrap; gap: 8px; }
+  .editor-toolbar .bar-group { gap: 0; }
+  .editor-toolbar .bar-group > button, .toolbar-menu > summary { width: 44px; min-height: 44px; padding: 8px; }
+  .toolbar-label, .toolbar-chevron { display: none; }
   .toolbar-menu { position: static; }
-  .editor-toolbar { position: relative; }
   .toolbar-dropdown { top: 100%; left: 0; max-width: 100%; }
 }
