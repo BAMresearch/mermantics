@@ -25,6 +25,8 @@ export function ToolbarMenu({ label, icon, children }: {
     };
     const escape = (event: KeyboardEvent) => {
       if (event.key === "Escape" && ref.current?.open) {
+        event.preventDefault();
+        event.stopPropagation();
         ref.current.open = false;
         ref.current.querySelector("summary")?.focus();
       }

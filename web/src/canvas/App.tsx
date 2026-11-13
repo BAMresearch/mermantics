@@ -784,7 +784,7 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
         <button type="button" className="logo-button" title="Back to the start page" onClick={onHome}>
           <img className="logo" src={logo} alt="mermantics" />
         </button>
-        <nav className="editor-toolbar" aria-label="Diagram actions">
+        <nav className="editor-toolbar nokey" aria-label="Diagram actions">
           <div className="bar-group">
             <button type="button" title={mode.options ? "Empty this view of the option" : "Start a new diagram"}
                     onClick={() => { setBoxes([]); setArrows([]); if (!mode.options) setUseCase(emptyUseCase()); setPatternUses([]); setFocused(null); if (!mode.options) setDocName("model.mmd"); }}>
@@ -884,7 +884,7 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
             if (!file) return;
             const pattern = parsePattern(await file.text());
             if (pattern) keepPattern(pattern);
-            else setNotice(`${file.name} is not a pattern file: it has no pattern name. Use "Open..." at the top to open it as a model.`);
+            else setNotice(`${file.name} is not a pattern file: it has no pattern name. Use "Import" at the top to open it as a model.`);
           }} />
           <p className="palette-hint">Select several boxes to save them as your own pattern.</p>
           </>)}
