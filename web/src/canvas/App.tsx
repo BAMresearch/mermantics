@@ -784,7 +784,8 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
         <button type="button" className="logo-button" title="Back to the start page" onClick={onHome}>
           <img className="logo" src={logo} alt="mermantics" />
         </button>
-        <nav className="editor-toolbar nokey" aria-label="Diagram actions">
+        <nav className="editor-toolbar nokey" aria-label="Diagram actions"
+             onKeyDown={(event) => { if (event.key !== "Escape") event.stopPropagation(); }}>
           <div className="bar-group">
             <button type="button" title={mode.options ? "Empty this view of the option" : "Start a new diagram"}
                     onClick={() => { setBoxes([]); setArrows([]); if (!mode.options) setUseCase(emptyUseCase()); setPatternUses([]); setFocused(null); if (!mode.options) setDocName("model.mmd"); }}>
