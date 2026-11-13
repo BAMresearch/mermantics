@@ -33,6 +33,7 @@ export interface BoxData extends Record<string, unknown> {
   caption?: string; // only for drawing: the section's name for the box's shape
   kindName?: string; // process modelling: the user's own kind for a "something else" box, e.g. "Location"
   status?: string; // only for drawing: design options, "proposed", "changed" or "deprecated"
+  onRename?: (name: string) => void; // only for drawing: commit an inline name edit
   openbis?: OpenbisInfo; // BAM Data Store boxes: object or dataset type, and where the object lives
 }
 
