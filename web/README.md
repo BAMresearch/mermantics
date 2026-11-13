@@ -60,6 +60,10 @@ change; that Mermaid text is what is checked, saved and downloaded. Box position
 (the shape a box is drawn as), use case notes and patterns go into `%% mermantics-...`
 comment lines, which Mermaid and the checker ignore.
 
+Click a box to edit its full details in the side panel, or double-click it to rename it
+on the canvas. Enter or clicking away saves the name; Esc cancels. Saved edits update
+the Mermaid source and rerun checks in sections that support checking.
+
 The canvas has four sections, set up in `src/canvas/mode.ts`: process modelling (plain
 shapes and relations, no ontology, no checks), materials science and engineering (PMDco,
 checked as you draw), BAM Data Store (openBIS object types, no ontology) and PMD Hackathon -

@@ -668,10 +668,11 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
       ...b,
       className: focus ? (lit.has(b.id) ? "lit" : "dimmed") : undefined,
       data: { ...b.data, tags: tags.get(b.id) ?? [], plain: !mode.ontology,
+              onRename: (name: string) => patchBox(b.id, { name }),
               caption: mode.options ? mode.shapes.find((s) => s.kind === b.data.kind)?.title : undefined,
               status: mode.options ? statusOf(b.data.css) || undefined : undefined },
     }));
-  }, [boxes, useCase.questions, focused, mode.ontology, mode.options, mode.shapes]);
+  }, [boxes, useCase.questions, focused, mode.ontology, mode.options, mode.shapes, patchBox]);
 
   // The openBIS view: the same boxes, placed by their Space, Project and Collection.
   const viewNodes = useMemo(() => {
