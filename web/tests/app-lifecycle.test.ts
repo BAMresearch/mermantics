@@ -5,7 +5,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { Box } from "../src/canvas/model.js";
 
-const mocks = vi.hoisted(() => ({ layout: vi.fn(), check: vi.fn(), supers: vi.fn(), fit: vi.fn(), initialized: false, cloneOnSet: false, nodes: [] as Box[], flowProps: {} as any, optionProps: {} as any, panelProps: {} as any }));
+const mocks = vi.hoisted(() => ({ layout: vi.fn(), check: vi.fn(), supers: vi.fn(), fit: vi.fn(), initialized: false, cloneOnSet: false, nodes: [] as Box[], flowProps: {} as any, optionProps: {} as any, panelProps: {} as any, relationProps: {} as any, linkProps: {} as any, arrowProps: {} as any }));
 vi.mock("../src/canvas/layout.js", () => ({ layout: mocks.layout }));
 vi.mock("@xyflow/react", async () => {
   const { useState, useCallback } = await import("react");
@@ -22,9 +22,11 @@ vi.mock("@xyflow/react", async () => {
         return mocks.cloneOnSet ? next.map((b) => ({ ...b, measured: { width: 220, height: 90 } })) : next;
       }), []);
       return [nodes, set, (changes: { id: string; position: { x: number; y: number } }[]) =>
-        setNodes((bs) => bs.map((b) => ({ ...b, position: changes.find((c) => c.id === b.id)?.position ?? b.position })))];
+        setNodes((bs) => bs.filter((b) => !changes.some((c: any) => c.type === "remove" && c.id === b.id)).map((b) => ({ ...b, position: changes.find((c) => c.id === b.id)?.position ?? b.position })))];
     },
-    useEdgesState: (initial: unknown[]) => { const [edges, setEdges] = useState(initial); return [edges, setEdges, () => {}]; },
+    useEdgesState: (initial: unknown[]) => { const [edges, setEdges] = useState(initial); return [edges, setEdges, (changes: any[]) => setEdges((es: any[]) => es
+      .filter((e) => !changes.some((c) => c.type === "remove" && c.id === e.id))
+      .map((e) => ({ ...e, selected: changes.find((c) => c.type === "select" && c.id === e.id)?.selected ?? e.selected })))]; },
   };
 });
 const flow = { fitView: mocks.fit, screenToFlowPosition: (p: unknown) => p };
@@ -35,7 +37,7 @@ vi.mock("../src/canvas/BoxNode.js", () => ({ BoxNode: () => null, worst: () => n
 vi.mock("../src/canvas/FloatingEdge.js", () => ({ FloatingEdge: () => null }));
 vi.mock("../src/canvas/OpenbisLane.js", () => ({ LaneNode: () => null }));
 vi.mock("../src/canvas/Details.js", () => ({
-  Overview: () => null, ArrowDetails: () => null, BoxDetails: () => null, SelectionPanel: () => null,
+  Overview: () => null, ArrowDetails: (props: any) => { mocks.arrowProps = props; return null; }, BoxDetails: () => null, SelectionPanel: () => null,
 }));
 vi.mock("../src/canvas/Options.js", () => ({
   OptionBar: (props: object) => { mocks.optionProps = props; return null; }, OptionPanel: (props: object) => { mocks.panelProps = props; return null; },
@@ -45,10 +47,20 @@ vi.mock("../src/canvas/ToolbarMenu.js", () => ({
   ToolbarIcon: () => null, ToolbarMenu: ({ children }: { children: import("react").ReactNode }) => children,
 }));
 
+vi.mock("../src/canvas/RelationMenu.js", () => ({
+  loadOwnRelations: () => [], saveOwnRelations: () => {},
+  PlainRelationMenu: (props: any) => { mocks.relationProps = props; return createElement("div", { "data-menu": "relation" }); },
+  RelationMenu: (props: any) => { mocks.relationProps = props; return createElement("div", { "data-menu": "relation" }); },
+}));
+vi.mock("../src/canvas/DatastorePanel.js", () => ({
+  WhereThingsGo: () => null,
+  DatastoreLinkMenu: (props: any) => { mocks.linkProps = props; return createElement("div", { "data-menu": "link" }); },
+}));
+
 import { App } from "../src/canvas/App.js";
 import { MODES, type Mode } from "../src/canvas/mode.js";
 import { readState } from "../src/canvas/options.js";
-import { fromMermaid } from "../src/canvas/model.js";
+import { fromMermaid, toMermaid } from "../src/canvas/model.js";
 
 let app: Root;
 let container: HTMLDivElement;
@@ -348,4 +360,157 @@ test.each(["failure", "success"])("reset %s retains saving until the replacement
     expect(savedText()).not.toContain("Before reset");
     expect(nodes()[0]!.data.name).toBe(replacement[0]!.data.name);
   }
+});
+
+const connectionMode = (datastore: boolean): Mode => ({ ...plain, datastore,
+  examples: [{ title: "Example", name: "example.mmd", text: 'flowchart TD\nA["A"]\nB["B"]' }] });
+const choice = { kind: "relation", name: "uses", words: "uses", curie: "", own: true };
+const openConnection = async (datastore: boolean) => {
+  await act(async () => mocks.flowProps.onConnect({ source: "A", target: "B" }));
+  const props = datastore ? mocks.linkProps : mocks.relationProps;
+  return () => props.onChoose(datastore ? "is parent of" : choice);
+};
+
+test.each([[false, "A"], [false, "B"], [true, "A"], [true, "B"]] as const)("deleted endpoints invalidate pending connections (Data Store: %s, endpoint: %s)", async (datastore, endpoint) => {
+  await mount(connectionMode(datastore));
+  const choose = await openConnection(datastore);
+  await act(async () => mocks.flowProps.onNodesChange([{ type: "remove", id: endpoint }]));
+  expect(container.querySelector("[data-menu]")).toBeNull();
+  await act(async () => choose());
+  expect(mocks.flowProps.edges).toEqual([]);
+  const reopened = fromMermaid(toMermaid(nodes(), mocks.flowProps.edges));
+  expect(reopened.boxes.map((b) => b.id)).toEqual([endpoint === "A" ? "B" : "A"]);
+  expect(reopened.warnings).toEqual([]);
+});
+
+test.each([false, true])("old callbacks cannot connect reused IDs (Data Store: %s)", async (datastore) => {
+  await mount(connectionMode(datastore));
+  const choose = await openConnection(datastore);
+  await act(async () => [...container.querySelectorAll("button")].find((b) => b.textContent === "Example")!.click());
+  expect(container.querySelector("[data-menu]")).toBeNull();
+  await act(async () => choose());
+  expect(mocks.flowProps.edges).toEqual([]);
+});
+
+test.each([false, true])("valid connection choices still add arrows (Data Store: %s)", async (datastore) => {
+  await mount(connectionMode(datastore));
+  const choose = await openConnection(datastore);
+  await act(async () => choose());
+  expect(mocks.flowProps.edges).toHaveLength(1);
+  expect(mocks.flowProps.edges[0]).toMatchObject({ source: "A", target: "B" });
+});
+
+
+test("deleting an arrow closes its replacement chooser and never recreates it", async () => {
+  await mount(connectionMode(false));
+  const choose = await openConnection(false);
+  await act(async () => choose());
+  const id = mocks.flowProps.edges[0].id;
+  await act(async () => mocks.flowProps.onEdgesChange([{ type: "select", id, selected: true }]));
+  await act(async () => mocks.arrowProps.onReconnect());
+  const replace = mocks.relationProps.onChoose;
+  await act(async () => mocks.flowProps.onEdgesChange([{ type: "remove", id }]));
+  expect(container.querySelector("[data-menu]")).toBeNull();
+  await act(async () => replace(choice));
+  expect(mocks.flowProps.edges).toEqual([]);
+});
+
+test.each([false, true])("New revokes pending callbacks without phantom boxes (Data Store: %s)", async (datastore) => {
+  await mount(connectionMode(datastore));
+  const choose = await openConnection(datastore);
+  await click("New");
+  expect(container.querySelector("[data-menu]")).toBeNull();
+  await act(async () => choose());
+  const reopened = fromMermaid(toMermaid(nodes(), mocks.flowProps.edges));
+  expect(reopened.boxes).toEqual([]);
+  expect(reopened.arrows).toEqual([]);
+  expect(reopened.warnings).toEqual([]);
+});
+
+test.each([false, true])("imports revoke connections before the file finishes loading (Data Store: %s)", async (datastore) => {
+  await mount(connectionMode(datastore));
+  const choose = await openConnection(datastore);
+  const pending = deferred<string>();
+  await act(async () => {
+    const input = container.querySelector<HTMLInputElement>('input[accept=".mmd,.md,.txt"]')!;
+    Object.defineProperty(input, "files", { value: [{ name: "next.mmd", text: () => pending.promise }] });
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  expect(container.querySelector("[data-menu]")).toBeNull();
+  await act(async () => choose());
+  expect(mocks.flowProps.edges).toEqual([]);
+  // The old canvas is still visible, but cannot start choices for the loading document.
+  await act(async () => mocks.flowProps.onConnect({ source: "A", target: "B" }));
+  expect(container.querySelector("[data-menu]")).toBeNull();
+  await act(async () => pending.resolve(connectionMode(datastore).examples[0]!.text));
+  await act(async () => choose());
+  expect(mocks.flowProps.edges).toEqual([]);
+});
+
+test("changing the Data Store view revokes its connection menu", async () => {
+  await mount(connectionMode(true));
+  const choose = await openConnection(true);
+  await act(async () => [...container.querySelectorAll("button")].find((b) => b.textContent?.includes("openBIS view"))!.click());
+  expect(container.querySelector("[data-menu]")).toBeNull();
+  await act(async () => choose());
+  expect(mocks.flowProps.edges).toEqual([]);
+});
+
+test.each(["reset", "option", "view"])("%s closes the previous computation connection menu", async (action) => {
+  await mount({ ...plain, options: true });
+  const [source, target] = nodes();
+  await act(async () => mocks.flowProps.onConnect({ source: source!.id, target: target!.id }));
+  expect(container.querySelector("[data-menu]")).not.toBeNull();
+  const choose = mocks.relationProps.onChoose;
+  if (action === "reset") {
+    await act(async () => [...container.querySelectorAll("button")].find((b) => b.textContent === "Option")!.click());
+    await act(async () => mocks.panelProps.onReset());
+  } else {
+    const bar = mocks.optionProps;
+    const option = action === "option" ? bar.options.find((o: { id: string }) => o.id !== bar.current.option).id : bar.current.option;
+    await act(async () => bar.onGo(option, bar.current.view === "terms" ? "dft" : "terms"));
+  }
+  expect(container.querySelector("[data-menu]")).toBeNull();
+  const before = mocks.flowProps.edges;
+  await act(async () => choose(choice));
+  expect(mocks.flowProps.edges).toEqual(before);
+});
+
+
+test.each([false, true])("a superseded menu cannot commit or close the new menu (Data Store: %s)", async (datastore) => {
+  await mount(connectionMode(datastore));
+  const oldChoose = await openConnection(datastore);
+  const newChoose = await openConnection(datastore);
+  await act(async () => oldChoose());
+  expect(mocks.flowProps.edges).toEqual([]);
+  expect(container.querySelector("[data-menu]")).not.toBeNull();
+  await act(async () => newChoose());
+  expect(mocks.flowProps.edges).toHaveLength(1);
+});
+
+test.each(["A", "B"])("dataset attachments keep their direction and reject missing endpoints (%s)", async (dataset) => {
+  const mode = connectionMode(true);
+  const imported = fromMermaid(mode.examples[0]!.text);
+  imported.boxes.find((b) => b.id === dataset)!.data.kind = "dataset";
+  mode.examples = [{ ...mode.examples[0]!, text: toMermaid(imported.boxes, []) }];
+  await mount(mode);
+  await act(async () => mocks.flowProps.onConnect({ source: "A", target: "B" }));
+  expect(mocks.flowProps.edges).toHaveLength(1);
+  expect(mocks.flowProps.edges[0]).toMatchObject({ source: dataset, target: dataset === "A" ? "B" : "A", data: { name: "is attached to" } });
+  await click("New");
+  await act(async () => mocks.flowProps.onConnect({ source: "A", target: "B" }));
+  expect(mocks.flowProps.edges).toEqual([]);
+  expect(container.querySelector("[data-menu]")).toBeNull();
+});
+
+test("an existing arrow can still have its relation replaced", async () => {
+  await mount(connectionMode(false));
+  const choose = await openConnection(false);
+  await act(async () => choose());
+  const id = mocks.flowProps.edges[0].id;
+  await act(async () => mocks.flowProps.onEdgesChange([{ type: "select", id, selected: true }]));
+  await act(async () => mocks.arrowProps.onReconnect());
+  await act(async () => mocks.relationProps.onChoose({ ...choice, name: "produces", words: "produces" }));
+  expect(mocks.flowProps.edges).toHaveLength(1);
+  expect(mocks.flowProps.edges[0]).toMatchObject({ id, data: { name: "produces" } });
 });

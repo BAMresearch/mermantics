@@ -100,3 +100,10 @@ being dragged, keeps its position. The opening baseline is committed with the do
 so measurement updates cannot leave autosaving disabled. `tests/app-lifecycle.test.ts`
 exercises the editor with controlled promises and timers in happy-dom; `document.test.ts`
 covers layout merging. These tests do not exercise React Flow's browser rendering.
+
+Connection menus carry the document identity and are revoked when closed, replaced, or
+interrupted by a document or view change. Both relation choices and Data Store links check
+that their endpoints still exist when committed; replacement choices also require the
+original arrow. Connections cannot start while a replacement document is loading.
+The lifecycle tests retain old menu callbacks to verify that interrupted choices cannot
+create dangling arrows or phantom boxes after saving and reopening.

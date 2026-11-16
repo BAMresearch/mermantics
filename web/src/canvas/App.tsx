@@ -110,12 +110,17 @@ function classIdsOf(boxes: Box[], arrows: Arrow[], id: string): string[] {
   return out;
 }
 
-interface PendingArrow {
+interface PendingConnection {
+  document: number;
+  generation: number;
   source: string;
   target: string;
+  replace?: string; // id of an arrow whose relation is being changed
+}
+
+interface PendingArrow extends PendingConnection {
   x: number;
   y: number;
-  replace?: string; // id of an arrow whose relation is being changed
   srcClasses: string[];
   dstClasses: string[];
 }
@@ -191,7 +196,14 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
   // Data Store: the model as drawn, or laid out like openBIS (Space > Project > Collection).
   const [view, setView] = useState<"model" | "openbis">("model");
   const openbis = mode.datastore && view === "openbis";
-  const [linking, setLinking] = useState<{ source: string; target: string; x: number; y: number } | null>(null);
+  const [linking, setLinking] = useState<(PendingConnection & { x: number; y: number }) | null>(null);
+  // Closing a menu also revokes callbacks retained by its children.
+  const connectionGeneration = useRef(0);
+  const closeConnections = useCallback(() => {
+    connectionGeneration.current++;
+    setPending(null);
+    setLinking(null);
+  }, []);
   const [notice, setNotice] = useState("");
   const [useCase, setUseCase] = useState<UseCase>(() => opts?.useCase ?? emptyUseCase());
   const [tab, setTab] = useState<"model" | "usecase" | "option">("model");
@@ -235,6 +247,15 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
   useCaseRef.current = useCase;
   const usesRef = useRef(patternUses);
   usesRef.current = patternUses;
+  const validConnection = useCallback((request: PendingConnection) =>
+    loading.current === null && work.owns(request.document) &&
+    request.generation === connectionGeneration.current &&
+    [request.source, request.target].every((id) => boxesRef.current.some((b) => b.id === id)) &&
+    (!request.replace || arrowsRef.current.some((a) => a.id === request.replace &&
+      a.source === request.source && a.target === request.target)), [work]);
+  useEffect(() => {
+    if ((pending && !validConnection(pending)) || (linking && !validConnection(linking))) closeConnections();
+  }, [boxes, arrows, pending, linking, validConnection, closeConnections]);
   /** The canvas as Mermaid. In the computations section the use case is kept with the workshop, not in each diagram. */
   const textNow = useCallback(() => toMermaid(boxesRef.current, arrowsRef.current,
                                               mode.options ? emptyUseCase() : useCaseRef.current, usesRef.current),
@@ -285,8 +306,7 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
     const document = work.replace();
     loading.current = document;
     relayout.current = false;
-    setPending(null);
-    setLinking(null);
+    closeConnections();
     try {
       const imported = fromMermaid(await text);
       if (!work.owns(document)) return;
@@ -330,7 +350,7 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
       // or a failed import leaves the previous canvas in place. Recheck that canvas.
       if (work.owns(document)) setCheckRevision((revision) => revision + 1);
     }
-  }, [fitDocument, mode.ontology, mode.options, setArrows, setBoxes, store, textNow, work]);
+  }, [closeConnections, fitDocument, mode.ontology, mode.options, setArrows, setBoxes, store, textNow, work]);
 
   /** Computations section: put another option view on the canvas, after saving the one there now. */
   const viewName = (o: DesignOption | undefined, view: ViewId) => `${o?.letter ?? "option"}-${view}.mmd`;
@@ -566,11 +586,14 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
   const classesOf = useCallback((id: string): string[] => classIdsOf(boxesRef.current, arrowsRef.current, id), []);
 
   const menuAt = useCallback((source: string, target: string, replace?: string) => {
+    closeConnections();
+    const request = { source, target, replace, document: work.current(), generation: connectionGeneration.current };
+    if (!validConnection(request)) return;
     const rect = wrapper.current!.getBoundingClientRect();
     const x = Math.max(8, Math.min(pointer.current.x - rect.left, rect.width - 340));
     const y = Math.max(8, Math.min(pointer.current.y - rect.top, rect.height - 360));
-    setPending({ source, target, x, y, replace, srcClasses: classesOf(source), dstClasses: classesOf(target) });
-  }, [classesOf]);
+    setPending({ ...request, x, y, srcClasses: classesOf(source), dstClasses: classesOf(target) });
+  }, [classesOf, closeConnections, validConnection, work]);
 
   const isValidConnection: IsValidConnection<Arrow> = useCallback((c) => {
     if (c.source === c.target) return false;
@@ -581,7 +604,9 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
   }, [mode.datastore]);
 
   /** Data Store: add a link, unless the two boxes are already linked. */
-  const addLink = useCallback((source: string, target: string, name: string) => {
+  const addLink = useCallback((request: PendingConnection, name: string) => {
+    if (!validConnection(request)) return;
+    const { source, target } = request;
     if (arrowsRef.current.some((a) => (a.source === source && a.target === target) || (a.source === target && a.target === source))) {
       setNotice("These two are already linked. Click the arrow to change it.");
       return;
@@ -590,21 +615,24 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
       id: `a${Date.now().toString(36)}`, source, target,
       data: { kind: "relation", name, curie: "", words: name, own: true, problems: [] },
     }]);
-  }, [setArrows]);
+  }, [setArrows, validConnection]);
 
   /**
    * Data Store: a dataset is attached to the object it is connected to, whichever way the arrow
    * was drawn. Between two objects, a small menu asks which one is the parent.
    */
   const connectDatastore = useCallback((source: string, target: string) => {
+    closeConnections();
+    const request = { source, target, document: work.current(), generation: connectionGeneration.current };
+    if (!validConnection(request)) return;
     const kindOf = (id: string) => boxesRef.current.find((b) => b.id === id)?.data.kind;
-    if (kindOf(source) === "dataset") return addLink(source, target, IS_ATTACHED_TO);
-    if (kindOf(target) === "dataset") return addLink(target, source, IS_ATTACHED_TO);
+    if (kindOf(source) === "dataset") return addLink(request, IS_ATTACHED_TO);
+    if (kindOf(target) === "dataset") return addLink({ ...request, source: target, target: source }, IS_ATTACHED_TO);
     const rect = wrapper.current!.getBoundingClientRect();
     const x = Math.max(8, Math.min(pointer.current.x - rect.left, rect.width - 340));
     const y = Math.max(8, Math.min(pointer.current.y - rect.top, rect.height - 200));
-    setLinking({ source, target, x, y });
-  }, [addLink]);
+    setLinking({ ...request, x, y });
+  }, [addLink, closeConnections, validConnection, work]);
 
   const connect = useCallback((source: string, target: string) => {
     if (mode.datastore) connectDatastore(source, target);
@@ -627,15 +655,15 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
 
 
   const choose = useCallback((choice: Choice) => {
-    if (!pending) return;
+    if (!pending || !validConnection(pending)) return;
     const data: ArrowData = { ...choice, problems: [] };
     if (pending.replace) {
       setArrows((as) => as.map((a) => (a.id === pending.replace ? { ...a, data } : a)));
     } else {
       setArrows((as) => [...as, { id: `a${Date.now().toString(36)}`, source: pending.source, target: pending.target, data }]);
     }
-    setPending(null);
-  }, [pending, setArrows]);
+    closeConnections();
+  }, [closeConnections, pending, setArrows, validConnection]);
 
   // ---- selection and editing ------------------------------------------------------------
 
@@ -873,7 +901,7 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
               </button>
               {mode.datastore && <button type="button" aria-pressed={openbis}
                   title="See where everything goes in openBIS: Lab Notebook and Inventories, Space, Project, Collection"
-                  onClick={() => setView((v) => (v === "openbis" ? "model" : "openbis"))}>
+                  onClick={() => { closeConnections(); setView((v) => (v === "openbis" ? "model" : "openbis")); }}>
                 <span className="toolbar-check" aria-hidden="true">{openbis ? "✓" : ""}</span>openBIS view
               </button>}
               {mode.ontology && <button type="button" aria-pressed={workshop}
@@ -898,7 +926,7 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
 
       {mode.options && opts && (
         <OptionBar options={opts.options} current={opts.current} onGo={goTo}
-                   onCompare={() => { flushedOptions(); setComparing(true); }} />
+                   onCompare={() => { closeConnections(); flushedOptions(); setComparing(true); }} />
       )}
 
       <div className={`body${drawer ? ` open-${drawer}` : ""}`}>
@@ -968,7 +996,7 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
             onNodesChange={onBoxesChangeByUser} onEdgesChange={onArrowsChange}
             onConnect={onConnect} onConnectEnd={onConnectEnd} isValidConnection={isValidConnection}
             connectionMode={ConnectionMode.Loose} connectionRadius={40}
-            deleteKeyCode={["Backspace", "Delete"]} onPaneClick={() => { setPending(null); setLinking(null); if (narrow) setDrawer(null); }} multiSelectionKeyCode={["Shift", "Meta", "Control"]}
+            deleteKeyCode={["Backspace", "Delete"]} onPaneClick={() => { closeConnections(); if (narrow) setDrawer(null); }} multiSelectionKeyCode={["Shift", "Meta", "Control"]}
             // On a phone, tapping a box or arrow opens its details.
             onNodeClick={() => { if (narrow) setDrawer("details"); }} onEdgeClick={() => { if (narrow) setDrawer("details"); }}
             // Like draw.io: dragging on empty canvas draws a selection rectangle; the canvas moves with
@@ -1003,22 +1031,22 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
           {pending && !mode.ontology && (
             <PlainRelationMenu x={pending.x} y={pending.y} srcName={nameOf(pending.source)} dstName={nameOf(pending.target)}
                                own={ownRelations} onRemember={rememberRelation}
-                               onChoose={choose} onCancel={() => setPending(null)} />
+                               onChoose={choose} onCancel={closeConnections} />
           )}
           {pending && mode.ontology && (
             <RelationMenu x={pending.x} y={pending.y} srcName={nameOf(pending.source)} dstName={nameOf(pending.target)}
                           srcClasses={pending.srcClasses} dstClasses={pending.dstClasses}
                           toVocab={boxes.find((b) => b.id === pending.target)?.data.kind === "vocab"}
                           own={ownRelations} onRemember={rememberRelation}
-                          onChoose={choose} onCancel={() => setPending(null)} />
+                          onChoose={choose} onCancel={closeConnections} />
           )}
           {openbis && (
             <div className="view-hint">openBIS view: placed by each box's Space, Project and Collection. Click a box to change them.</div>
           )}
           {linking && (
             <DatastoreLinkMenu x={linking.x} y={linking.y} srcName={nameOf(linking.source)} dstName={nameOf(linking.target)}
-                               onCancel={() => setLinking(null)}
-                               onChoose={(name) => { addLink(linking.source, linking.target, name); setLinking(null); }} />
+                               onCancel={closeConnections}
+                               onChoose={(name) => { if (!validConnection(linking)) return; addLink(linking, name); closeConnections(); }} />
           )}
           {showMermaid && (
             <MermaidPanel text={toMermaid(boxes, arrows, mode.options ? emptyUseCase() : useCase, patternUses)} onClose={() => setShowMermaid(false)} />
