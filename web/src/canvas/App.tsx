@@ -13,6 +13,8 @@ import {
 } from "@xyflow/react";
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 
+import { applyPositions, DocumentWork } from "./document.js";
+
 import logo from "../../../assets/mermantics-logo.svg";
 import { BoxNode, worst } from "./BoxNode.js";
 import { check, loadOntology, supers } from "./checker.js";
@@ -128,17 +130,18 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
   const [opts, setOpts] = useState<OptionsState | null>(() => (mode.options ? readState(savedDiagram(mode.storageKey)) : null));
   const optsRef = useRef(opts);
   optsRef.current = opts;
-  // The option view whose diagram is on the canvas now; null while another one is being opened,
-  // so a save that fires in between cannot write one view's boxes into another.
+  // The view actually on the canvas, retained while another view loads so late edits
+  // are saved to their original destination.
   const holding = useRef<{ option: string; view: ViewId } | null>(null);
   const [comparing, setComparing] = useState(false);
   // Nothing is saved until something is changed, so only looking at an example never keeps it
   // (see saved.ts). changed: the diagram on the canvas was changed since it was opened, judged
-  // against opened (its content then); a box being dragged counts too. opened is null while a
-  // diagram is still being opened, and nothing is saved then: the canvas does not show it yet.
+  // against opened (its content then); a box being dragged counts too. opened is null until
+  // the first document commits. During later loads the previous canvas remains saveable.
   const changed = useRef(false);
   const opened = useRef<string | null>(null);
-  const opening = useRef<{ boxes: Box[]; key: string } | null>(null);
+  const work = useRef(new DocumentWork()).current;
+  const loading = useRef<number | null>(null);
   const optsAtStart = useRef(opts ? optionsKey(opts) : "");
   const optsChanged = useRef(false);
   useEffect(() => {
@@ -160,12 +163,13 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
     }
     const h = holding.current;
     if (!h) return;
-    setOpts((s) => {
-      if (!s) return s;
-      const o = s.options.find((x) => x.id === h.option);
-      if (!o || o.views[h.view] === text) return s;
-      return { ...s, options: s.options.map((x) => (x.id === h.option ? { ...x, views: { ...x.views, [h.view]: text } } : x)) };
-    });
+    const s = optsRef.current;
+    if (!s) return;
+    const o = s.options.find((x) => x.id === h.option);
+    if (!o || o.views[h.view] === text) return;
+    const next = { ...s, options: s.options.map((x) => (x.id === h.option ? { ...x, views: { ...x.views, [h.view]: text } } : x)) };
+    optsRef.current = next;
+    setOpts(next);
   }, [mode.options, mode.storageKey]);
   const [boxes, setBoxes, onBoxesChange] = useNodesState<Box>([]);
   const [arrows, setArrows, onArrowsChange] = useEdgesState<Arrow>([]);
@@ -177,6 +181,7 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
   const [docName, setDocName] = useState("model.mmd");
   const [ontoStatus, setOntoStatus] = useState(mode.ontology ? "Loading PMDco 3.1.2..." : "");
   const [ready, setReady] = useState(false);
+  const [checkRevision, setCheckRevision] = useState(0);
   // status: what the badge says; result: the quick check's result alone ("no problems"), "" until there is one.
   const [checkState, setCheckState] = useState<{ status: string; result: string; findings: GlobalFinding[]; passed: string[];
                                                   perUse: Record<string, number> }>(
@@ -244,52 +249,95 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
   // box size; once the boxes have their real sizes it is laid out once more, like "Tidy up".
   const relayout = useRef(false);
   const nodesReady = useNodesInitialized();
+  const fitDocument = useCallback((valid: () => boolean) => {
+    requestAnimationFrame(() => {
+      if (valid()) void flow.fitView({ padding: 0.15, duration: 300, maxZoom: 1.2 });
+    });
+  }, [flow]);
+
+  const arrange = useCallback(async (explicit = false) => {
+    if (opened.current === null || loading.current !== null) return;
+    const valid = work.beginLayout();
+    const snapshot = boxesRef.current;
+    try {
+      const placed = await layout(snapshot, arrowsRef.current);
+      if (!valid()) return;
+      if (explicit) changed.current = true;
+      setBoxes((current) => valid() ? applyPositions(current, snapshot, placed) : current);
+      fitDocument(valid);
+    } catch (error) {
+      if (valid()) setNotice(`Could not arrange the diagram: ${(error as Error).message}`);
+    }
+  }, [fitDocument, setBoxes, work]);
+
   useEffect(() => {
     if (!relayout.current || !nodesReady) return;
     const snap = boxesRef.current;
     if (!snap.length || !snap.every((b) => b.measured?.width && b.measured.height)) return;
     relayout.current = false;
-    void layout(snap, arrowsRef.current).then((placed) => {
-      const at = new Map(placed.map((b) => [b.id, b.position]));
-      setBoxes((bs) => bs.map((b) => ({ ...b, position: at.get(b.id) ?? b.position })));
-      requestAnimationFrame(() => flow.fitView({ padding: 0.15, duration: 300, maxZoom: 1.2 }));
-    });
-  }, [nodesReady, boxes, flow, setBoxes]);
+    void arrange();
+  }, [nodesReady, boxes, arrange]);
 
-  /**
-   * Put a diagram on the canvas. One the user opened (an example, a file) is theirs and saved
-   * right away; the example shown on arrival (untouched) and option views (target, already
-   * kept with the options) are saved only once they are changed.
-   */
-  const open = useCallback(async (text: string, name: string, target?: { option: string; view: ViewId },
-                                  untouched = false) => {
-    const imported = fromMermaid(text);
+  /** Invalidate old work before reading, classifying or laying out a replacement. */
+  const open = useCallback(async (text: string | Promise<string>, name: string,
+                                  target?: { option: string; view: ViewId }, untouched = false, persist = false) => {
+    store(textNow());
+    const document = work.replace();
+    loading.current = document;
     relayout.current = false;
-    let placed = mode.ontology ? await classify(imported.boxes) : imported.boxes;
-    if (!imported.positioned) placed = await layout(placed, imported.arrows);
-    relayout.current = !imported.positioned && placed.length > 0;
-    const uses = readUses(imported.patternUses);
-    opened.current = null;
-    opening.current = { boxes: placed, key: contentKey(placed, imported.arrows, uses, mode.options ? null : imported.useCase) };
-    changed.current = !(untouched || target);
-    setBoxes(placed);
-    setArrows(imported.arrows);
-    if (!mode.options) setUseCase(imported.useCase);
-    if (target) holding.current = target;
-    setPatternUses(uses);
-    setFocused(null);
-    setDocName(name);
-    setNotice(imported.warnings.length ? `Some lines could not be read: ${imported.warnings.join("; ")}` : "");
-    requestAnimationFrame(() => flow.fitView({ padding: 0.15, duration: 300, maxZoom: 1.2 }));
-  }, [flow, mode.ontology, mode.options, setArrows, setBoxes]);
+    setPending(null);
+    setLinking(null);
+    try {
+      const imported = fromMermaid(await text);
+      if (!work.owns(document)) return;
+      let placed = mode.ontology ? await classify(imported.boxes) : imported.boxes;
+      if (!work.owns(document)) return;
+      if (!imported.positioned) placed = await layout(placed, imported.arrows);
+      if (!work.owns(document)) return;
+      loading.current = null;
+      // Flush edits made to the previous canvas while its replacement was loading.
+      store(textNow());
+      relayout.current = !imported.positioned && placed.length > 0;
+      const uses = readUses(imported.patternUses);
+      // Commit refs and the baseline together; measurement updates must not disable saving.
+      opened.current = contentKey(placed, imported.arrows, uses, mode.options ? null : imported.useCase);
+      changed.current = persist || !(untouched || target);
+      boxesRef.current = placed;
+      arrowsRef.current = imported.arrows;
+      usesRef.current = uses;
+      setBoxes(placed);
+      setArrows(imported.arrows);
+      if (!mode.options) {
+        useCaseRef.current = imported.useCase;
+        setUseCase(imported.useCase);
+      }
+      holding.current = target ?? (mode.options ? optsRef.current!.current : null);
+      // Reset is saved only after replacement succeeds; a failed reset keeps the old view.
+      if (persist) store(textNow());
+      setPatternUses(uses);
+      setFocused(null);
+      setDocName(name);
+      setNotice(imported.warnings.length ? `Some lines could not be read: ${imported.warnings.join("; ")}` : "");
+      fitDocument(() => work.owns(document));
+    } catch (error) {
+      if (!work.owns(document)) return;
+      loading.current = null;
+      const previous = holding.current;
+      if (previous) setOpts((s) => s ? { ...s, current: previous } : s);
+      setNotice(`Could not open the diagram: ${(error as Error).message}`);
+    } finally {
+      // Replacement invalidates pending checks even when the structure stays identical,
+      // or a failed import leaves the previous canvas in place. Recheck that canvas.
+      if (work.owns(document)) setCheckRevision((revision) => revision + 1);
+    }
+  }, [fitDocument, mode.ontology, mode.options, setArrows, setBoxes, store, textNow, work]);
 
   /** Computations section: put another option view on the canvas, after saving the one there now. */
   const viewName = (o: DesignOption | undefined, view: ViewId) => `${o?.letter ?? "option"}-${view}.mmd`;
   const goTo = useCallback((option: string, view: ViewId) => {
+    if (holding.current) store(textNow());
     const s = optsRef.current;
     if (!s) return;
-    if (holding.current) store(textNow());
-    holding.current = null;
     const o = s.options.find((x) => x.id === option);
     setOpts((cur) => (cur ? { ...cur, current: { option, view } } : cur));
     setPending(null);
@@ -308,8 +356,12 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
   };
 
   useEffect(() => {
+    let active = true;
+    const document = work.current();
     const start = () => {
+      if (!active) return;
       setReady(true);
+      if (!work.owns(document)) return;
       if (mode.options) {
         const s = optsRef.current!;
         const o = s.options.find((x) => x.id === s.current.option);
@@ -324,16 +376,19 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
     };
     if (!mode.ontology) {
       start();
-      return;
+      return () => { active = false; work.replace(); };
     }
     loadOntology().then((info) => {
+      if (!active) return;
       setOntoStatus(`${info.title}`);
       start();
     }).catch((e: Error) => {
+      if (!active) return;
       setOntoStatus(`Could not load the ontology: ${e.message}`);
       setCheckState((c) => ({ ...c, status: `Could not load the ontology: ${e.message}` }));
     });
-  }, [open, mode]);
+    return () => { active = false; work.replace(); };
+  }, [open, mode, work]);
 
   // ---- checking -------------------------------------------------------------------------
 
@@ -348,6 +403,7 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
       return () => clearTimeout(timer);
     }
     const mine = ++run.current;
+    const document = work.current();
     setCheckState((s) => ({ ...s, status: "Checking..." }));
     const timer = setTimeout(async () => {
       const snapBoxes = boxesRef.current;
@@ -357,7 +413,7 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
       store(text);
       try {
         const checked = await check(text);
-        if (mine !== run.current) return;
+        if (mine !== run.current || !work.owns(document)) return;
         const byBox = new Map<string, Problem[]>();
         const byArrow = new Map<string, Problem[]>();
         const findings: GlobalFinding[] = [];
@@ -379,7 +435,7 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
           const ids = new Map(snapBoxes.map((b) => [b.id, classIdsOf(snapBoxes, snapArrows, b.id)]));
           const unique = [...new Set([...ids.values()].flat())];
           const found = await supers(unique);
-          if (mine !== run.current) return;
+          if (mine !== run.current || !work.owns(document)) return;
           const supersOf = new Map(unique.map((c, i) => [c, found[i] ?? []]));
           const classes = (box: string) => new Set((ids.get(box) ?? []).flatMap((c) => supersOf.get(c) ?? [c]));
           for (const f of checkUses(snapUses, snapBoxes, snapArrows, classes)) {
@@ -395,19 +451,11 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
         const status = snapBoxes.length ? `${QUICK_CHECK}: ${result}` : "Empty";
         setCheckState({ status, result, findings, passed, perUse });
       } catch (e) {
-        if (mine === run.current) setCheckState({ status: `The check failed: ${(e as Error).message}`, result: "", findings: [], passed: [], perUse: {} });
+        if (mine === run.current && work.owns(document)) setCheckState({ status: `The check failed: ${(e as Error).message}`, result: "", findings: [], passed: [], perUse: {} });
       }
     }, 300);
     return () => clearTimeout(timer);
-  }, [key, ready, mode.ontology, mode.options, store, textNow, setArrows, setBoxes]);
-
-  // The boxes that open() put on the canvas are drawn: from now on changes are judged and saved.
-  useEffect(() => {
-    if (opening.current && boxes === opening.current.boxes) {
-      opened.current = opening.current.key;
-      opening.current = null;
-    }
-  }, [boxes]);
+  }, [key, checkRevision, ready, mode.ontology, mode.options, store, textNow, setArrows, setBoxes, work]);
 
   // Positions and use case notes are saved too, a little later, as they change.
   useEffect(() => {
@@ -460,6 +508,8 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
                               [myPatterns, mode.patternIds]);
 
   const insertPattern = useCallback(async (pattern: Pattern, at?: { x: number; y: number }) => {
+    if (loading.current !== null) return;
+    const document = work.current();
     // Clicked (not dropped): place it to the right of the model, so it does not cover any box.
     const rect = wrapper.current!.getBoundingClientRect();
     const current = boxesRef.current;
@@ -472,16 +522,21 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
     let n = useIds.size + 1;
     while (useIds.has(`u${n}`)) n++;
     const inserted = instantiate(pattern, taken, { x: 0, y: 0 }, `u${n}`);
-    let placed = await classify(inserted.boxes);
-    if (!inserted.positioned) placed = await layout(placed, inserted.arrows);
-    const minX = Math.min(...placed.map((b) => b.position.x));
-    const minY = Math.min(...placed.map((b) => b.position.y));
-    placed = placed.map((b) => ({ ...b, selected: true, position: { x: where.x + b.position.x - minX, y: where.y + b.position.y - minY } }));
-    setBoxes((bs) => [...bs.map((b) => ({ ...b, selected: false })), ...placed]);
-    setArrows((as) => [...as.map((a) => ({ ...a, selected: false })), ...inserted.arrows]);
-    setPatternUses((us) => [...us, inserted.use]);
-    if (!at) setTimeout(() => flow.fitView({ padding: 0.12, duration: 300, maxZoom: 1.2 }), 50);
-  }, [flow, setArrows, setBoxes]);
+    try {
+      let placed = await classify(inserted.boxes);
+      if (!inserted.positioned) placed = await layout(placed, inserted.arrows);
+      if (!work.owns(document)) return;
+      const minX = Math.min(...placed.map((b) => b.position.x));
+      const minY = Math.min(...placed.map((b) => b.position.y));
+      placed = placed.map((b) => ({ ...b, selected: true, position: { x: where.x + b.position.x - minX, y: where.y + b.position.y - minY } }));
+      setBoxes((bs) => [...bs.map((b) => ({ ...b, selected: false })), ...placed]);
+      setArrows((as) => [...as.map((a) => ({ ...a, selected: false })), ...inserted.arrows]);
+      setPatternUses((us) => [...us, inserted.use]);
+      if (!at) setTimeout(() => fitDocument(() => work.owns(document)), 50);
+    } catch (error) {
+      if (work.owns(document)) setNotice(`Could not insert the pattern: ${(error as Error).message}`);
+    }
+  }, [flow, fitDocument, setArrows, setBoxes, work]);
 
   const onDrop = useCallback((e: DragEvent) => {
     e.preventDefault();
@@ -602,14 +657,18 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
   const patchBox = useCallback((id: string, patch: Partial<BoxData>) => {
     setBoxes((bs) => bs.map((b) => (b.id === id ? { ...b, data: { ...b.data, ...patch } } : b)));
     // A box that is "something else" gets a shape once its class is known.
-    if (patch.classId) {
+    if (patch.classId && loading.current === null) {
+      const document = work.current();
       void supers([patch.classId]).then(([anc]) => {
+        if (!work.owns(document)) return;
         const hit = KIND_BY_ANCESTOR.find(([cid]) => (anc ?? []).includes(cid));
         if (!hit) return;
-        setBoxes((bs) => bs.map((b) => (b.id === id && b.data.kind === "other" ? { ...b, data: { ...b.data, kind: hit[1] } } : b)));
+        setBoxes((bs) => bs.map((b) => (b.id === id && b.data.classId === patch.classId && b.data.kind === "other" ? { ...b, data: { ...b.data, kind: hit[1] } } : b)));
+      }).catch((error: Error) => {
+        if (work.owns(document)) setNotice(`Could not classify the box: ${error.message}`);
       });
     }
-  }, [setBoxes]);
+  }, [setBoxes, work]);
 
   const patchArrow = useCallback((id: string, patch: Partial<ArrowData>) => {
     setArrows((as) => as.map((a) => (a.id === id ? { ...a, data: { ...a.data!, ...patch } } : a)));
@@ -687,8 +746,9 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
     return shownArrows.filter((a) => ids.has(a.source) && ids.has(a.target));
   }, [openbis, shownArrows, viewNodes]);
   useEffect(() => {
-    if (mode.datastore) requestAnimationFrame(() => flow.fitView({ padding: 0.08, duration: 300, maxZoom: 1.2 }));
-  }, [view, mode.datastore, flow]);
+    const document = work.current();
+    if (mode.datastore) fitDocument(() => work.owns(document));
+  }, [view, mode.datastore, fitDocument, work]);
 
   const showQuestion = useCallback((id: string | null) => {
     setFocused(id);
@@ -755,8 +815,9 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
           verdict: "", why: "", builtIn: false, source: `Started from option ${from.letter}.` }
       : { id, letter, title: "New option", summary: "", kinds: "", gains: "", costs: "", verdict: "", why: "", source: "",
           builtIn: false, views: { terms: EMPTY_VIEW, dft: EMPTY_VIEW, fem: EMPTY_VIEW } };
-    holding.current = null;
-    setOpts({ ...s, options: [...options, made], current: { option: id, view: s.current.view } });
+    const next = { ...s, options: [...options, made], current: { option: id, view: s.current.view } };
+    optsRef.current = next;
+    setOpts(next);
     void open(made.views[s.current.view], viewName(made, s.current.view), { option: id, view: s.current.view });
   };
 
@@ -772,10 +833,9 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
     void open(next.views[s.current.view] || EMPTY_VIEW, viewName(next, s.current.view), { option: next.id, view: s.current.view });
   };
 
-  const tidy = async () => {
-    changed.current = true;
-    setBoxes(await layout(boxesRef.current, arrowsRef.current));
-    requestAnimationFrame(() => flow.fitView({ padding: 0.15, duration: 300, maxZoom: 1.2 }));
+  const tidy = () => {
+    relayout.current = false;
+    return arrange(true);
   };
 
   return (
@@ -788,7 +848,7 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
              onKeyDown={(event) => { if (event.key !== "Escape" && !event.ctrlKey && !event.metaKey && !event.shiftKey) event.stopPropagation(); }}>
           <div className="bar-group">
             <button type="button" aria-label={mode.options ? "Clear" : "New"} title={mode.options ? "Empty this view of the option" : "Start a new diagram"}
-                    onClick={() => { setBoxes([]); setArrows([]); if (!mode.options) setUseCase(emptyUseCase()); setPatternUses([]); setFocused(null); if (!mode.options) setDocName("model.mmd"); }}>
+                    onClick={() => void open(EMPTY_VIEW, opts ? viewName(currentOption, opts.current.view) : "model.mmd")}>
               <ToolbarIcon name="new" /><span className="toolbar-label">{mode.options ? "Clear" : "New"}</span>
             </button>
             {EXAMPLES.length > 0 && <ToolbarMenu label="Examples" icon="examples">
@@ -830,8 +890,8 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
         </nav>
         <input ref={fileInput} type="file" accept=".mmd,.md,.txt" hidden onChange={async (e) => {
           const file = e.target.files?.[0];
-          if (file) await open(await file.text(), file.name);
           e.target.value = "";
+          if (file) await open(file.text(), file.name);
         }} />
         <div className="bar-spacer" />
       </header>
@@ -994,10 +1054,7 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
                          onReset={() => {
                            const text = originalView(currentOption.id, opts.current.view);
                            if (text === null) return;
-                           holding.current = null;
-                           setOpts((s) => (s ? { ...s, options: s.options.map((o) => (o.id === currentOption.id
-                             ? { ...o, views: { ...o.views, [s.current.view]: text } } : o)) } : s));
-                           void open(text, viewName(currentOption, opts.current.view), opts.current);
+                           void open(text, viewName(currentOption, opts.current.view), opts.current, false, true);
                          }} />
           ) : tab === "usecase" ? (
             <UseCasePanel useCase={useCase} onChange={setUseCase} boxes={boxes}
