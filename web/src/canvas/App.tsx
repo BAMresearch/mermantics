@@ -181,6 +181,7 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
   const [docName, setDocName] = useState("model.mmd");
   const [ontoStatus, setOntoStatus] = useState(mode.ontology ? "Loading PMDco 3.1.2..." : "");
   const [ready, setReady] = useState(false);
+  const [checkRevision, setCheckRevision] = useState(0);
   // status: what the badge says; result: the quick check's result alone ("no problems"), "" until there is one.
   const [checkState, setCheckState] = useState<{ status: string; result: string; findings: GlobalFinding[]; passed: string[];
                                                   perUse: Record<string, number> }>(
@@ -322,6 +323,10 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
       const previous = holding.current;
       if (previous) setOpts((s) => s ? { ...s, current: previous } : s);
       setNotice(`Could not open the diagram: ${(error as Error).message}`);
+    } finally {
+      // Replacement invalidates pending checks even when the structure stays identical,
+      // or a failed import leaves the previous canvas in place. Recheck that canvas.
+      if (work.owns(document)) setCheckRevision((revision) => revision + 1);
     }
   }, [fitDocument, mode.ontology, mode.options, setArrows, setBoxes, store, textNow, work]);
 
@@ -448,7 +453,7 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
       }
     }, 300);
     return () => clearTimeout(timer);
-  }, [key, ready, mode.ontology, mode.options, store, textNow, setArrows, setBoxes, work]);
+  }, [key, checkRevision, ready, mode.ontology, mode.options, store, textNow, setArrows, setBoxes, work]);
 
   // Positions and use case notes are saved too, a little later, as they change.
   useEffect(() => {

@@ -5,7 +5,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { Box } from "../src/canvas/model.js";
 
-const mocks = vi.hoisted(() => ({ layout: vi.fn(), fit: vi.fn(), initialized: false, cloneOnSet: false, nodes: [] as Box[], flowProps: {} as any, optionProps: {} as any, panelProps: {} as any }));
+const mocks = vi.hoisted(() => ({ layout: vi.fn(), check: vi.fn(), fit: vi.fn(), initialized: false, cloneOnSet: false, nodes: [] as Box[], flowProps: {} as any, optionProps: {} as any, panelProps: {} as any }));
 vi.mock("../src/canvas/layout.js", () => ({ layout: mocks.layout }));
 vi.mock("@xyflow/react", async () => {
   const { useState, useCallback } = await import("react");
@@ -29,7 +29,7 @@ vi.mock("@xyflow/react", async () => {
 });
 const flow = { fitView: mocks.fit, screenToFlowPosition: (p: unknown) => p };
 vi.mock("../src/canvas/media.js", () => ({ NARROW: "", TOUCH: "", useMedia: () => false }));
-vi.mock("../src/canvas/checker.js", () => ({ check: vi.fn(), supers: vi.fn(), loadOntology: vi.fn() }));
+vi.mock("../src/canvas/checker.js", () => ({ check: mocks.check, supers: vi.fn(), loadOntology: vi.fn(async () => ({ title: "Test ontology" })) }));
 vi.mock("../src/canvas/ZoomBar.js", () => ({ ZoomBar: () => null, loadWheelMode: () => "move", saveWheelMode: () => {} }));
 vi.mock("../src/canvas/BoxNode.js", () => ({ BoxNode: () => null, worst: () => null }));
 vi.mock("../src/canvas/FloatingEdge.js", () => ({ FloatingEdge: () => null }));
@@ -70,6 +70,7 @@ const flushFrames = () => { const pending = frames.splice(0); pending.forEach((f
 beforeEach(() => {
   vi.useFakeTimers();
   mocks.layout.mockReset().mockImplementation(async (bs: Box[]) => bs);
+  mocks.check.mockReset();
   mocks.fit.mockClear();
   mocks.initialized = false;
   mocks.cloneOnSet = false;
@@ -259,4 +260,36 @@ test("failed current import preserves the diagram, reports the error and remains
   await act(async () => nodes()[0]!.data.onRename!("Still saveable"));
   await act(async () => vi.advanceTimersByTime(801));
   expect(storage.get(plain.storageKey)).toContain("Still saveable");
+});
+
+test.each(["failed import", "identical reopen"])("%s restarts an invalidated ontology check without a structural edit", async (action) => {
+  const stale = deferred<{ result: { findings: { level: string; message: string; nodeId: string }[] } }>();
+  const fresh = deferred<{ result: { findings: [] } }>();
+  mocks.check.mockImplementationOnce(() => stale.promise).mockImplementationOnce(() => fresh.promise);
+  await mount({ ...plain, ontology: true });
+  await act(async () => vi.advanceTimersByTime(300));
+  expect(mocks.check).toHaveBeenCalledTimes(1);
+  expect(container.querySelector(".status")!.textContent).toBe("Checking...");
+
+  if (action === "failed import") {
+    const pending = deferred<string>();
+    await act(async () => {
+      const input = container.querySelector<HTMLInputElement>('input[accept=".mmd,.md,.txt"]')!;
+      Object.defineProperty(input, "files", { value: [{ name: "broken.mmd", text: () => pending.promise }] });
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await act(async () => pending.reject(new Error("Read failed")));
+  } else {
+    await act(async () => [...container.querySelectorAll("button")].find((b) => b.textContent === "Example")!.click());
+  }
+
+  await act(async () => vi.advanceTimersByTime(300));
+  expect(mocks.check).toHaveBeenCalledTimes(2);
+  expect(mocks.check.mock.calls[1]![0]).toBe(mocks.check.mock.calls[0]![0]);
+  await act(async () => fresh.resolve({ result: { findings: [] } }));
+  expect(container.querySelector(".status")!.textContent).toBe("Quick check: no problems");
+  // The old result cannot overwrite the completed replacement check either.
+  await act(async () => stale.resolve({ result: { findings: [{ level: "error", message: "Stale error", nodeId: "A" }] } }));
+  expect(container.querySelector(".status")!.textContent).toBe("Quick check: no problems");
+  expect(nodes()[0]!.data.problems).toEqual([]);
 });
