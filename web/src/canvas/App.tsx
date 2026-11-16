@@ -35,7 +35,7 @@ import { EMPTY_VIEW, newOptionId, nextLetter, originalView, readState, resultsMa
          type OptionsState, type ViewId } from "./options.js";
 import { DATASTORE_LINKS, IS_ATTACHED_TO, IS_CHILD_OF, IS_PARENT_OF, KIND_BY_ANCESTOR, openbisFor, shapeOf, statusOf,
          type Shape, type ShapeKind } from "./palette.js";
-import { BUILT_IN, checkUses, instantiate, loadMine, parsePattern, patternFromSelection, readUses, saveMine, slug,
+import { BUILT_IN, checkUses, instantiate, loadMine, parsePattern, patternFromSelection, readUses, remapInsertion, saveMine, slug,
          type Pattern, type PatternUse } from "./patterns.js";
 import { loadOwnRelations, PlainRelationMenu, RelationMenu, saveOwnRelations, type Choice,
          type OwnRelation } from "./RelationMenu.js";
@@ -533,28 +533,34 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
   const insertPattern = useCallback(async (pattern: Pattern, at?: { x: number; y: number }) => {
     if (loading.current !== null) return;
     const document = work.current();
-    // Clicked (not dropped): place it to the right of the model, so it does not cover any box.
-    const rect = wrapper.current!.getBoundingClientRect();
-    const current = boxesRef.current;
-    const where = at ?? (current.length
-      ? { x: Math.max(...current.map((b) => b.position.x + (b.measured?.width ?? 220))) + 120,
-          y: Math.min(...current.map((b) => b.position.y)) }
-      : flow.screenToFlowPosition({ x: rect.left + rect.width / 2 - 260, y: rect.top + rect.height / 2 - 160 }));
-    const taken = new Set(boxesRef.current.map((b) => b.id));
-    const useIds = new Set(usesRef.current.map((u) => u.id));
-    let n = useIds.size + 1;
-    while (useIds.has(`u${n}`)) n++;
-    const inserted = instantiate(pattern, taken, { x: 0, y: 0 }, `u${n}`);
     try {
+      // Prepare with pattern-local IDs; free IDs and the position depend on the diagram at commit.
+      const inserted = instantiate(pattern, { x: 0, y: 0 });
       let placed = await classify(inserted.boxes);
+      if (!work.owns(document)) return;
       if (!inserted.positioned) placed = await layout(placed, inserted.arrows);
       if (!work.owns(document)) return;
+      // Clicked (not dropped): place it to the right of the model, so it does not cover any box.
+      const current = boxesRef.current;
+      const rect = wrapper.current!.getBoundingClientRect();
+      const where = at ?? (current.length
+        ? { x: Math.max(...current.map((b) => b.position.x + (b.measured?.width ?? 220))) + 120,
+            y: Math.min(...current.map((b) => b.position.y)) }
+        : flow.screenToFlowPosition({ x: rect.left + rect.width / 2 - 260, y: rect.top + rect.height / 2 - 160 }));
       const minX = Math.min(...placed.map((b) => b.position.x));
       const minY = Math.min(...placed.map((b) => b.position.y));
       placed = placed.map((b) => ({ ...b, selected: true, position: { x: where.x + b.position.x - minX, y: where.y + b.position.y - minY } }));
-      setBoxes((bs) => [...bs.map((b) => ({ ...b, selected: false })), ...placed]);
-      setArrows((as) => [...as.map((a) => ({ ...a, selected: false })), ...inserted.arrows]);
-      setPatternUses((us) => [...us, inserted.use]);
+      const final = remapInsertion({ ...inserted, boxes: placed },
+                                   { boxes: current, arrows: arrowsRef.current, uses: usesRef.current });
+      // Publish the IDs to the refs at once, so an insertion completing in the same React batch
+      // allocates against this one; append through updaters so queued box changes are kept.
+      const deselect = <T extends { selected?: boolean }>(x: T) => ({ ...x, selected: false });
+      boxesRef.current = [...current.map(deselect), ...final.boxes];
+      arrowsRef.current = [...arrowsRef.current.map(deselect), ...final.arrows];
+      usesRef.current = [...usesRef.current, final.use];
+      setBoxes((bs) => [...bs.map(deselect), ...final.boxes]);
+      setArrows((as) => [...as.map(deselect), ...final.arrows]);
+      setPatternUses((us) => [...us, final.use]);
       if (!at) setTimeout(() => fitDocument(() => work.owns(document)), 50);
     } catch (error) {
       if (work.owns(document)) setNotice(`Could not insert the pattern: ${(error as Error).message}`);

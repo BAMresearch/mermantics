@@ -57,6 +57,7 @@ vi.mock("../src/canvas/DatastorePanel.js", () => ({
   DatastoreLinkMenu: (props: any) => { mocks.linkProps = props; return createElement("div", { "data-menu": "link" }); },
 }));
 
+import { readUses } from "../src/canvas/patterns.js";
 import { App } from "../src/canvas/App.js";
 import { MODES, type Mode } from "../src/canvas/mode.js";
 import { readState } from "../src/canvas/options.js";
@@ -539,4 +540,82 @@ test.each(["plain", "ontology", "datastore"])("%s menu cancellation only revokes
   expect(mocks.flowProps.edges).toHaveLength(1);
   expect(mocks.flowProps.edges.some((edge: { source: string; target: string }) =>
     (edge.source === "A" && edge.target === "C") || (edge.source === "C" && edge.target === "A"))).toBe(false);
+});
+
+const insertFirstPattern = async () => act(async () => {
+  container.querySelector<HTMLButtonElement>('button.pattern')!.click();
+});
+
+// Resolve both operations without a React render between them as well as in either order.
+test.each(["first", "second", "same batch"])("overlapping patterns keep independent identities (%s finishes first)", async (order) => {
+  await mount({ ...plain, patterns: true });
+  const pending = [deferred<Box[]>(), deferred<Box[]>()];
+  const prepared: Box[][] = [];
+  for (const p of pending) mocks.layout.mockImplementationOnce((bs: Box[]) => { prepared.push(bs); return p.promise; });
+  await insertFirstPattern();
+  await insertFirstPattern();
+  expect(prepared).toHaveLength(2);
+  if (order === "same batch") await act(async () => pending.forEach((p, i) => p.resolve(prepared[i]!)));
+  else for (const i of order === "first" ? [0, 1] : [1, 0]) await act(async () => pending[i]!.resolve(prepared[i]!));
+  const boxes = nodes();
+  const arrows = mocks.flowProps.edges as import("../src/canvas/model.js").Arrow[];
+  expect(boxes).toHaveLength(11);
+  expect(new Set(boxes.map((b) => b.id)).size).toBe(11);
+  expect(arrows).toHaveLength(8);
+  expect(new Set(arrows.map((a) => a.id)).size).toBe(8);
+  await act(async () => vi.advanceTimersByTime(801));
+  const reopened = fromMermaid(storage.get(plain.storageKey)!);
+  const uses = readUses(reopened.patternUses);
+  expect(reopened.boxes).toHaveLength(11);
+  expect(reopened.arrows).toHaveLength(8);
+  expect(uses).toHaveLength(2);
+  expect(new Set(uses.map((u) => u.id)).size).toBe(2);
+  expect(new Set(uses.flatMap((u) => u.parts.map((p) => p.box))).size).toBe(10);
+  for (const use of uses) {
+    const ids = new Map(use.parts.map((p) => [p.part, p.box]));
+    for (const required of use.arrows) {
+      for (const actual of [arrows, reopened.arrows]) expect(actual.some((a) =>
+        a.source === ids.get(required.from) && a.target === ids.get(required.to) && a.data?.curie === required.curie)).toBe(true);
+    }
+  }
+  // Clicked copies are placed when they commit, so the later one goes beside the earlier one.
+  const spans = uses.map((use) => {
+    const xs = use.parts.map((p) => boxes.find((b) => b.id === p.box)!.position.x);
+    return [Math.min(...xs), Math.max(...xs)] as const;
+  }).sort((a, b) => a[0] - b[0]);
+  expect(spans[1]![0]).toBeGreaterThan(spans[0]![1]);
+  expect(reopened.warnings).toEqual([]);
+});
+
+test.each(["success", "failure"])("a replaced document discards pending pattern %s", async (outcome) => {
+  await mount({ ...plain, patterns: true });
+  const pending = deferred<Box[]>();
+  let prepared: Box[] = [];
+  mocks.layout.mockImplementationOnce((bs: Box[]) => { prepared = bs; return pending.promise; });
+  await insertFirstPattern();
+  await click("New");
+  await act(async () => outcome === "success" ? pending.resolve(prepared) : pending.reject(new Error("Stale pattern")));
+  expect(nodes()).toEqual([]);
+  expect(mocks.flowProps.edges).toEqual([]);
+  expect(container.textContent).not.toContain("Stale pattern");
+});
+
+test.each(["classification", "layout"])("failed pattern %s preserves content without partial metadata", async (stage) => {
+  mocks.check.mockResolvedValue({ result: { findings: [] } });
+  await mount({ ...plain, patterns: true, ontology: true });
+  await insertFirstPattern();
+  await act(async () => vi.advanceTimersByTime(801));
+  const before = storage.get(plain.storageKey)!;
+  const pending = deferred<any>();
+  (stage === "classification" ? mocks.supers : mocks.layout).mockImplementationOnce(() => pending.promise);
+  await insertFirstPattern();
+  await act(async () => pending.reject(new Error("Pattern failed")));
+  expect(container.textContent).toContain("Could not insert the pattern: Pattern failed");
+  await act(async () => vi.advanceTimersByTime(801));
+  expect(storage.get(plain.storageKey)).toBe(before);
+  expect(nodes()).toHaveLength(6);
+  expect(mocks.flowProps.edges).toHaveLength(4);
+  // A subsequent insertion still works after the failure.
+  await insertFirstPattern();
+  expect(nodes()).toHaveLength(11);
 });
