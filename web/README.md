@@ -22,10 +22,16 @@ it to `public/ontology/`, so the page can load it. Neither copy is committed.
 ## Test
 
 ```bash
-npm test             # fast tests
-PMDCO=1 npm test     # also the tests that load PMDco (from .cache/, or PMDCO_FILE=...)
+npm ci
 npm run typecheck
+npm run fetch-pmdco   # download before running the PMDco tests
+npm run test:pmdco    # all web tests, including PMDco
+npm run build        # production build
 ```
+
+These are the web checks run by `.github/workflows/validate.yml` on relevant pull requests
+and pushes. For a quick run without PMDco, use `npm test`; that skips the PMDco tests.
+`PMDCO_FILE=/path/to/pmdco-full.ttl npm run test:pmdco` uses an existing ontology file.
 
 The parity tests compare the TypeScript checks with JSON output of the Python CLI, saved in
 `tests/golden/`. `npm run golden:fast` makes those files again (it needs the Python package

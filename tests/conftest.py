@@ -9,15 +9,23 @@ from mermantics.robot import Robot, RobotError, find_java
 FIXTURES = Path(__file__).parent / "fixtures"
 
 
+def pytest_addoption(parser):
+    parser.addoption(
+        "--require-reasoner", action="store_true",
+        help="Fail instead of skipping when Java or ROBOT is unavailable.",
+    )
+
+
 @pytest.fixture(scope="session")
-def robot():
-    """ROBOT runner, from $ROBOT_JAR or the cache (downloaded once). Skips if unavailable."""
+def robot(request):
+    """ROBOT runner; unavailable dependencies fail with --require-reasoner, else skip."""
+    unavailable = pytest.fail if request.config.getoption("--require-reasoner") else pytest.skip
     if not find_java():
-        pytest.skip("Java not found")
+        unavailable("Java not found")
     try:
         return Robot()
     except RobotError as exc:
-        pytest.skip(f"ROBOT not available: {exc}")
+        unavailable(f"ROBOT not available: {exc}")
 
 
 @pytest.fixture(scope="session")

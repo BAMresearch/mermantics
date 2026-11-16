@@ -139,10 +139,21 @@ jobs:
 
 ```bash
 pip install -e ".[test]"
-pytest -m "not reasoner"              # fast tests, no Java needed
-pytest -m "reasoner and not pmdco"    # reasoner on a tiny test ontology, a few seconds
+pytest -m "not reasoner and not pmdco"  # fast tests, no Java needed
+pytest -m "reasoner and not pmdco" --require-reasoner  # tiny ontology; requires Java 11+
 PMDCO_FILE=/path/to/pmdco-full.ttl pytest -m pmdco   # full PMDco runs, a few minutes
 ```
+
+The validation workflow (`.github/workflows/validate.yml`) runs the first two test commands
+in separate jobs on pull requests and pushes affecting `web/`, `src/`, `tests/`, `assets/`,
+`pyproject.toml` or workflows. It uses Python 3.12 and Java 17, and also runs the
+[full web checks](../web/README.md#test) with Node 24. It does not deploy; Pages publishing
+remains in `pages.yml`. The slow PMDco reasoner tests are excluded from validation.
+
+ROBOT is downloaded automatically into the mermantics cache, or can be supplied with
+`ROBOT_JAR=/path/to/robot.jar`. `--require-reasoner` makes missing Java or an unavailable
+ROBOT jar fail the tests; without it, local reasoner tests skip when these are unavailable.
+CI caches pip and npm downloads, the ROBOT jar and the web PMDco download.
 
 `tests/fixtures/` contains a real simulation data-model diagram and three deliberately
 broken copies (unknown ID, impossible class, misused relation) with the expected results.
