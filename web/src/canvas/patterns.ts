@@ -153,38 +153,70 @@ export interface Inserted {
 }
 
 /**
- * Copies of the pattern's boxes and arrows with ids that are free in the diagram, placed
- * with their top left corner at `at`, and the record of which box plays which part.
+ * Copies of the pattern's boxes and arrows, placed with their top left corner at `at`, and
+ * the record of which box plays which part. IDs are pattern-local placeholders: insertion
+ * may wait for classification and layout, so free IDs are only chosen by `remapInsertion`
+ * against the diagram as it is when the copy is committed.
  */
-export function instantiate(pattern: Pattern, taken: Set<string>, at: { x: number; y: number }, useId: string): Inserted {
+export function instantiate(pattern: Pattern, at: { x: number; y: number }): Inserted {
   const { boxes, arrows, positioned } = fromMermaid(pattern.text);
-  const used = new Set(taken);
-  const rename = new Map<string, string>();
-  for (const b of boxes) {
-    const id = makeId(b.data.name || b.id, used);
-    used.add(id);
-    rename.set(b.id, id);
-  }
   const minX = Math.min(...boxes.map((b) => b.position.x));
   const minY = Math.min(...boxes.map((b) => b.position.y));
-  const stamp = Date.now().toString(36);
   const newBoxes: Box[] = boxes.map((b) => ({
-    ...b, id: rename.get(b.id)!, selected: true,
+    ...b, selected: true,
     position: { x: at.x + b.position.x - minX, y: at.y + b.position.y - minY },
     data: { ...b.data, css: [] },
   }));
-  const newArrows: Arrow[] = arrows.map((a, i) => ({
-    ...a, id: `p${stamp}${i}`, source: rename.get(a.source)!, target: rename.get(a.target)!,
-  }));
+  const newArrows: Arrow[] = arrows.map((a, i) => ({ ...a, id: `a${i}` }));
   const use: PatternUse = {
-    id: useId,
+    id: "",
     pattern: pattern.id,
     title: pattern.title,
     version: pattern.version,
-    parts: boxes.map((b) => ({ part: b.id, name: b.data.name, classId: b.data.classId, box: rename.get(b.id)! })),
+    parts: boxes.map((b) => ({ part: b.id, name: b.data.name, classId: b.data.classId, box: b.id })),
     arrows: arrows.map((a) => ({ from: a.source, to: a.target, kind: a.data!.kind, curie: a.data!.curie, name: a.data!.name })),
   };
   return { boxes: newBoxes, arrows: newArrows, use, positioned };
+}
+
+/** The IDs a committed insertion must avoid. */
+export interface TakenIds {
+  boxes: readonly { id: string }[];
+  arrows: readonly { id: string }[];
+  uses: readonly { id: string }[];
+}
+
+/**
+ * The only place insertion IDs are chosen: box, arrow and pattern-use IDs that are free in
+ * `diagram`, with arrow endpoints and each part's box moved along. Pattern-local part names
+ * (`use.parts[].part`, `use.arrows`) stay as they are. Call it and publish the result
+ * synchronously, so that a concurrent insertion sees these IDs before it commits.
+ */
+export function remapInsertion(inserted: Inserted, diagram: TakenIds): Inserted {
+  const taken = new Set([...diagram.boxes, ...diagram.arrows].map((x) => x.id));
+  const useIds = new Set(diagram.uses.map((u) => u.id));
+  let n = useIds.size + 1;
+  while (useIds.has(`u${n}`)) n++;
+  const useId = `u${n}`;
+  const rename = new Map<string, string>();
+  for (const b of inserted.boxes) {
+    const id = makeId(b.data.name || b.id, taken);
+    taken.add(id);
+    rename.set(b.id, id);
+  }
+  const arrowId = (base: string) => {
+    let id = base;
+    for (let k = 2; taken.has(id); k++) id = `${base}_${k}`;
+    taken.add(id);
+    return id;
+  };
+  return {
+    ...inserted,
+    boxes: inserted.boxes.map((b) => ({ ...b, id: rename.get(b.id)! })),
+    arrows: inserted.arrows.map((a, i) => ({ ...a, id: arrowId(`p${useId}_${i}`),
+                                             source: rename.get(a.source)!, target: rename.get(a.target)! })),
+    use: { ...inserted.use, id: useId, parts: inserted.use.parts.map((p) => ({ ...p, box: rename.get(p.box)! })) },
+  };
 }
 
 // ---- checking that the diagram still follows its patterns -------------------------------------

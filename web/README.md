@@ -107,3 +107,13 @@ that their endpoints still exist when committed; replacement choices also requir
 original arrow. Connections cannot start while a replacement document is loading.
 The lifecycle tests retain old menu callbacks to verify that interrupted choices cannot
 create dangling arrows or phantom boxes after saving and reopening.
+
+Pattern insertion prepares classification and layout on a copy with pattern-local IDs before
+changing the diagram. On success, `remapInsertion` in `patterns.ts`, the only place insertion IDs
+are chosen, picks free box, arrow and pattern-use IDs against the current diagram and moves arrow
+endpoints and each part's box reference along. Every addition of boxes (palette or pattern) goes
+through one canvas helper that publishes the new boxes to the refs at once and appends state through
+updaters, so IDs chosen later in the same React batch never repeat them. Clicked copies are placed
+at commit time so they do not overlap. Document replacement discards pending insertions; failures
+leave the graph and metadata intact. The lifecycle tests control completion order and verify the
+saved Mermaid round trip.
