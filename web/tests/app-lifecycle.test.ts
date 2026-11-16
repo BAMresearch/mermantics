@@ -518,7 +518,9 @@ test("an existing arrow can still have its relation replaced", async () => {
 test.each(["plain", "ontology", "datastore"])("%s menu cancellation only revokes its own generation", async (kind) => {
   const datastore = kind === "datastore";
   mocks.check.mockResolvedValue({ result: { findings: [] } });
-  await mount({ ...connectionMode(datastore), ontology: kind === "ontology" });
+  const mode = connectionMode(datastore);
+  mode.examples = mode.examples.map((example) => ({ ...example, text: `${example.text}\nC["C"]` }));
+  await mount({ ...mode, ontology: kind === "ontology" });
   const menu = () => datastore ? mocks.linkProps : mocks.relationProps;
   await openConnection(datastore);
   const oldCancel = menu().onCancel;
@@ -528,9 +530,13 @@ test.each(["plain", "ontology", "datastore"])("%s menu cancellation only revokes
   await act(async () => choose());
   expect(mocks.flowProps.edges).toHaveLength(1);
 
-  const cancelledChoose = await openConnection(datastore);
+  // Use an unlinked pair so Data Store's duplicate-link guard cannot mask a stale choice.
+  await act(async () => mocks.flowProps.onConnect({ source: "A", target: "C" }));
+  const cancelledChoose = menu().onChoose;
   await act(async () => menu().onCancel());
   expect(container.querySelector("[data-menu]")).toBeNull();
-  await act(async () => cancelledChoose());
+  await act(async () => cancelledChoose(datastore ? "is parent of" : choice));
   expect(mocks.flowProps.edges).toHaveLength(1);
+  expect(mocks.flowProps.edges.some((edge: { source: string; target: string }) =>
+    (edge.source === "A" && edge.target === "C") || (edge.source === "C" && edge.target === "A"))).toBe(false);
 });
