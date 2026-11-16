@@ -86,3 +86,17 @@ analysis), and the section shows them one at a time or side by side (`src/canvas
 adds, changes or removes a term; `termsTree.ts` places them in the PMDco class tree. The
 group's notes and the use case are kept with the options in the browser tab, and "Export → Workshop results"
 writes all of it as one Markdown file.
+
+Document replacement and layout are coordinated in `src/canvas/document.ts` and `App.tsx`.
+Every open (including New, Import, Examples and option resets) invalidates work for the
+previous document before asynchronous work starts. Only the latest load or layout may
+commit; deferred viewport fitting and failures obey the same ownership checks. Unmount
+invalidates outstanding work too. Pending edits are flushed to the view actually on the
+canvas before switching, and its save destination stays attached until the replacement commits.
+
+Layout merges positions into the current boxes rather than restoring a snapshot. Renames,
+kind changes, additions and deletions survive; a box moved since layout started, or still
+being dragged, keeps its position. The opening baseline is committed with the document,
+so measurement updates cannot leave autosaving disabled. `tests/app-lifecycle.test.ts`
+exercises the editor with controlled promises and timers in happy-dom; `document.test.ts`
+covers layout merging. These tests do not exercise React Flow's browser rendering.
