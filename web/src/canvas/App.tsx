@@ -204,6 +204,9 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
     setPending(null);
     setLinking(null);
   }, []);
+  const cancelConnection = useCallback((request: PendingConnection) => {
+    if (work.owns(request.document) && request.generation === connectionGeneration.current) closeConnections();
+  }, [closeConnections, work]);
   const [notice, setNotice] = useState("");
   const [useCase, setUseCase] = useState<UseCase>(() => opts?.useCase ?? emptyUseCase());
   const [tab, setTab] = useState<"model" | "usecase" | "option">("model");
@@ -1031,21 +1034,21 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
           {pending && !mode.ontology && (
             <PlainRelationMenu x={pending.x} y={pending.y} srcName={nameOf(pending.source)} dstName={nameOf(pending.target)}
                                own={ownRelations} onRemember={rememberRelation}
-                               onChoose={choose} onCancel={closeConnections} />
+                               onChoose={choose} onCancel={() => cancelConnection(pending)} />
           )}
           {pending && mode.ontology && (
             <RelationMenu x={pending.x} y={pending.y} srcName={nameOf(pending.source)} dstName={nameOf(pending.target)}
                           srcClasses={pending.srcClasses} dstClasses={pending.dstClasses}
                           toVocab={boxes.find((b) => b.id === pending.target)?.data.kind === "vocab"}
                           own={ownRelations} onRemember={rememberRelation}
-                          onChoose={choose} onCancel={closeConnections} />
+                          onChoose={choose} onCancel={() => cancelConnection(pending)} />
           )}
           {openbis && (
             <div className="view-hint">openBIS view: placed by each box's Space, Project and Collection. Click a box to change them.</div>
           )}
           {linking && (
             <DatastoreLinkMenu x={linking.x} y={linking.y} srcName={nameOf(linking.source)} dstName={nameOf(linking.target)}
-                               onCancel={closeConnections}
+                               onCancel={() => cancelConnection(linking)}
                                onChoose={(name) => { if (!validConnection(linking)) return; addLink(linking, name); closeConnections(); }} />
           )}
           {showMermaid && (

@@ -514,3 +514,23 @@ test("an existing arrow can still have its relation replaced", async () => {
   expect(mocks.flowProps.edges).toHaveLength(1);
   expect(mocks.flowProps.edges[0]).toMatchObject({ id, data: { name: "produces" } });
 });
+
+test.each(["plain", "ontology", "datastore"])("%s menu cancellation only revokes its own generation", async (kind) => {
+  const datastore = kind === "datastore";
+  mocks.check.mockResolvedValue({ result: { findings: [] } });
+  await mount({ ...connectionMode(datastore), ontology: kind === "ontology" });
+  const menu = () => datastore ? mocks.linkProps : mocks.relationProps;
+  await openConnection(datastore);
+  const oldCancel = menu().onCancel;
+  const choose = await openConnection(datastore);
+  await act(async () => oldCancel());
+  expect(container.querySelector("[data-menu]")).not.toBeNull();
+  await act(async () => choose());
+  expect(mocks.flowProps.edges).toHaveLength(1);
+
+  const cancelledChoose = await openConnection(datastore);
+  await act(async () => menu().onCancel());
+  expect(container.querySelector("[data-menu]")).toBeNull();
+  await act(async () => cancelledChoose());
+  expect(mocks.flowProps.edges).toHaveLength(1);
+});
