@@ -125,6 +125,8 @@ interface PendingArrow extends PendingConnection {
   dstClasses: string[];
 }
 
+const deselect = <T extends { selected?: boolean }>(x: T): T => ({ ...x, selected: false });
+
 /**
  * The canvas for one section (process modelling, or materials science and engineering).
  * Switching sections mounts a new App, so each section starts from its own saved diagram.
@@ -516,6 +518,24 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
 
   // ---- adding boxes ---------------------------------------------------------------------
 
+  /**
+   * Every addition of boxes goes through here. The refs are published at once, so an ID chosen
+   * later in the same React batch (another click, a pattern finishing) sees these boxes; state is
+   * appended through updaters, so changes queued for the current boxes are kept.
+   */
+  const append = useCallback((added: { boxes: Box[]; arrows?: Arrow[]; use?: PatternUse }) => {
+    const newArrows = added.arrows ?? [];
+    boxesRef.current = [...boxesRef.current.map(deselect), ...added.boxes];
+    arrowsRef.current = [...arrowsRef.current.map(deselect), ...newArrows];
+    setBoxes((bs) => [...bs.map(deselect), ...added.boxes]);
+    setArrows((as) => [...as.map(deselect), ...newArrows]);
+    const use = added.use;
+    if (use) {
+      usesRef.current = [...usesRef.current, use];
+      setPatternUses((us) => [...us, use]);
+    }
+  }, [setArrows, setBoxes]);
+
   const addBox = useCallback((shape: Shape, at?: { x: number; y: number }) => {
     const rect = wrapper.current!.getBoundingClientRect();
     const position = at ?? flow.screenToFlowPosition({ x: rect.left + rect.width / 2 - 110, y: rect.top + rect.height / 2 - 40 });
@@ -523,9 +543,8 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
     const data: BoxData = { name: shape.kind === "note" ? "Note" : shape.title, kind: shape.kind, classId: shape.classId,
                             classLabel: shape.classLabel, lines: [], css: [], problems: [] };
     if (mode.datastore && shape.kind !== "note") data.openbis = openbisFor(shape.kind);
-    setBoxes((bs) => [...bs.map((b) => ({ ...b, selected: false })), { id, type: "box", position, data, selected: true }]);
-    setArrows((as) => as.map((a) => ({ ...a, selected: false })));
-  }, [flow, mode.datastore, setArrows, setBoxes]);
+    append({ boxes: [{ id, type: "box", position, data, selected: true }] });
+  }, [append, flow, mode.datastore]);
 
   const allPatterns = useMemo(() => [...BUILT_IN.filter((p) => !mode.patternIds || mode.patternIds.includes(p.id)), ...myPatterns],
                               [myPatterns, mode.patternIds]);
@@ -552,20 +571,12 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
       placed = placed.map((b) => ({ ...b, selected: true, position: { x: where.x + b.position.x - minX, y: where.y + b.position.y - minY } }));
       const final = remapInsertion({ ...inserted, boxes: placed },
                                    { boxes: current, arrows: arrowsRef.current, uses: usesRef.current });
-      // Publish the IDs to the refs at once, so an insertion completing in the same React batch
-      // allocates against this one; append through updaters so queued box changes are kept.
-      const deselect = <T extends { selected?: boolean }>(x: T) => ({ ...x, selected: false });
-      boxesRef.current = [...current.map(deselect), ...final.boxes];
-      arrowsRef.current = [...arrowsRef.current.map(deselect), ...final.arrows];
-      usesRef.current = [...usesRef.current, final.use];
-      setBoxes((bs) => [...bs.map(deselect), ...final.boxes]);
-      setArrows((as) => [...as.map(deselect), ...final.arrows]);
-      setPatternUses((us) => [...us, final.use]);
+      append(final); // synchronously after choosing IDs, so the next ID choice sees them
       if (!at) setTimeout(() => fitDocument(() => work.owns(document)), 50);
     } catch (error) {
       if (work.owns(document)) setNotice(`Could not insert the pattern: ${(error as Error).message}`);
     }
-  }, [flow, fitDocument, setArrows, setBoxes, work]);
+  }, [append, flow, fitDocument, work]);
 
   const onDrop = useCallback((e: DragEvent) => {
     e.preventDefault();

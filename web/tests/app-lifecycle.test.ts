@@ -57,6 +57,7 @@ vi.mock("../src/canvas/DatastorePanel.js", () => ({
   DatastoreLinkMenu: (props: any) => { mocks.linkProps = props; return createElement("div", { "data-menu": "link" }); },
 }));
 
+import { MSE_SHAPES } from "../src/canvas/palette.js";
 import { readUses } from "../src/canvas/patterns.js";
 import { App } from "../src/canvas/App.js";
 import { MODES, type Mode } from "../src/canvas/mode.js";
@@ -585,6 +586,34 @@ test.each(["first", "second", "same batch"])("overlapping patterns keep independ
   }).sort((a, b) => a[0] - b[0]);
   expect(spans[1]![0]).toBeGreaterThan(spans[0]![1]);
   expect(reopened.warnings).toEqual([]);
+});
+
+test("a palette box added in the same batch as a pattern completion keeps its own ID", async () => {
+  await mount({ ...plain, patterns: true, shapes: MSE_SHAPES });
+  const pending = deferred<Box[]>();
+  let prepared: Box[] = [];
+  mocks.layout.mockImplementationOnce((bs: Box[]) => { prepared = bs; return pending.promise; });
+  // Both the palette shape and the pattern's box are named 'Device', so they compete for one ID.
+  const pattern = [...container.querySelectorAll<HTMLButtonElement>("button.pattern")]
+    .find((b) => b.querySelector("b")?.textContent === "Device identifier")!;
+  await act(async () => pattern.click());
+  expect(prepared.some((b) => b.data.name === "Device")).toBe(true);
+  // Resolve first, then click before any microtask runs: the pattern resumes after addBox has
+  // chosen its ID but before React renders, so only the refs can tell it that 'Device' is taken.
+  await act(async () => {
+    pending.resolve(prepared);
+    container.querySelector<HTMLButtonElement>("button.shape.kind-device")!.click();
+  });
+  const ids = nodes().map((b) => b.id);
+  expect(ids).toHaveLength(1 + 1 + prepared.length);
+  expect(new Set(ids).size).toBe(ids.length);
+  await act(async () => vi.advanceTimersByTime(801));
+  const reopened = fromMermaid(storage.get(plain.storageKey)!);
+  expect(reopened.boxes.map((b) => b.id).sort()).toEqual([...ids].sort());
+  const [use] = readUses(reopened.patternUses);
+  const device = use!.parts.find((p) => p.part === "Device")!.box;
+  expect(device).not.toBe("Device"); // the palette box committed first and kept the plain name
+  expect(reopened.boxes.filter((b) => b.data.name === "Device")).toHaveLength(2);
 });
 
 test.each(["success", "failure"])("a replaced document discards pending pattern %s", async (outcome) => {
