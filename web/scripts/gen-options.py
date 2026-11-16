@@ -7,8 +7,9 @@ the script. Run it from web/ after changing the options here:
     npm run fetch-pmdco                 # once, for .cache/pmdco-full-3.1.2.ttl
     python3 scripts/gen-options.py      # or: gen-options.py <pmdco-full.ttl> <options dir>
 
-Needs rdflib (pip install rdflib, or the mermantics package). When the diagrams change, raise
-BUILT_IN_VERSION in src/canvas/options.ts, so browsers that kept the old ones pick up the new.
+Needs rdflib (pip install rdflib, or the mermantics package). New diagrams do not replace work
+saved in a browser: fresh sessions, newly added options and the reset action use the current
+diagrams. BUILT_IN_VERSION in src/canvas/options.ts only records the version of the templates.
 The Terms views are laid out here (indented trees in columns); the example views are laid
 out by the canvas.
 """

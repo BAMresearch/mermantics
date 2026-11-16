@@ -142,7 +142,10 @@ export function originalView(optionId: string, view: ViewId): string | null {
 
 // ---- kept in the browser ----------------------------------------------------------------
 
-/** Changed when the built-in diagrams change, so the browser picks up the new ones. */
+/**
+ * The version of the built-in templates, stored with the state. It is informational only: saved
+ * work is never replaced because the templates changed (see readState).
+ */
 export const BUILT_IN_VERSION = 2;
 
 export interface OptionsState {
@@ -160,8 +163,19 @@ export function freshState(): OptionsState {
 const isView = (v: unknown): v is ViewId => v === "terms" || v === "dft" || v === "fem";
 const isVerdict = (v: unknown): v is Verdict => VERDICTS.some((x) => x.id === v);
 const str = (v: unknown) => (typeof v === "string" ? v : "");
+/** A stored string, or the fallback when the field is missing or not a string. */
+const strOr = (v: unknown, fallback: string) => (typeof v === "string" ? v : fallback);
 
-/** The state from storage, with anything unreadable replaced; older built-in diagrams are replaced. */
+/**
+ * The state from storage, with anything unreadable replaced.
+ *
+ * Replacement policy: saved content always wins over the templates, whatever version it was saved
+ * with. For a built-in option found in storage, every field the workshop can edit (title, summary,
+ * kinds, gains, costs, verdict, why and the diagrams) is kept as stored; the template fills in only
+ * fields that are missing. Built-in options not in storage (fresh sessions, options added since) come
+ * from the current templates. A stored built-in option that the templates no longer have is kept as
+ * the workshop's own option, so no work is lost. The reset action (originalView) restores a template.
+ */
 export function readState(raw: string | null): OptionsState {
   const fresh = freshState();
   if (!raw) return fresh;
@@ -171,28 +185,43 @@ export function readState(raw: string | null): OptionsState {
   } catch {
     return fresh;
   }
+  if (!o || typeof o !== "object") return fresh;
   const stored = (Array.isArray(o.options) ? o.options : []).filter((x) => x && typeof x === "object") as Record<string, unknown>[];
-  const read = (x: Record<string, unknown>): DesignOption | null => {
+  /** A stored option read over `base`: stored strings win, missing ones come from `base`. */
+  const read = (x: Record<string, unknown>, base: DesignOption | null): DesignOption | null => {
     const id = str(x.id);
     if (!id) return null;
     const views = (x.views && typeof x.views === "object" ? x.views : {}) as Record<string, unknown>;
+    const b = base ?? { letter: "", title: "", summary: "", kinds: "", gains: "", costs: "", why: "", source: "",
+                        views: { terms: "", dft: "", fem: "" } };
     return {
-      id, letter: str(x.letter), title: str(x.title), summary: str(x.summary), kinds: str(x.kinds), gains: str(x.gains),
-      costs: str(x.costs), verdict: isVerdict(x.verdict) ? x.verdict : "", why: str(x.why), source: str(x.source),
-      builtIn: x.builtIn === true,
-      views: { terms: str(views.terms), dft: str(views.dft), fem: str(views.fem) },
+      id,
+      // letter and source are not edited in the workshop; built-in ones follow the template
+      letter: base ? base.letter : str(x.letter), source: base ? base.source : str(x.source),
+      title: strOr(x.title, b.title), summary: strOr(x.summary, b.summary), kinds: strOr(x.kinds, b.kinds),
+      gains: strOr(x.gains, b.gains), costs: strOr(x.costs, b.costs),
+      verdict: isVerdict(x.verdict) ? x.verdict : "", why: strOr(x.why, b.why),
+      builtIn: !!base,
+      views: { terms: strOr(views.terms, b.views.terms), dft: strOr(views.dft, b.views.dft), fem: strOr(views.fem, b.views.fem) },
     };
   };
-  const mine = stored.map(read).filter((x): x is DesignOption => !!x);
-  const sameVersion = o.version === BUILT_IN_VERSION;
-  // Built-in options: the group's notes are always kept; the diagrams only if they are the current version.
+  const builtInIds = new Set(fresh.options.map((b) => b.id));
+  const seen = new Set<string>();
   const options = fresh.options.map((b) => {
-    const kept = mine.find((m) => m.id === b.id && m.builtIn);
-    if (!kept) return b;
-    return { ...b, gains: kept.gains, costs: kept.costs, verdict: kept.verdict, why: kept.why,
-             ...(sameVersion ? { title: kept.title, summary: kept.summary, kinds: kept.kinds, views: kept.views } : {}) };
+    seen.add(b.id);
+    // matched by id whatever the stored flag says, so a retired option that comes back keeps its work
+    const kept = stored.find((x) => x.id === b.id && x.builtIn === true) ?? stored.find((x) => x.id === b.id);
+    return (kept && read(kept, b)) || b;
   });
-  options.push(...mine.filter((m) => !m.builtIn));
+  for (const x of stored) {
+    const id = str(x.id);
+    // one option per id: built-in ids are taken by the templates, and duplicates are dropped
+    if (!id || seen.has(id) || builtInIds.has(id)) continue;
+    const mine = read(x, null);
+    if (!mine) continue;
+    seen.add(id);
+    options.push(mine);
+  }
   const cur = (o.current && typeof o.current === "object" ? o.current : {}) as Record<string, unknown>;
   const current = options.some((x) => x.id === cur.option) && isView(cur.view)
     ? { option: str(cur.option), view: cur.view } : fresh.current;

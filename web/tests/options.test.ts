@@ -118,25 +118,85 @@ test("the tree never loops, even when the diagram does", () => {
 
 // ---- stored state -------------------------------------------------------------------------
 
-test("stored state: notes are kept; built-in diagrams only for the same version; own options kept", () => {
+test("stored state: saved content and notes are kept across template versions; own options kept", () => {
   const s = freshState();
   const e = s.options.find((o) => o.letter === "E")!;
+  e.title = "E, as we changed it";
+  e.summary = "Our summary.";
+  e.kinds = "Our kinds.";
+  e.gains = "Our gains.";
+  e.costs = "Our costs.";
   e.verdict = "preferred";
   e.why = "It works for FEM too.";
   e.views.dft = "flowchart TB\n    X[\"x\"]\n";
   s.options.push({ ...e, id: "option-g", letter: "G", title: "Mine", builtIn: false });
   s.current = { option: "option-g", view: "fem" };
+  s.useCase = { ...emptyUseCase(), title: "Computations", openPoints: [{ id: "p1", text: "Ask about QM/MM", done: false }] };
 
-  const same = readState(JSON.stringify(s));
-  expect(same.options.find((o) => o.letter === "E")!.views.dft).toContain("X[");
-  expect(same.options.find((o) => o.letter === "E")!.verdict).toBe("preferred");
-  expect(same.options.map((o) => o.letter)).toEqual(["A", "B", "C", "D", "E", "F", "G"]);
-  expect(same.current).toEqual({ option: "option-g", view: "fem" });
+  for (const version of [BUILT_IN_VERSION, BUILT_IN_VERSION - 1, BUILT_IN_VERSION + 1, undefined]) {
+    const read = readState(JSON.stringify({ ...s, version }));
+    const kept = read.options.find((o) => o.letter === "E")!;
+    expect(kept, `version ${version}`).toMatchObject({
+      title: "E, as we changed it", summary: "Our summary.", kinds: "Our kinds.", gains: "Our gains.", costs: "Our costs.",
+      verdict: "preferred", why: "It works for FEM too.", builtIn: true });
+    expect(kept.views.dft).toContain("X[");
+    expect(kept.views.fem).toBe(builtInOptions()[4]!.views.fem);
+    expect(read.options.map((o) => o.letter)).toEqual(["A", "B", "C", "D", "E", "F", "G"]);
+    expect(read.options.find((o) => o.letter === "G")!).toMatchObject({ title: "Mine", builtIn: false });
+    expect(read.options.find((o) => o.letter === "G")!.views.dft).toContain("X[");
+    expect(read.current).toEqual({ option: "option-g", view: "fem" });
+    expect(read.useCase.title).toBe("Computations");
+    expect(read.useCase.openPoints).toHaveLength(1);
+  }
+});
 
-  const older = readState(JSON.stringify({ ...s, version: BUILT_IN_VERSION - 1 }));
-  expect(older.options.find((o) => o.letter === "E")!.views.dft).not.toContain("X[");
-  expect(older.options.find((o) => o.letter === "E")!.why).toBe("It works for FEM too.");
-  expect(older.options.find((o) => o.letter === "G")!.views.dft).toContain("X[");
+test("stored state: loading again changes nothing and never duplicates options", () => {
+  const s = freshState();
+  s.options[0]!.views.terms = "flowchart TB\n    Y[\"y\"]\n";
+  s.options.push({ ...s.options[1]!, id: "option-g", letter: "G", title: "Mine", builtIn: false });
+  // a stored state with the same option twice
+  const once = readState(JSON.stringify({ ...s, version: BUILT_IN_VERSION - 1, options: [...s.options, ...s.options] }));
+  const twice = readState(JSON.stringify(once));
+  const thrice = readState(JSON.stringify(twice));
+  expect(once.options.map((o) => o.id)).toEqual(s.options.map((o) => o.id));
+  expect(twice).toEqual(once);
+  expect(thrice).toEqual(once);
+  expect(thrice.options[0]!.views.terms).toContain("Y[");
+});
+
+test("stored state: built-in options new since the save come from the templates", () => {
+  const s = freshState();
+  s.options[0]!.why = "Kept.";
+  // saved before options C to F existed, and with an option the templates no longer have
+  const saved = { ...s, version: BUILT_IN_VERSION - 1,
+                  options: [s.options[0], s.options[1], { ...s.options[1]!, id: "z-retired", letter: "Z", title: "Retired" }] };
+  const read = readState(JSON.stringify(saved));
+  const templates = builtInOptions();
+  expect(read.options.slice(0, 6).map((o) => o.id)).toEqual(templates.map((o) => o.id));
+  expect(read.options[0]!.why).toBe("Kept.");
+  for (const i of [2, 3, 4, 5]) expect(read.options[i]).toEqual(templates[i]);
+  // the retired option's work is kept, as the workshop's own option
+  expect(read.options[6]).toMatchObject({ id: "z-retired", title: "Retired", builtIn: false });
+});
+
+test("stored state: a retired built-in option that comes back keeps the saved work", () => {
+  const s = freshState();
+  const e = s.options[4]!;
+  // saved while E was retired, so it was kept as the workshop's own option
+  const saved = { ...s, options: s.options.filter((o) => o !== e).concat({ ...e, builtIn: false, why: "Ours.",
+                  views: { ...e.views, dft: "flowchart TB\n    X[\"x\"]\n" } }) };
+  const read = readState(JSON.stringify(saved));
+  expect(read.options.filter((o) => o.id === e.id)).toHaveLength(1);
+  expect(read.options[4]).toMatchObject({ id: e.id, builtIn: true, why: "Ours." });
+  expect(read.options[4]!.views.dft).toContain("X[");
+});
+
+test("stored state: missing fields of a built-in option fall back to the template", () => {
+  const e = builtInOptions()[4]!;
+  const read = readState(JSON.stringify({ options: [{ id: e.id, builtIn: true, why: "Short.", views: { dft: "flowchart TB\n" } }] }));
+  const kept = read.options[4]!;
+  expect(kept).toMatchObject({ title: e.title, summary: e.summary, why: "Short.", builtIn: true });
+  expect(kept.views).toEqual({ ...e.views, dft: "flowchart TB\n" });
 });
 
 test("stored state: unreadable storage gives the built-in options", () => {
