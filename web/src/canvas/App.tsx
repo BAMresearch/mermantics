@@ -280,7 +280,7 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
 
   /** Invalidate old work before reading, classifying or laying out a replacement. */
   const open = useCallback(async (text: string | Promise<string>, name: string,
-                                  target?: { option: string; view: ViewId }, untouched = false) => {
+                                  target?: { option: string; view: ViewId }, untouched = false, persist = false) => {
     store(textNow());
     const document = work.replace();
     loading.current = document;
@@ -301,7 +301,7 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
       const uses = readUses(imported.patternUses);
       // Commit refs and the baseline together; measurement updates must not disable saving.
       opened.current = contentKey(placed, imported.arrows, uses, mode.options ? null : imported.useCase);
-      changed.current = !(untouched || target);
+      changed.current = persist || !(untouched || target);
       boxesRef.current = placed;
       arrowsRef.current = imported.arrows;
       usesRef.current = uses;
@@ -312,6 +312,8 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
         setUseCase(imported.useCase);
       }
       holding.current = target ?? (mode.options ? optsRef.current!.current : null);
+      // Reset is saved only after replacement succeeds; a failed reset keeps the old view.
+      if (persist) store(textNow());
       setPatternUses(uses);
       setFocused(null);
       setDocName(name);
@@ -813,8 +815,9 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
           verdict: "", why: "", builtIn: false, source: `Started from option ${from.letter}.` }
       : { id, letter, title: "New option", summary: "", kinds: "", gains: "", costs: "", verdict: "", why: "", source: "",
           builtIn: false, views: { terms: EMPTY_VIEW, dft: EMPTY_VIEW, fem: EMPTY_VIEW } };
-    holding.current = null;
-    setOpts({ ...s, options: [...options, made], current: { option: id, view: s.current.view } });
+    const next = { ...s, options: [...options, made], current: { option: id, view: s.current.view } };
+    optsRef.current = next;
+    setOpts(next);
     void open(made.views[s.current.view], viewName(made, s.current.view), { option: id, view: s.current.view });
   };
 
@@ -1051,10 +1054,7 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
                          onReset={() => {
                            const text = originalView(currentOption.id, opts.current.view);
                            if (text === null) return;
-                           holding.current = null;
-                           setOpts((s) => (s ? { ...s, options: s.options.map((o) => (o.id === currentOption.id
-                             ? { ...o, views: { ...o.views, [s.current.view]: text } } : o)) } : s));
-                           void open(text, viewName(currentOption, opts.current.view), opts.current);
+                           void open(text, viewName(currentOption, opts.current.view), opts.current, false, true);
                          }} />
           ) : tab === "usecase" ? (
             <UseCasePanel useCase={useCase} onChange={setUseCase} boxes={boxes}

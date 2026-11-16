@@ -5,7 +5,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { Box } from "../src/canvas/model.js";
 
-const mocks = vi.hoisted(() => ({ layout: vi.fn(), check: vi.fn(), fit: vi.fn(), initialized: false, cloneOnSet: false, nodes: [] as Box[], flowProps: {} as any, optionProps: {} as any, panelProps: {} as any }));
+const mocks = vi.hoisted(() => ({ layout: vi.fn(), check: vi.fn(), supers: vi.fn(), fit: vi.fn(), initialized: false, cloneOnSet: false, nodes: [] as Box[], flowProps: {} as any, optionProps: {} as any, panelProps: {} as any }));
 vi.mock("../src/canvas/layout.js", () => ({ layout: mocks.layout }));
 vi.mock("@xyflow/react", async () => {
   const { useState, useCallback } = await import("react");
@@ -29,7 +29,7 @@ vi.mock("@xyflow/react", async () => {
 });
 const flow = { fitView: mocks.fit, screenToFlowPosition: (p: unknown) => p };
 vi.mock("../src/canvas/media.js", () => ({ NARROW: "", TOUCH: "", useMedia: () => false }));
-vi.mock("../src/canvas/checker.js", () => ({ check: mocks.check, supers: vi.fn(), loadOntology: vi.fn(async () => ({ title: "Test ontology" })) }));
+vi.mock("../src/canvas/checker.js", () => ({ check: mocks.check, supers: mocks.supers, loadOntology: vi.fn(async () => ({ title: "Test ontology" })) }));
 vi.mock("../src/canvas/ZoomBar.js", () => ({ ZoomBar: () => null, loadWheelMode: () => "move", saveWheelMode: () => {} }));
 vi.mock("../src/canvas/BoxNode.js", () => ({ BoxNode: () => null, worst: () => null }));
 vi.mock("../src/canvas/FloatingEdge.js", () => ({ FloatingEdge: () => null }));
@@ -71,6 +71,7 @@ beforeEach(() => {
   vi.useFakeTimers();
   mocks.layout.mockReset().mockImplementation(async (bs: Box[]) => bs);
   mocks.check.mockReset();
+  mocks.supers.mockReset().mockImplementation(async (ids: string[]) => ids.map(() => []));
   mocks.fit.mockClear();
   mocks.initialized = false;
   mocks.cloneOnSet = false;
@@ -292,4 +293,59 @@ test.each(["failed import", "identical reopen"])("%s restarts an invalidated ont
   await act(async () => stale.resolve({ result: { findings: [{ level: "error", message: "Stale error", nodeId: "A" }] } }));
   expect(container.querySelector(".status")!.textContent).toBe("Quick check: no problems");
   expect(nodes()[0]!.data.problems).toEqual([]);
+});
+
+test("copy keeps late edits attached to the visible original while classification is pending", async () => {
+  const mode = { ...plain, options: true, ontology: true };
+  const state = readState(null);
+  const original = state.current;
+  state.options.find((o) => o.id === original.option)!.views[original.view] =
+    'flowchart TD\nA["Original<br/>PMD_0000000"]';
+  storage.set(mode.storageKey, JSON.stringify(state));
+  mocks.check.mockResolvedValue({ result: { findings: [] } });
+  await mount(mode);
+  await act(async () => [...container.querySelectorAll("button")].find((b) => b.textContent === "Option")!.click());
+  const pending = deferred<string[][]>();
+  mocks.supers.mockImplementationOnce(() => pending.promise);
+  await act(async () => mocks.panelProps.onCopy());
+  expect(mocks.supers).toHaveBeenCalledTimes(2);
+  const copy = mocks.optionProps.current;
+  expect(copy.option).not.toBe(original.option);
+  await act(async () => nodes()[0]!.data.onRename!("Late original edit"));
+  // Complete before the debounce: open must flush to the original save destination.
+  await act(async () => pending.resolve([[]]));
+  const saved = readState(storage.get(mode.storageKey)!);
+  expect(saved.options.find((o) => o.id === original.option)!.views[original.view]).toContain("Late original edit");
+  expect(saved.options.find((o) => o.id === copy.option)!.views[copy.view as "dft"]).not.toContain("Late original edit");
+  expect(nodes()[0]!.data.name).toBe("Original");
+});
+
+test.each(["failure", "success"])("reset %s retains saving until the replacement commits", async (outcome) => {
+  const mode = { ...plain, options: true };
+  await mount(mode);
+  const target = mocks.optionProps.current;
+  const savedText = () => readState(storage.get(mode.storageKey)!).options.find((o) => o.id === target.option)!.views[target.view as "dft"];
+  await act(async () => nodes()[0]!.data.onRename!("Before reset"));
+  await act(async () => vi.advanceTimersByTime(801));
+  await act(async () => [...container.querySelectorAll("button")].find((b) => b.textContent === "Option")!.click());
+  const pending = deferred<Box[]>();
+  let replacement: Box[] = [];
+  mocks.layout.mockImplementationOnce((bs: Box[]) => { replacement = bs; return pending.promise; });
+  await act(async () => mocks.panelProps.onReset());
+  expect(savedText()).toContain("Before reset");
+  await act(async () => nodes()[0]!.data.onRename!("While resetting"));
+  await act(async () => vi.advanceTimersByTime(801));
+  expect(savedText()).toContain("While resetting");
+  if (outcome === "failure") {
+    await act(async () => pending.reject(new Error("Reset layout failed")));
+    expect(container.textContent).toContain("Reset layout failed");
+    await act(async () => nodes()[0]!.data.onRename!("After failed reset"));
+    await act(async () => vi.advanceTimersByTime(801));
+    expect(savedText()).toContain("After failed reset");
+  } else {
+    await act(async () => pending.resolve(replacement));
+    expect(savedText()).not.toContain("While resetting");
+    expect(savedText()).not.toContain("Before reset");
+    expect(nodes()[0]!.data.name).toBe(replacement[0]!.data.name);
+  }
 });
