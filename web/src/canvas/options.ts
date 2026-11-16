@@ -209,7 +209,8 @@ export function readState(raw: string | null): OptionsState {
   const seen = new Set<string>();
   const options = fresh.options.map((b) => {
     seen.add(b.id);
-    const kept = stored.find((x) => x.id === b.id && x.builtIn === true);
+    // matched by id whatever the stored flag says, so a retired option that comes back keeps its work
+    const kept = stored.find((x) => x.id === b.id && x.builtIn === true) ?? stored.find((x) => x.id === b.id);
     return (kept && read(kept, b)) || b;
   });
   for (const x of stored) {

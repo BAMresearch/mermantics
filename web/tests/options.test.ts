@@ -179,6 +179,18 @@ test("stored state: built-in options new since the save come from the templates"
   expect(read.options[6]).toMatchObject({ id: "z-retired", title: "Retired", builtIn: false });
 });
 
+test("stored state: a retired built-in option that comes back keeps the saved work", () => {
+  const s = freshState();
+  const e = s.options[4]!;
+  // saved while E was retired, so it was kept as the workshop's own option
+  const saved = { ...s, options: s.options.filter((o) => o !== e).concat({ ...e, builtIn: false, why: "Ours.",
+                  views: { ...e.views, dft: "flowchart TB\n    X[\"x\"]\n" } }) };
+  const read = readState(JSON.stringify(saved));
+  expect(read.options.filter((o) => o.id === e.id)).toHaveLength(1);
+  expect(read.options[4]).toMatchObject({ id: e.id, builtIn: true, why: "Ours." });
+  expect(read.options[4]!.views.dft).toContain("X[");
+});
+
 test("stored state: missing fields of a built-in option fall back to the template", () => {
   const e = builtInOptions()[4]!;
   const read = readState(JSON.stringify({ options: [{ id: e.id, builtIn: true, why: "Short.", views: { dft: "flowchart TB\n" } }] }));
