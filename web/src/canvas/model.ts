@@ -267,16 +267,30 @@ export interface Imported {
   warnings: string[];
 }
 
-function readBox(raw: string, css: Set<string>): Pick<BoxData, "name" | "kind" | "classId" | "classLabel" | "lines" | "css"> {
+function readBox(raw: string, css: Set<string>, storedKind: unknown): Pick<BoxData, "name" | "kind" | "classId" | "classLabel" | "lines" | "css" | "openbis"> {
   const vocab = css.has("vocab");
   const note = css.has("note");
   const segs = labels.segments(raw);
-  const name = segs.find((s) => s) ?? "";
-  const rest = segs.slice(segs.indexOf(name) + 1);
+  // The first line is always the name, even when empty (segments trims whitespace).
+  const name = segs[0] ?? "";
+  const rest = segs.slice(1);
+  const kind: ShapeKind = note ? "note" : vocab ? "vocab"
+    : isShapeKind(storedKind) && storedKind !== "note" && storedKind !== "vocab" ? storedKind : "other";
+  // Only lines before the first blank line can be structured fields. Older labels
+  // without a separator retain their field interpretation; their intent is ambiguous.
+  const separator = note || vocab ? -1 : rest.indexOf("");
+  let fields = separator < 0 ? rest : rest.slice(0, separator);
+  const notes = separator < 0 ? [] : rest.slice(separator + 1);
+  let openbis: OpenbisInfo | undefined;
+  if (DATASTORE_KINDS.has(kind)) {
+    const parsed = readOpenbis(fields);
+    openbis = parsed.openbis;
+    fields = parsed.rest;
+  }
   let classId = "";
   let classLabel = "";
   const lines: string[] = [];
-  for (const seg of rest) {
+  for (const seg of fields) {
     const ids = [...seg.matchAll(new RegExp(labels.CURIE_RE.source, "gu"))].map((m) => m[0]);
     if (!vocab && !note && !classId && ids.length === 1 && seg.startsWith(ids[0]!)) {
       classId = ids[0]!;
@@ -285,8 +299,8 @@ function readBox(raw: string, css: Set<string>): Pick<BoxData, "name" | "kind" |
       if (seg) lines.push(seg);
     }
   }
-  const kind: ShapeKind = note ? "note" : vocab ? "vocab" : "other";
-  return { name, kind, classId, classLabel, lines, css: [...css] };
+  lines.push(...notes.filter((s) => s));
+  return { name, kind, classId, classLabel, lines, css: [...css], ...(openbis ? { openbis } : {}) };
 }
 
 function readArrow(raw: string): { name: string; curie: string; words: string; own: boolean } {
@@ -355,16 +369,11 @@ export function fromMermaid(text: string): Imported {
   const boxes: Box[] = [];
   for (const node of diagram.nodes.values()) {
     const p = pos[node.id];
-    const data = readBox(node.label, node.css);
-    const kind = kinds[node.id];
-    if (data.kind === "other" && isShapeKind(kind) && kind !== "note" && kind !== "vocab") data.kind = kind;
+    const data = readBox(node.label, node.css, kinds[node.id]);
     const extra: Partial<BoxData> = {};
     const kindName = kindNames[node.id];
     if (data.kind === "other" && typeof kindName === "string" && kindName.trim()) extra.kindName = kindName.trim();
     if (DATASTORE_KINDS.has(data.kind)) {
-      const { openbis, rest } = readOpenbis(data.lines);
-      extra.openbis = openbis;
-      data.lines = rest;
       data.css = data.css.filter((c) => !(c in DATASTORE_CLASS_DEFS));
     }
     boxes.push({ id: node.id, type: "box", position: { x: p?.[0] ?? 0, y: p?.[1] ?? 0 }, data: { ...data, ...extra, problems: [] } });
