@@ -29,14 +29,16 @@ const SHAPES: [string, string][] = [
   [">", "]"], ["[", "]"], ["(", ")"], ["{", "}"],
 ];
 
+// Complete connectors cannot become label openers. Unquoted labels stop at
+// their own style’s delimiter; other styles are text. Quotes/pipes delimit labels.
 const EDGE_RE = new RegExp(
   `^(?<src>${ID})(?::::(?<src_css>${CSS}))?${S}*` +
   "(?:" +
-    `-\\.${S}*(?<l1>"[^"]*"|[^"]*?)${S}*\\.+->` + //       A -. label .-> B
+    `-\\.(?![.-])${S}*(?<l1>"[^"]*"|(?:(?!\\.-)[^"])*?)${S}*\\.+->` + //       A -. label .-> B
     `|-\\.+->${S}*(?:\\|(?<l2>[^|]*)\\|)?` + //            A -.-> B  or  A -.->|label| B
-    `|==${S}*(?<l3>"[^"]*"|[^"]*?)${S}*=+>` + //          A == label ==> B
+    `|==(?![=>])${S}*(?<l3>"[^"]*"|(?:(?!==)[^"])*?)${S}*=+>` + //          A == label ==> B
     `|=+>${S}*(?:\\|(?<l4>[^|]*)\\|)?` + //               A ==> B   or  A ==>|label| B
-    `|--${S}*(?<l5>"[^"]*"|[^"]*?)${S}*-+>` + //          A -- label --> B
+    `|--(?![->ox])${S}*(?<l5>"[^"]*"|(?:(?!--)[^"])*?)${S}*-+>` + //          A -- label --> B
     `|-{2,}>${S}*(?:\\|(?<l6>[^|]*)\\|)?` + //            A --> B   or  A -->|label| B
   `)${S}*(?<dst>${ID})(?::::(?<dst_css>${CSS}))?${S}*;?$`,
   "du",
@@ -118,10 +120,6 @@ export function matchClassStatement(line: string): ClassMatch | null {
 }
 
 export function matchEdge(line: string): EdgeMatch | null {
-  // Count complete connectors outside quoted/pipe labels, including undirected
-  // ones. A single-dash -> is label text; -- / -. / == are only label openers.
-  const outsideLabels = line.replace(/"[^"]*"|\|[^|]*\|/gu, " ");
-  if ([...outsideLabels.matchAll(/-{2,}>|-\.+->|\.+->|=+>|-{3,}|-\.+-|={3,}/gu)].length > 1) return null;
   const m = EDGE_RE.exec(line);
   if (!m) return null;
   const g = m.groups!;

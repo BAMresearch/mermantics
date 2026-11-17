@@ -28,14 +28,17 @@ _SHAPES = [
     (">", "]"), ("[", "]"), ("(", ")"), ("{", "}"),
 ]
 
+# A complete connector cannot be reinterpreted as a label opener. Unquoted
+# labels stop at their own style's delimiter; other styles are ordinary text.
+# Quoted and pipe-delimited labels retain their explicit boundaries.
 _EDGE_RE = re.compile(
     rf"""^(?P<src>{ID})(?::::(?P<src_css>[\w-]+))?\s*
     (?:
-        -\.\s*(?P<l1>"[^"]*"|[^"]*?)\s*\.+->        # A -. label .-> B
+        -\.(?![.-])\s*(?P<l1>"[^"]*"|(?:(?!\.-)[^"])*?)\s*\.+->  # A -. label .-> B
       | -\.+->\s*(?:\|(?P<l2>[^|]*)\|)?            # A -.-> B  or  A -.->|label| B
-      | ==\s*(?P<l3>"[^"]*"|[^"]*?)\s*=+>          # A == label ==> B
+      | ==(?![=>])\s*(?P<l3>"[^"]*"|(?:(?!==)[^"])*?)\s*=+>  # A == label ==> B
       | =+>\s*(?:\|(?P<l4>[^|]*)\|)?               # A ==> B   or  A ==>|label| B
-      | --\s*(?P<l5>"[^"]*"|[^"]*?)\s*-+>          # A -- label --> B
+      | --(?![->ox])\s*(?P<l5>"[^"]*"|(?:(?!--)[^"])*?)\s*-+>  # A -- label --> B
       | -{{2,}}>\s*(?:\|(?P<l6>[^|]*)\|)?           # A --> B   or  A -->|label| B
     )\s*(?P<dst>{ID})(?::::(?P<dst_css>[\w-]+))?\s*;?$""",
     re.VERBOSE,
@@ -120,13 +123,7 @@ def parse(text: str) -> Diagram:
             pending_css.append((ids, m.group(2), number))
             continue
 
-        # Arrow-like text in quoted or pipe-delimited labels is ordinary text.
-        # Count complete connectors, including undirected ones, rather than
-        # arrowheads: a single-dash -> can be ordinary unquoted label text.
-        # The -- / -. / == label openers are not complete connectors.
-        outside_labels = re.sub(r'"[^"]*"|\|[^|]*\|', " ", line)
-        chained = len(re.findall(r"-{2,}>|-\.+->|\.+->|=+>|-{3,}|-\.+-|={3,}", outside_labels)) > 1
-        m = None if chained else _EDGE_RE.match(line)
+        m = _EDGE_RE.match(line)
         if m:
             label = next((m.group(g) for g in ("l1", "l2", "l3", "l4", "l5", "l6") if m.group(g)), "")
             label = _unquote(label)

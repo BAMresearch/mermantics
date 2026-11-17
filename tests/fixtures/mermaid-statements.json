@@ -172,6 +172,38 @@
     {
       "line": "A == temperature -> pressure ==> B",
       "label": "temperature -> pressure"
+    },
+    {
+      "line": "A -- x === y --> B",
+      "label": "x === y"
+    },
+    {
+      "line": "A == x --- y ==> B",
+      "label": "x --- y"
+    },
+    {
+      "line": "A -. x === y .-> B",
+      "label": "x === y"
+    },
+    {
+      "line": "A -- x -.- y --> B",
+      "label": "x -.- y"
+    },
+    {
+      "line": "A == x -.-> y ==> B",
+      "label": "x -.-> y"
+    },
+    {
+      "line": "A -. x --> y .-> B",
+      "label": "x --> y"
+    },
+    {
+      "line": "A -- x B --> B",
+      "label": "x B"
+    },
+    {
+      "line": "A -- o B --> B",
+      "label": "o B"
     }
   ],
   "chains": [
@@ -186,6 +218,13 @@
     "A === B --> C",
     "A --- B; C --> D",
     "A === B; C ==> D",
-    "A -.- B; C -.-> D"
+    "A -.- B; C -.-> D",
+    "A --o B --> C",
+    "A --x B --> C",
+    "A --o B; C --> D",
+    "A --x B; C --> D",
+    "A -- first --> B -- second --> C",
+    "A == first ==> B == second ==> C",
+    "A -. first .-> B -. second .-> C"
   ]
 }
