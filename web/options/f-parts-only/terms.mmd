@@ -33,7 +33,7 @@ flowchart TB
     NumericalMethod["<b>numerical method</b><br>PMD_0000931 simulation method specification<br><br>Definition: A solver specification that approximates the solution by discretization or iteration."]:::proposed
     MCMethod["<b>Monte Carlo method</b><br>PMD_0000931 simulation method specification<br><br>Definition: A numerical method that estimates results from random samples."]:::proposed
     Stochastic["<b>stochastic simulation</b><br>PMD_0000951 stochastic simulation"]:::local
-    Physical["<b>physical simulation</b><br>PMD_0000884 physical simulation<br><br>a lab process (Gleeble), not a computation"]:::deprecated
+    Physical["<b>physical simulation</b><br>PMD_0000884 physical simulation<br><br>a method specification that also covers experiments (e.g. Gleeble); not only computation"]:::deprecated
     Device["<b>computing device</b><br>PMD_0000582 computing device<br><br>Definition: A device that executes software."]:::changed
     Software["<b>software</b><br>IAO_0000010 software"]:::local
     Image["<b>execution environment image</b><br>IAO_0000010 software<br><br>a container or virtual machine image"]:::proposed
@@ -75,13 +75,13 @@ flowchart TB
     Solver --> NumericalMethod
     NumericalMethod --> MCMethod
     Stochastic --> MCMethod
-    Simulation -. "executes<br>STATO_0000102" .-> SimSpec
+    Simulation -. "concretizes<br>RO_0000059" .-> SimSpec
     Simulation -. "has part<br>BFO_0000051" .-> ModelSolution
     ModelSolution -. "has specified input<br>OBI_0000293" .-> Model
-    ModelSolution -. "executes<br>STATO_0000102" .-> Solver
+    ModelSolution -. "concretizes<br>RO_0000059" .-> Solver
     Software --> Image
     Computing -. "has participant<br>RO_0000057" .-> Device
-    Computing -. "executes<br>STATO_0000102" .-> Software
+    Computing -. "concretizes<br>RO_0000059" .-> Software
 
     classDef local fill:#dbeafe,stroke:#1d4ed8,stroke-width:2px,color:#0f172a
     classDef proposed fill:#ecfdf5,stroke:#059669,stroke-width:2px,stroke-dasharray:6 3,color:#0f172a

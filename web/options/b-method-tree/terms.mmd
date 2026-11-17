@@ -1,7 +1,7 @@
 flowchart TB
 
 %% Option B. Method tree: terms
-%% simulation process split by method, as ASMO does for atomistic methods. New methods and
+%% simulation process split by method. New methods and
 %% purposes become new classes. Added for comparison.
 
     Computing["<b>computing process</b><br>PMD_0000583 computing process"]:::local
@@ -14,11 +14,11 @@ flowchart TB
     MonteCarlo["<b>monte carlo simulation</b><br>PMD_0000862 monte carlo simulation"]:::local
     AtomisticMC["<b>atomistic monte carlo simulation</b><br>PMD_0000527 atomistic monte carlo simulation"]:::local
     MachineLearning["<b>machine learning</b><br>PMD_0000821 machine learning"]:::local
-    AIMD["<b>ab initio molecular dynamics simulation</b><br>PMD_0000504 ab initio molecular dynamics simulation<br><br>now under DFT and MD"]:::changed
+    AIMD["<b>ab initio molecular dynamics simulation</b><br>PMD_0000504 ab initio molecular dynamics simulation<br><br>proposed parent: MD; electronic forces need not use DFT"]:::changed
     EmpiricalMD["<b>empirical potential molecular dynamics simulation</b><br>PMD_0000631 empirical potential molecular dynamics simulation<br><br>now under MD"]:::changed
     DFTOpt["<b>DFT geometry optimization</b><br>PMD_0000933 simulation process<br><br>method and purpose combined"]:::proposed
     FEMStatic["<b>FEM static analysis</b><br>PMD_0000933 simulation process<br><br>method and purpose combined"]:::proposed
-    Note["<b>What to look at</b><br>Every new method needs a class here, and every method with a purpose needs another one.<br>Purpose and scale classes (structural optimization, multiscale, high throughput) do not fit this axis.<br>Methods that combine others (ab initio MD) need two parents."]:::note
+    Note["<b>What to look at</b><br>Every new method needs a class here, and every method with a purpose needs another one.<br>Purpose and scale classes (structural optimization, multiscale, high throughput) do not fit this axis.<br>AIMD uses electronic-structure forces, not necessarily DFT. The MD parent is proposed here, not asserted by PMDco or ASMO."]:::note
 
     Computing --> Simulation
     Simulation --> DFT
@@ -29,7 +29,6 @@ flowchart TB
     Simulation --> MonteCarlo
     MonteCarlo --> AtomisticMC
     Simulation --> MachineLearning
-    DFT --> AIMD
     MD --> AIMD
     MD --> EmpiricalMD
     DFT --> DFTOpt
@@ -40,5 +39,5 @@ flowchart TB
     classDef proposed fill:#ecfdf5,stroke:#059669,stroke-width:2px,stroke-dasharray:6 3,color:#0f172a
     classDef changed fill:#fff7ed,stroke:#ea580c,stroke-width:2px,color:#0f172a
 
-%% mermantics-layout {"Computing":[0,0],"Simulation":[26,83],"DFT":[52,166],"AIMD":[78,249],"DFTOpt":[78,377],"MD":[52,505],"EmpiricalMD":[78,607],"FEM":[52,754],"FEMStatic":[78,856],"CFD":[52,965],"PhaseField":[52,1067],"MonteCarlo":[52,1150],"AtomisticMC":[78,1233],"MachineLearning":[52,1335],"Note":[408,0]}
+%% mermantics-layout {"Computing":[0,0],"Simulation":[26,83],"DFT":[52,166],"AIMD":[78,480],"DFTOpt":[78,249],"MD":[52,377],"EmpiricalMD":[78,690],"FEM":[52,854],"FEMStatic":[78,956],"CFD":[52,1065],"PhaseField":[52,1167],"MonteCarlo":[52,1250],"AtomisticMC":[78,1333],"MachineLearning":[52,1435],"Note":[408,0]}
 %% mermantics-kinds {"Computing":"process","Simulation":"process","DFT":"process","MD":"process","FEM":"process","CFD":"process","PhaseField":"process","MonteCarlo":"process","AtomisticMC":"process","MachineLearning":"process","AIMD":"process","EmpiricalMD":"process","DFTOpt":"process","FEMStatic":"process"}

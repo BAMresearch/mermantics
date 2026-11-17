@@ -5,7 +5,7 @@ flowchart TB
 
     Relaxation["<b>DFT relaxation</b><br>PMD_0000933 simulation process"]:::local
     Spec["<b>Relaxation settings</b><br>IAO_0000104 plan specification<br><br>is a: simulation specification"]:::proposed
-    Task["<b>Find the lowest-energy structure</b><br>IAO_0000005 objective specification<br><br>is a: equilibrium task"]:::proposed
+    Task["<b>Find a local energy minimum</b><br>IAO_0000005 objective specification<br><br>is a: equilibrium task"]:::proposed
     Solve["<b>Solve the Kohn-Sham equations</b><br>PMD_0000583 computing process<br><br>is a: model solution process"]:::proposed
     DFTModel["<b>DFT model</b><br>IAO_0000030 information content entity<br><br>is a: physics-based model"]:::proposed
     KS["<b>Kohn-Sham equations</b><br>IAO_0000030 information content entity<br><br>is a: electronic physics equation"]:::proposed
@@ -15,18 +15,18 @@ flowchart TB
     Relaxed["<b>Relaxed structure and total energy</b><br>PMD_0025035 calculation datum"]:::local
     Code["<b>DFT code</b><br>IAO_0000010 software<br><br>name, version"]:::local
     Node["<b>Cluster node</b><br>PMD_0000582 computing device"]:::local
-    Note["<b>What to look at</b><br>Asserted only as simulation process, with its task, model and solver.<br>A reasoner infers: electronic structure calculation (the model has an electronic equation)<br>and geometry optimization (equilibrium task)."]:::note
+    Note["<b>What to look at</b><br>Asserted only as simulation process, with its task, model and solver.<br>A reasoner would infer, once these classes are defined: electronic structure calculation (the model has an electronic equation)<br>and geometry optimization (the stated geometry-relaxation objective, not equilibrium alone)."]:::note
 
-    Relaxation -. "executes<br>STATO_0000102" .-> Spec
+    Relaxation -. "concretizes<br>RO_0000059" .-> Spec
     Spec -. "has part<br>BFO_0000051" .-> Task
     Relaxation -. "has part<br>BFO_0000051" .-> Solve
     Solve -. "has specified input<br>OBI_0000293" .-> DFTModel
-    Solve -. "executes<br>STATO_0000102" .-> SCF
+    Solve -. "concretizes<br>RO_0000059" .-> SCF
     DFTModel -. "has part<br>BFO_0000051" .-> KS
     DFTModel -. "has part<br>BFO_0000051" .-> PBE
     Relaxation -. "has specified input<br>OBI_0000293" .-> Structure
     Relaxation -. "has specified output<br>OBI_0000299" .-> Relaxed
-    Relaxation -. "executes<br>STATO_0000102" .-> Code
+    Relaxation -. "concretizes<br>RO_0000059" .-> Code
     Relaxation -. "has participant<br>RO_0000057" .-> Node
 
     classDef local fill:#dbeafe,stroke:#1d4ed8,stroke-width:2px,color:#0f172a

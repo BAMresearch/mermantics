@@ -3,24 +3,26 @@ flowchart TB
 %% Option C. One axis, model level: DFT geometry optimization
 %% Materials science: a DFT geometry optimization (relaxation) of a crystal structure.
 
-    Relaxation["<b>DFT relaxation</b><br>PMD_0000933 simulation process<br><br>is a: electronic structure simulation"]:::proposed
-    Task["<b>Find the lowest-energy structure</b><br>IAO_0000005 objective specification<br><br>is a: equilibrium task"]:::proposed
+    Relaxation["<b>DFT relaxation</b><br>COB_0000082 planned process<br><br>is a: electronic-structure computation (proposed)<br>completion not asserted"]:::proposed
+    Spec["<b>Simulation plan</b><br>IAO_0000104 plan specification<br><br>actions, settings and intended objective"]:::local
+    Task["<b>Find a local energy minimum</b><br>IAO_0000005 objective specification<br><br>is a: equilibrium task"]:::proposed
     Solver["<b>SCF and BFGS</b><br>PMD_0000931 simulation method specification<br><br>functional, cutoff, k-points in the settings"]:::local
-    Structure["<b>Starting crystal structure</b><br>IAO_0000030 information content entity"]:::local
-    Relaxed["<b>Relaxed structure and total energy</b><br>PMD_0025035 calculation datum"]:::local
+    Structure["<b>Starting crystal structure (input information)</b><br>IAO_0000030 information content entity"]:::local
+    Relaxed["<b>Produced structure and energy data</b><br>IAO_0000030 information content entity"]:::local
     Code["<b>DFT code</b><br>IAO_0000010 software<br><br>name, version"]:::local
-    Node["<b>Cluster node</b><br>PMD_0000582 computing device"]:::local
-    Note["<b>What to look at</b><br>The class says the level, the task is a link. Geometry optimization is a query: this class plus an equilibrium task.<br>The functional is still settings text."]:::note
+    Node["<b>Cluster node (computing resource)</b><br>PMD_0000582 computing device"]:::local
+    Note["<b>What to look at</b><br>Explicit type: proposed electronic-structure computation; task is part of the plan.<br>Planned process allows failed, interrupted or unconverged attempts without asserting completion.<br>Output is shown only when produced by an ended run; it does not establish convergence or achievement.<br>Input purpose is a label convention; has participant alone does not encode it."]:::note
 
-    Relaxation -. "executes<br>STATO_0000102" .-> Task
-    Relaxation -. "executes<br>STATO_0000102" .-> Solver
-    Relaxation -. "has specified input<br>OBI_0000293" .-> Structure
-    Relaxation -. "has specified output<br>OBI_0000299" .-> Relaxed
-    Relaxation -. "executes<br>STATO_0000102" .-> Code
+    Relaxation -. "concretizes<br>RO_0000059" .-> Spec
+    Spec -. "has part<br>BFO_0000051" .-> Task
+    Relaxation -. "concretizes<br>RO_0000059" .-> Solver
+    Relaxation -. "has participant<br>RO_0000057" .-> Structure
+    Relaxation -. "has output<br>RO_0002234" .-> Relaxed
+    Relaxation -. "concretizes<br>RO_0000059" .-> Code
     Relaxation -. "has participant<br>RO_0000057" .-> Node
 
     classDef local fill:#dbeafe,stroke:#1d4ed8,stroke-width:2px,color:#0f172a
     classDef note fill:#fffbeb,stroke:#d97706,color:#374151
     classDef proposed fill:#ecfdf5,stroke:#059669,stroke-width:2px,stroke-dasharray:6 3,color:#0f172a
 
-%% mermantics-kinds {"Relaxation":"process","Task":"plan","Solver":"plan","Structure":"information","Relaxed":"data","Code":"software","Node":"device"}
+%% mermantics-kinds {"Spec":"plan","Relaxation":"process","Task":"plan","Solver":"plan","Structure":"information","Relaxed":"data","Code":"software","Node":"device"}

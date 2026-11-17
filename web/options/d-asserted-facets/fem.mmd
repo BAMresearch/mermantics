@@ -11,10 +11,10 @@ flowchart TB
     Node["<b>Workstation</b><br>PMD_0000582 computing device"]:::local
     Note["<b>What to look at</b><br>Same two asserted types as in the DFT case, one from each tree."]:::note
 
-    Analysis -. "executes<br>STATO_0000102" .-> Settings
+    Analysis -. "concretizes<br>RO_0000059" .-> Settings
     Analysis -. "has specified input<br>OBI_0000293" .-> Mesh
     Analysis -. "has specified output<br>OBI_0000299" .-> Stress
-    Analysis -. "executes<br>STATO_0000102" .-> Code
+    Analysis -. "concretizes<br>RO_0000059" .-> Code
     Analysis -. "has participant<br>RO_0000057" .-> Node
 
     classDef local fill:#dbeafe,stroke:#1d4ed8,stroke-width:2px,color:#0f172a

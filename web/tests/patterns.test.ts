@@ -154,3 +154,20 @@ test("commit remaps against imported IDs without changing the prepared pattern",
   expect(committed.boxes.map((b) => b.position)).toEqual(prepared.boxes.map((b) => b.position));
   expect(prepared).toEqual(before);
 });
+
+test("computation and workflow pattern metadata agree with specification arrows", () => {
+  for (const id of ["computation-task-model-solver", "workflow-step-assignments"]) {
+    const p = BUILT_IN.find((p) => p.id === id)!;
+    expect(p.description).toContain("concretizes");
+    expect(p.description).not.toContain("executes");
+    expect(p.text).not.toContain("STATO_0000102");
+    expect(p.text).not.toContain("OBI_0000417");
+    const arrows = fromMermaid(p.text).arrows;
+    const specs = id === "workflow-step-assignments"
+      ? [["Run", "Definition"], ["Step", "Function"]]
+      : [["Simulation", "Specification"], ["ModelSolution", "Solver"], ["Simulation", "Software"]];
+    for (const [source, target] of specs) {
+      expect(arrows.find((a) => a.source === source && a.target === target)?.data?.curie).toBe("RO_0000059");
+    }
+  }
+});
