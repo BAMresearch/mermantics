@@ -221,3 +221,76 @@ test("results: use case, a verdict table and every option with its diagrams", ()
   expect(md).toContain("Quick check against PMDco 3.1.2 (no reasoner): no problems.");
   expect(md.match(/```mermaid/g)).toHaveLength(18);
 });
+
+// Semantic regressions: domain/range checks alone cannot detect these mistakes.
+const optionC = builtInOptions().find((o) => o.letter === "C")!;
+test.each(VIEWS)("C $id: intention is a plan part, not an achieved objective", (view) => {
+  const { boxes, arrows, warnings } = fromMermaid(optionC.views[view.id]);
+  const process = view.id === "terms" ? "Planned" : view.id === "dft" ? "Relaxation" : "Analysis";
+  expect(warnings).toEqual([]);
+  const ids = Object.fromEntries(boxes.map((b) => [b.id, b.data.classId]));
+  expect(ids[process]).toBe("COB_0000082");
+  expect(ids.Spec).toBe("IAO_0000104");
+  expect(ids.Task).toBe("IAO_0000005");
+  const edges = arrows.map((a) => [a.source, a.data!.curie, a.target]);
+  expect(edges).toContainEqual([process, "RO_0000059", "Spec"]);
+  expect(edges).toContainEqual(["Spec", "BFO_0000051", "Task"]);
+  expect(arrows.filter((a) => a.target === "Task" && a.data?.curie)).toHaveLength(1);
+  expect(arrows.some((a) => a.data!.curie === "OBI_0000417")).toBe(false);
+  if (view.id !== "terms") {
+    // Specified I/O also implies completed execution in PMDco 3.1.2.
+    expect(arrows.some((a) => ["OBI_0000293", "OBI_0000299"].includes(a.data!.curie))).toBe(false);
+    expect(arrows.some((a) => a.data!.curie === "RO_0002233")).toBe(false);
+    expect(edges).toContainEqual([process, "RO_0000057", view.id === "dft" ? "Structure" : "Mesh"]);
+    expect(arrows.some((a) => a.data!.curie === "RO_0002234")).toBe(true);
+  }
+});
+
+test("B: general AIMD has the proposed MD parent, but no DFT ancestor", () => {
+  const text = builtInOptions().find((o) => o.letter === "B")!.views.terms;
+  const d = mermaid.parse(text);
+  const parents = (id: string): string[] => d.edges.filter((e) => e.dst === id && !e.label).map((e) => e.src);
+  const ancestors = new Set<string>();
+  const pending = [...parents("AIMD")];
+  while (pending.length) {
+    const id = pending.pop()!;
+    if (ancestors.has(id)) continue;
+    ancestors.add(id);
+    pending.push(...parents(id));
+  }
+  expect(ancestors.has("MD")).toBe(true);
+  expect(ancestors.has("DFT")).toBe(false);
+  expect(d.nodes.get("AIMD")!.label).toContain("PMD_0000504");
+  expect(d.nodes.get("AIMD")!.label).toContain("proposed parent");
+  expect(d.nodes.get("Note")!.label).not.toContain("need two parents");
+});
+
+test("E: specification prose matches concretization; proposed criteria do not claim implemented definitions", () => {
+  const e = builtInOptions().find((o) => o.letter === "E")!;
+  expect(e.summary).toContain("concretizes a specification");
+  expect(e.views.terms).not.toContain("executes a specification");
+  expect(e.views.terms).not.toContain("Defined:");
+  expect(e.views.terms).toContain("geometry-relaxation objective");
+});
+
+describe.skipIf(!PMDCO_ENABLED)("attempts do not acquire completed-process typing", () => {
+  let onto: Ontology;
+  beforeAll(() => { onto = loadOntology(PMDCO_FILE); });
+  test.each(["dft", "fem"] as const)("C %s: ontology types and relation domains allow incomplete attempts", (view) => {
+    const { boxes, arrows } = fromMermaid(optionC.views[view]);
+    const process = boxes.find((b) => b.id === (view === "dft" ? "Relaxation" : "Analysis"))!;
+    const completed = "http://purl.obolibrary.org/obo/COB_0000035";
+    expect(onto.superclasses(DataFactory.namedNode(`http://purl.obolibrary.org/obo/${process.data.classId}`)).has(completed)).toBe(false);
+    for (const a of arrows.filter((a) => a.source === process.id)) {
+      const prop = DataFactory.namedNode(`http://purl.obolibrary.org/obo/${a.data!.curie}`);
+      const domains = onto.store.getObjects(prop, DataFactory.namedNode("http://www.w3.org/2000/01/rdf-schema#domain"), null);
+      expect(domains.some((d) => onto.superclasses(d).has(completed)), a.data!.curie).toBe(false);
+    }
+    // An attempt with no output keeps its intended task and still validates.
+    const noOutput = toMermaid(boxes.filter((b) => !["Relaxed", "Stress"].includes(b.id)),
+      arrows.filter((a) => a.data!.curie !== "RO_0002234"));
+    expect(checks.run(mermaid.parse(noOutput), onto, defaultConfig(), null).findings
+      .filter((f) => f.level === "warning" || f.level === "error")).toEqual([]);
+    expect(noOutput).toContain("IAO_0000005");
+  });
+});

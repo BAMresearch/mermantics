@@ -15,7 +15,7 @@ flowchart TB
     Stress["<b>Stress and displacement fields</b><br>PMD_0025035 calculation datum"]:::local
     Code["<b>FE solver</b><br>IAO_0000010 software<br><br>name, version"]:::local
     Node["<b>Workstation</b><br>PMD_0000582 computing device"]:::local
-    Note["<b>What to look at</b><br>Same pattern as the DFT case.<br>A reasoner would infer, once these classes are defined: continuum simulation. It would not be classified as geometry optimization: the task is equilibrium,<br>but the model has no electronic or atomistic equation."]:::note
+    Note["<b>What to look at</b><br>Same pattern as the DFT case.<br>A reasoner would infer, once these classes are defined: continuum simulation. The stated task is stress evaluation at equilibrium, not geometry relaxation.<br>Failure to infer a type is not proof of its negation."]:::note
 
     Analysis -. "concretizes<br>RO_0000059" .-> Spec
     Spec -. "has part<br>BFO_0000051" .-> Task

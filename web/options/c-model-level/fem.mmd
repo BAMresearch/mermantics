@@ -3,19 +3,21 @@ flowchart TB
 %% Option C. One axis, model level: static FEM analysis
 %% Engineering: a static finite element analysis of a loaded steel bracket.
 
-    Analysis["<b>Static analysis of a bracket</b><br>PMD_0000933 simulation process<br><br>is a: continuum simulation"]:::proposed
+    Analysis["<b>Static analysis of a bracket</b><br>COB_0000082 planned process<br><br>continuum model; completion not asserted"]:::proposed
+    Spec["<b>Simulation plan</b><br>IAO_0000104 plan specification<br><br>actions, settings and intended objective"]:::local
     Task["<b>Find the stresses under load</b><br>IAO_0000005 objective specification<br><br>is a: equilibrium task"]:::proposed
     Solver["<b>Finite element method</b><br>PMD_0000931 simulation method specification<br><br>element type, material law in the settings"]:::local
     Mesh["<b>Mesh of the bracket, loads and supports</b><br>IAO_0000030 information content entity"]:::local
-    Stress["<b>Stress and displacement fields</b><br>PMD_0025035 calculation datum"]:::local
+    Stress["<b>Produced stress and displacement data</b><br>PMD_0025035 calculation datum"]:::local
     Code["<b>FE solver</b><br>IAO_0000010 software<br><br>name, version"]:::local
     Node["<b>Workstation</b><br>PMD_0000582 computing device"]:::local
-    Note["<b>What to look at</b><br>Same shape as the DFT case, with another level class."]:::note
+    Note["<b>What to look at</b><br>Same plan/task pattern as DFT, with a continuum model.<br>Planned process allows failed, interrupted or unconverged attempts without asserting completion.<br>Output is shown only when produced; it does not establish convergence or achievement."]:::note
 
-    Analysis -. "achieves_planned_objective<br>OBI_0000417" .-> Task
+    Analysis -. "concretizes<br>RO_0000059" .-> Spec
+    Spec -. "has part<br>BFO_0000051" .-> Task
     Analysis -. "concretizes<br>RO_0000059" .-> Solver
-    Analysis -. "has specified input<br>OBI_0000293" .-> Mesh
-    Analysis -. "has specified output<br>OBI_0000299" .-> Stress
+    Analysis -. "has participant<br>RO_0000057" .-> Mesh
+    Analysis -. "has output<br>RO_0002234" .-> Stress
     Analysis -. "concretizes<br>RO_0000059" .-> Code
     Analysis -. "has participant<br>RO_0000057" .-> Node
 
@@ -23,4 +25,4 @@ flowchart TB
     classDef note fill:#fffbeb,stroke:#d97706,color:#374151
     classDef proposed fill:#ecfdf5,stroke:#059669,stroke-width:2px,stroke-dasharray:6 3,color:#0f172a
 
-%% mermantics-kinds {"Analysis":"process","Task":"plan","Solver":"plan","Mesh":"information","Stress":"data","Code":"software","Node":"device"}
+%% mermantics-kinds {"Spec":"plan","Analysis":"process","Task":"plan","Solver":"plan","Mesh":"information","Stress":"data","Code":"software","Node":"device"}

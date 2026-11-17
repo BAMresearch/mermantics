@@ -90,7 +90,7 @@ const META: Meta[] = [
     id: "c-model-level", letter: "C", title: "One axis: model level",
     summary: "simulation process split by the level of the model's physics equation: electronic, "
       + "atomistic, mesoscopic, continuum (CWA 17284), plus data-based (RoMM).",
-    kinds: "One asserted class per level. Methods only in domain ontologies. Task and solver are links.",
+    kinds: "One asserted class per level. Methods only in domain ontologies. Intended task is part of a plan; solver is linked. Attempts use planned process, since PMDco computing processes imply completion.",
     gains: "Simple. No method in the core. Covers materials science and engineering the same way.",
     costs: "Multiscale and QM/MM need two parents. Task and solver are second class.",
     source: "Added for comparison.",
@@ -105,9 +105,9 @@ const META: Meta[] = [
   },
   {
     id: "e-task-model-solver", letter: "E", title: "Task, model and solver as parts",
-    summary: "A simulation executes a specification that has a task as part, and has a model solution process with a "
+    summary: "A simulation concretizes a specification that has a task as part, and has a model solution process with a "
       + "model as input and a solver.",
-    kinds: "Defined classes, inferred by a reasoner from the parts.",
+    kinds: "Proposed class definitions: a reasoner could infer kinds from the parts once the axioms are implemented.",
     gains: "Kinds cannot drift from the data. The core stays small. The same pattern for materials science and engineering.",
     costs: "Needs a reasoner to get the kinds. Users have to fill in the parts.",
     source: "Draft proposal for the hackathon, not reviewed. Builds on CWA 17284, MathModDB and ASMO.",

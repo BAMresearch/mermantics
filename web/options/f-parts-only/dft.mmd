@@ -5,7 +5,7 @@ flowchart TB
 
     Relaxation["<b>DFT relaxation</b><br>PMD_0000933 simulation process"]:::local
     Spec["<b>Relaxation settings</b><br>IAO_0000104 plan specification<br><br>is a: simulation specification"]:::proposed
-    Task["<b>Find the lowest-energy structure</b><br>IAO_0000005 objective specification<br><br>is a: equilibrium task"]:::proposed
+    Task["<b>Find a local energy minimum</b><br>IAO_0000005 objective specification<br><br>is a: equilibrium task"]:::proposed
     Solve["<b>Solve the Kohn-Sham equations</b><br>PMD_0000583 computing process<br><br>is a: model solution process"]:::proposed
     DFTModel["<b>DFT model</b><br>IAO_0000030 information content entity<br><br>is a: physics-based model"]:::proposed
     KS["<b>Kohn-Sham equations</b><br>IAO_0000030 information content entity<br><br>is a: electronic physics equation"]:::proposed
@@ -15,7 +15,7 @@ flowchart TB
     Relaxed["<b>Relaxed structure and total energy</b><br>PMD_0025035 calculation datum"]:::local
     Code["<b>DFT code</b><br>IAO_0000010 software<br><br>name, version"]:::local
     Node["<b>Cluster node</b><br>PMD_0000582 computing device"]:::local
-    Note["<b>What to look at</b><br>The same data as in option E.<br>Nothing is inferred in the core. Geometry optimization is a query (equilibrium task, and a model<br>with an electronic or atomistic equation), or a class in a domain ontology."]:::note
+    Note["<b>What to look at</b><br>The same data as in option E.<br>Nothing is inferred in the core. Geometry optimization is a query (geometry-relaxation objective, and a model<br>with an electronic or atomistic equation), or a class in a domain ontology."]:::note
 
     Relaxation -. "concretizes<br>RO_0000059" .-> Spec
     Spec -. "has part<br>BFO_0000051" .-> Task

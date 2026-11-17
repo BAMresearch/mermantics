@@ -1,8 +1,8 @@
 flowchart TB
 
 %% Option E. Task, model and solver as parts: terms
-%% A simulation executes a specification with its task, and has a model solution process with a model
-%% as input and a solver. Kinds of simulation are defined classes that a reasoner assigns from these parts.
+%% A simulation concretizes a specification with its task, and has a model solution process with a model
+%% as input and a solver. Kinds of simulation are proposed class definitions, not implemented reasoner axioms.
 %% Draft proposal, not reviewed. Workflow nodes, assignments and parameters are left out of this view.
 
     Computing["<b>computing process</b><br>PMD_0000583 computing process<br><br>Definition: A planned process in which one or more computing devices execute software to derive information content entities (the specified outputs) from information content entities (the specified inputs)."]:::changed
@@ -42,17 +42,17 @@ flowchart TB
     SimRole["<b>simulation entity role</b><br>PMD_0000051 simulation entity role<br><br>a model can be about a specimen (is about) instead"]:::deprecated
     MultiModel["<b>multi-model simulation</b><br>PMD_0000933 simulation process<br><br>Definition: A simulation process that solves two or more models, or one model made of coupled models."]:::proposed
     Multiscale["<b>multiscale simulation</b><br>PMD_0000866 multiscale simulation"]:::changed
-    ElectronicCalc["<b>electronic structure calculation</b><br>PMD_0000933 simulation process<br><br>Defined: a simulation whose model has an electronic physics equation"]:::proposed
-    ContinuumSim["<b>continuum simulation</b><br>PMD_0000933 simulation process<br><br>Defined: a simulation whose model has a continuum physics equation"]:::proposed
-    GeometryOpt["<b>geometry optimization</b><br>PMD_0000956 structural optimization simulation<br><br>Defined: an equilibrium task, and a model with an electronic or atomistic equation"]:::changed
-    AIMD["<b>ab initio molecular dynamics simulation</b><br>PMD_0000504 ab initio molecular dynamics simulation<br><br>Defined: a time evolution task, and a model with an electronic and an atomistic equation"]:::changed
-    EmpiricalMD["<b>empirical potential molecular dynamics simulation</b><br>PMD_0000631 empirical potential molecular dynamics simulation<br><br>Defined: a time evolution task, and a model with an atomistic equation and an interatomic potential"]:::changed
-    CoarseGrained["<b>coarse-grained simulation</b><br>PMD_0000562 coarse grained simulation<br><br>Defined: a model with a mesoscopic equation (subclass, not defined)"]:::changed
-    MonteCarlo["<b>Monte Carlo simulation</b><br>PMD_0000862 monte carlo simulation<br><br>Defined: a computing process that executes a Monte Carlo method"]:::changed
-    Analytical["<b>analytical calculation</b><br>PMD_0025012 analytical calculation<br><br>Defined: a computing process that executes an analytical solution method"]:::changed
-    ParameterEst["<b>parameter estimation</b><br>PMD_0000583 computing process<br><br>Defined: a computing process that addresses a parameter estimation task"]:::proposed
-    AtomisticMC["<b>atomistic Monte Carlo simulation</b><br>PMD_0000527 atomistic monte carlo simulation<br><br>Defined: a Monte Carlo simulation whose model has an atomistic equation"]:::changed
-    MachineLearning["<b>machine learning model training</b><br>PMD_0000821 machine learning<br><br>Defined: a parameter estimation with a data-based model as input"]:::changed
+    ElectronicCalc["<b>electronic structure calculation</b><br>PMD_0000933 simulation process<br><br>Proposed: a simulation whose model has an electronic physics equation"]:::proposed
+    ContinuumSim["<b>continuum simulation</b><br>PMD_0000933 simulation process<br><br>Proposed: a simulation whose model has a continuum physics equation"]:::proposed
+    GeometryOpt["<b>geometry optimization</b><br>PMD_0000956 structural optimization simulation<br><br>Proposed: simulation with a geometry-relaxation objective and an electronic or atomistic model"]:::changed
+    AIMD["<b>ab initio molecular dynamics simulation</b><br>PMD_0000504 ab initio molecular dynamics simulation<br><br>Proposed: time-evolution simulation with an electronic and an atomistic equation"]:::changed
+    EmpiricalMD["<b>empirical potential molecular dynamics simulation</b><br>PMD_0000631 empirical potential molecular dynamics simulation<br><br>Proposed: time-evolution simulation with an atomistic equation and an interatomic potential"]:::changed
+    CoarseGrained["<b>coarse-grained simulation</b><br>PMD_0000562 coarse grained simulation<br><br>Proposed: a model with a mesoscopic equation (subclass, not defined)"]:::changed
+    MonteCarlo["<b>Monte Carlo simulation</b><br>PMD_0000862 monte carlo simulation<br><br>Proposed: a computing process that concretizes a Monte Carlo method"]:::changed
+    Analytical["<b>analytical calculation</b><br>PMD_0025012 analytical calculation<br><br>Proposed: a computing process that concretizes an analytical solution method"]:::changed
+    ParameterEst["<b>parameter estimation</b><br>PMD_0000583 computing process<br><br>Proposed: a computing process that addresses a parameter estimation task"]:::proposed
+    AtomisticMC["<b>atomistic Monte Carlo simulation</b><br>PMD_0000527 atomistic monte carlo simulation<br><br>Proposed: a Monte Carlo simulation whose model has an atomistic equation"]:::changed
+    MachineLearning["<b>machine learning model training</b><br>PMD_0000821 machine learning<br><br>Proposed: a parameter estimation with a data-based model as input"]:::changed
     DeepLearning["<b>deep learning</b><br>PMD_0000594 deep learning"]:::changed
     Reinforcement["<b>reinforcement learning</b><br>PMD_0000913 reinforcement learning"]:::changed
 
