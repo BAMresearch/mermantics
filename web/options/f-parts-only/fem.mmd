@@ -17,16 +17,16 @@ flowchart TB
     Node["<b>Workstation</b><br>PMD_0000582 computing device"]:::local
     Note["<b>What to look at</b><br>The same data as in option E. Continuum simulation is a query, or a class in a domain ontology."]:::note
 
-    Analysis -. "executes<br>STATO_0000102" .-> Spec
+    Analysis -. "concretizes<br>RO_0000059" .-> Spec
     Spec -. "has part<br>BFO_0000051" .-> Task
     Analysis -. "has part<br>BFO_0000051" .-> Solve
     Solve -. "has specified input<br>OBI_0000293" .-> ElasticModel
-    Solve -. "executes<br>STATO_0000102" .-> FEMethod
+    Solve -. "concretizes<br>RO_0000059" .-> FEMethod
     ElasticModel -. "has part<br>BFO_0000051" .-> Balance
     ElasticModel -. "has part<br>BFO_0000051" .-> Hooke
     Analysis -. "has specified input<br>OBI_0000293" .-> Mesh
     Analysis -. "has specified output<br>OBI_0000299" .-> Stress
-    Analysis -. "executes<br>STATO_0000102" .-> Code
+    Analysis -. "concretizes<br>RO_0000059" .-> Code
     Analysis -. "has participant<br>RO_0000057" .-> Node
 
     classDef local fill:#dbeafe,stroke:#1d4ed8,stroke-width:2px,color:#0f172a

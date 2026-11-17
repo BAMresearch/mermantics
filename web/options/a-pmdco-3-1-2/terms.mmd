@@ -1,9 +1,11 @@
 flowchart TB
 
 %% Option A. PMDco 3.1.2 today: terms
-%% The computing terms as they are in PMDco 3.1.2. 'axis' says what each subclass is split by.
+%% The computing terms as they are in PMDco 3.1.2. 'axis' says what each subclass is split by. The 'axis' tags are an interpretation, not PMDco statements.
 
     Computing["<b>computing process</b><br>PMD_0000583 computing process"]:::local
+    WorkflowRun["<b>workflow run</b><br>PMD_0000016 workflow run<br><br>axis: workflow"]:::local
+    WorkflowNode["<b>workflow node</b><br>PMD_0000011 workflow node<br><br>axis: workflow"]:::local
     Analytical["<b>analytical calculation</b><br>PMD_0025012 analytical calculation<br><br>axis: solver"]:::local
     Simulation["<b>simulation process</b><br>PMD_0000933 simulation process"]:::local
     AIMD["<b>ab initio molecular dynamics simulation</b><br>PMD_0000504 ab initio molecular dynamics simulation<br><br>axis: method"]:::local
@@ -25,6 +27,8 @@ flowchart TB
     Physical["<b>physical simulation</b><br>PMD_0000884 physical simulation<br><br>axis: physical or computational"]:::local
     Note["<b>What to look at</b><br>Siblings under simulation process are split by method, scale, purpose, throughput and learning.<br>There is no plain molecular dynamics, and no class for continuum or FEM calculations.<br>The method specifications are plan specifications, but their labels read like processes."]:::note
 
+    Computing --> WorkflowRun
+    Computing --> WorkflowNode
     Computing --> Analytical
     Computing --> Simulation
     Simulation --> AIMD
@@ -47,5 +51,5 @@ flowchart TB
     classDef local fill:#dbeafe,stroke:#1d4ed8,stroke-width:2px,color:#0f172a
     classDef note fill:#fffbeb,stroke:#d97706,color:#374151
 
-%% mermantics-layout {"Computing":[0,0],"Analytical":[26,83],"Simulation":[26,192],"AIMD":[52,275],"EmpiricalMD":[52,403],"MonteCarlo":[52,550],"AtomisticMC":[78,659],"Multiscale":[52,787],"CoarseGrained":[78,896],"StructuralOpt":[52,1024],"HighThroughput":[52,1152],"MachineLearning":[52,1280],"DeepLearning":[52,1389],"MethodSpec":[408,0],"Continuous":[434,102],"DiscreteEvent":[434,211],"Deterministic":[434,339],"Stochastic":[434,448],"Hybrid":[434,557],"Physical":[434,666],"Note":[768,0]}
-%% mermantics-kinds {"Computing":"process","Analytical":"process","Simulation":"process","AIMD":"process","EmpiricalMD":"process","MonteCarlo":"process","Multiscale":"process","StructuralOpt":"process","HighThroughput":"process","MachineLearning":"process","DeepLearning":"process","AtomisticMC":"process","CoarseGrained":"process","MethodSpec":"plan","Continuous":"plan","DiscreteEvent":"plan","Deterministic":"plan","Stochastic":"plan","Hybrid":"plan","Physical":"plan"}
+%% mermantics-layout {"WorkflowRun":[408,820],"WorkflowNode":[408,960],"Computing":[0,0],"Analytical":[26,83],"Simulation":[26,192],"AIMD":[52,275],"EmpiricalMD":[52,403],"MonteCarlo":[52,550],"AtomisticMC":[78,659],"Multiscale":[52,787],"CoarseGrained":[78,896],"StructuralOpt":[52,1024],"HighThroughput":[52,1152],"MachineLearning":[52,1280],"DeepLearning":[52,1389],"MethodSpec":[408,0],"Continuous":[434,102],"DiscreteEvent":[434,211],"Deterministic":[434,339],"Stochastic":[434,448],"Hybrid":[434,557],"Physical":[434,666],"Note":[768,0]}
+%% mermantics-kinds {"WorkflowRun":"process","WorkflowNode":"process","Computing":"process","Analytical":"process","Simulation":"process","AIMD":"process","EmpiricalMD":"process","MonteCarlo":"process","Multiscale":"process","StructuralOpt":"process","HighThroughput":"process","MachineLearning":"process","DeepLearning":"process","AtomisticMC":"process","CoarseGrained":"process","MethodSpec":"plan","Continuous":"plan","DiscreteEvent":"plan","Deterministic":"plan","Stochastic":"plan","Hybrid":"plan","Physical":"plan"}

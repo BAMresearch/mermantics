@@ -1,7 +1,7 @@
 flowchart TB
 
 %% Option B. Method tree: terms
-%% simulation process split by method, as ASMO does for atomistic methods. New methods and
+%% simulation process split by method. New methods and
 %% purposes become new classes. Added for comparison.
 
     Computing["<b>computing process</b><br>PMD_0000583 computing process"]:::local
@@ -14,7 +14,7 @@ flowchart TB
     MonteCarlo["<b>monte carlo simulation</b><br>PMD_0000862 monte carlo simulation"]:::local
     AtomisticMC["<b>atomistic monte carlo simulation</b><br>PMD_0000527 atomistic monte carlo simulation"]:::local
     MachineLearning["<b>machine learning</b><br>PMD_0000821 machine learning"]:::local
-    AIMD["<b>ab initio molecular dynamics simulation</b><br>PMD_0000504 ab initio molecular dynamics simulation<br><br>now under DFT and MD"]:::changed
+    AIMD["<b>ab initio molecular dynamics simulation</b><br>PMD_0000504 ab initio molecular dynamics simulation<br><br>now under DFT and MD (in practice; PMDco only says quantum mechanical)"]:::changed
     EmpiricalMD["<b>empirical potential molecular dynamics simulation</b><br>PMD_0000631 empirical potential molecular dynamics simulation<br><br>now under MD"]:::changed
     DFTOpt["<b>DFT geometry optimization</b><br>PMD_0000933 simulation process<br><br>method and purpose combined"]:::proposed
     FEMStatic["<b>FEM static analysis</b><br>PMD_0000933 simulation process<br><br>method and purpose combined"]:::proposed

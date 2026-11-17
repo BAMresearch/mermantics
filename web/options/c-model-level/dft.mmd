@@ -12,11 +12,11 @@ flowchart TB
     Node["<b>Cluster node</b><br>PMD_0000582 computing device"]:::local
     Note["<b>What to look at</b><br>The class says the level, the task is a link. Geometry optimization is a query: this class plus an equilibrium task.<br>The functional is still settings text."]:::note
 
-    Relaxation -. "executes<br>STATO_0000102" .-> Task
-    Relaxation -. "executes<br>STATO_0000102" .-> Solver
+    Relaxation -. "achieves_planned_objective<br>OBI_0000417" .-> Task
+    Relaxation -. "concretizes<br>RO_0000059" .-> Solver
     Relaxation -. "has specified input<br>OBI_0000293" .-> Structure
     Relaxation -. "has specified output<br>OBI_0000299" .-> Relaxed
-    Relaxation -. "executes<br>STATO_0000102" .-> Code
+    Relaxation -. "concretizes<br>RO_0000059" .-> Code
     Relaxation -. "has participant<br>RO_0000057" .-> Node
 
     classDef local fill:#dbeafe,stroke:#1d4ed8,stroke-width:2px,color:#0f172a

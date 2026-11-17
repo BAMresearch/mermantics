@@ -11,10 +11,10 @@ flowchart TB
     Node["<b>Cluster node</b><br>PMD_0000582 computing device"]:::local
     Note["<b>What to look at</b><br>Two asserted types, both written by hand.<br>If someone asserts continuum simulation here instead, nothing notices."]:::note
 
-    Relaxation -. "executes<br>STATO_0000102" .-> Settings
+    Relaxation -. "concretizes<br>RO_0000059" .-> Settings
     Relaxation -. "has specified input<br>OBI_0000293" .-> Structure
     Relaxation -. "has specified output<br>OBI_0000299" .-> Relaxed
-    Relaxation -. "executes<br>STATO_0000102" .-> Code
+    Relaxation -. "concretizes<br>RO_0000059" .-> Code
     Relaxation -. "has participant<br>RO_0000057" .-> Node
 
     classDef local fill:#dbeafe,stroke:#1d4ed8,stroke-width:2px,color:#0f172a

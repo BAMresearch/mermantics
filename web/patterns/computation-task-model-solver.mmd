@@ -13,14 +13,14 @@ flowchart TB
     Software["<b>Software</b><br>IAO_0000010 software"]:::local
     Computer["<b>Computer</b><br>PMD_0000582 computing device"]:::local
 
-    Simulation -. "executes<br>STATO_0000102" .-> Specification
+    Simulation -. "concretizes<br>RO_0000059" .-> Specification
     Specification -. "has part<br>BFO_0000051" .-> Task
     Simulation -. "has part<br>BFO_0000051" .-> ModelSolution
     ModelSolution -. "has specified input<br>OBI_0000293" .-> Model
-    ModelSolution -. "executes<br>STATO_0000102" .-> Solver
+    ModelSolution -. "concretizes<br>RO_0000059" .-> Solver
     Simulation -. "has specified input<br>OBI_0000293" .-> Input
     Simulation -. "has specified output<br>OBI_0000299" .-> Result
-    Simulation -. "executes<br>STATO_0000102" .-> Software
+    Simulation -. "concretizes<br>RO_0000059" .-> Software
     Simulation -. "has participant<br>RO_0000057" .-> Computer
 
     classDef local fill:#dbeafe,stroke:#1d4ed8,stroke-width:2px,color:#0f172a

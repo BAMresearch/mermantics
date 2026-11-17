@@ -80,7 +80,7 @@ const META: Meta[] = [
   },
   {
     id: "b-method-tree", letter: "B", title: "Method tree",
-    summary: "One asserted tree by method: DFT, MD, Monte Carlo, FEM, CFD, phase field. ASMO does this for atomistic methods.",
+    summary: "One asserted tree by method: DFT, MD, Monte Carlo, FEM, CFD, phase field. ASMO has a method tree too, but as methods linked from a simulation, not as kinds of simulation.",
     kinds: "One asserted class per method, and combined classes for a purpose, such as DFT geometry optimization.",
     gains: "Familiar. Easy to tag data with.",
     costs: "This is the method axis in a mid-level ontology. It grows with every method and every pair of method and purpose.",
@@ -88,8 +88,8 @@ const META: Meta[] = [
   },
   {
     id: "c-model-level", letter: "C", title: "One axis: model level",
-    summary: "simulation process split by the level of the model's physics equation, as in CWA 17284: electronic, "
-      + "atomistic, mesoscopic, continuum, plus data-based.",
+    summary: "simulation process split by the level of the model's physics equation: electronic, "
+      + "atomistic, mesoscopic, continuum (CWA 17284), plus data-based (RoMM).",
     kinds: "One asserted class per level. Methods only in domain ontologies. Task and solver are links.",
     gains: "Simple. No method in the core. Covers materials science and engineering the same way.",
     costs: "Multiscale and QM/MM need two parents. Task and solver are second class.",

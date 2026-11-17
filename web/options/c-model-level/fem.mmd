@@ -12,11 +12,11 @@ flowchart TB
     Node["<b>Workstation</b><br>PMD_0000582 computing device"]:::local
     Note["<b>What to look at</b><br>Same shape as the DFT case, with another level class."]:::note
 
-    Analysis -. "executes<br>STATO_0000102" .-> Task
-    Analysis -. "executes<br>STATO_0000102" .-> Solver
+    Analysis -. "achieves_planned_objective<br>OBI_0000417" .-> Task
+    Analysis -. "concretizes<br>RO_0000059" .-> Solver
     Analysis -. "has specified input<br>OBI_0000293" .-> Mesh
     Analysis -. "has specified output<br>OBI_0000299" .-> Stress
-    Analysis -. "executes<br>STATO_0000102" .-> Code
+    Analysis -. "concretizes<br>RO_0000059" .-> Code
     Analysis -. "has participant<br>RO_0000057" .-> Node
 
     classDef local fill:#dbeafe,stroke:#1d4ed8,stroke-width:2px,color:#0f172a

@@ -1,7 +1,7 @@
 flowchart TB
 
 %% Option C. One axis, model level: terms
-%% simulation process split by the level of the model's physics equation (CWA 17284).
+%% simulation process split by the level of the model's physics equation (CWA 17284; data-based from RoMM).
 %% Task and solver are linked, not subclasses. Added for comparison.
 
     Computing["<b>computing process</b><br>PMD_0000583 computing process"]:::local
@@ -50,8 +50,8 @@ flowchart TB
     Task --> ParameterTask
     Task --> OptimizationTask
     Solver --> MCMethod
-    Simulation -. "executes<br>STATO_0000102" .-> Task
-    Simulation -. "executes<br>STATO_0000102" .-> Solver
+    Simulation -. "achieves_planned_objective<br>OBI_0000417" .-> Task
+    Simulation -. "concretizes<br>RO_0000059" .-> Solver
 
     classDef local fill:#dbeafe,stroke:#1d4ed8,stroke-width:2px,color:#0f172a
     classDef note fill:#fffbeb,stroke:#d97706,color:#374151
