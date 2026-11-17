@@ -13,11 +13,9 @@ from dataclasses import dataclass, field
 from .model import WARNING, Edge, Finding, Node
 
 ID = r"[A-Za-z_][\w-]*"
-# Stop endpoint names at complete solid connectors, not at every double hyphen.
-_EDGE_ID = r"[A-Za-z_](?:(?!--[-ox>])[\w-])*"
-# Within a style token, --o/--x are text (node--other, node--xray).
-# Still stop at an adjacent solid arrow or undirected connector.
-_EDGE_CSS = r"(?:(?!--[->])[\w-])+"
+# Double hyphens begin a connector or label; single hyphens remain in names.
+_EDGE_ID = r"[A-Za-z_](?:(?!--)[\w-])*"
+_EDGE_CSS = r"(?:(?!--)[\w-])+"
 
 # Statements that carry no model information.
 _SKIP_RE = re.compile(
@@ -35,11 +33,12 @@ _SHAPES = [
 
 # A complete connector cannot be reinterpreted as a label opener. Unquoted
 # labels stop at their own style's delimiter; other styles are ordinary text.
-# Quoted and pipe-delimited labels retain their explicit boundaries.
+# Dotted labels close with .-> or -.->; consume the optional leading dash
+# as part of the connector, not the label. Quotes/pipes keep explicit boundaries.
 _EDGE_RE = re.compile(
     rf"""^(?P<src>{_EDGE_ID})(?::::(?P<src_css>{_EDGE_CSS}))?\s*
     (?:
-        -\.(?![.ox-])\s*(?P<l1>"[^"]*"|(?:(?!\.-)[^"])*?)\s*\.+->  # A -. label .-> B
+        -\.(?![.-])\s*(?P<l1>"[^"]*"|(?:(?!-?\.+-)[^"])*?)\s*-?\.+->  # A -. label .-> B
       | -\.+->\s*(?:\|(?P<l2>[^|]*)\|)?            # A -.-> B  or  A -.->|label| B
       | ==(?![=>ox])\s*(?P<l3>"[^"]*"|(?:(?!==)[^"])*?)\s*=+>  # A == label ==> B
       | =+>\s*(?:\|(?P<l4>[^|]*)\|)?               # A ==> B   or  A ==>|label| B
@@ -70,9 +69,8 @@ def _parse_node(line: str):
     if not m:
         return None
     node_id, rest = m.group(1), line[m.end():]
-    # A compact arrow's > is not a flag-shape opener. Whitespace separates
-    # a genuine flag definition from an ID that happens to end in --.
-    if node_id.endswith("--") and m.end(1) == m.end() and rest.startswith(">"):
+    # Double hyphens introduce edge syntax, including before a flag opener.
+    if "--" in node_id:
         return None
     for opening, _ in _SHAPES:
         if not rest.startswith(opening):

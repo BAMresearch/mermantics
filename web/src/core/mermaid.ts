@@ -12,11 +12,9 @@ import { S, W, W_MEMBERS, lstrip, rstrip, splitlines, strip } from "./py.js";
 const WORD = `[${W_MEMBERS}]+`; // Python \w+
 const CSS = `[${W_MEMBERS}-]+`; // Python [\w-]+
 const ID = `[A-Za-z_][${W_MEMBERS}-]*`;
-// Stop endpoint names at complete solid connectors, not at every double hyphen.
-const EDGE_ID = `[A-Za-z_](?:(?!--[-ox>])[${W_MEMBERS}-])*`;
-// Within a style token, --o/--x are text (node--other, node--xray).
-// Still stop at an adjacent solid arrow or undirected connector.
-const EDGE_CSS = `(?:(?!--[->])[${W_MEMBERS}-])+`;
+// Double hyphens begin a connector or label; single hyphens remain in names.
+const EDGE_ID = `[A-Za-z_](?:(?!--)[${W_MEMBERS}-])*`;
+const EDGE_CSS = `(?:(?!--)[${W_MEMBERS}-])+`;
 
 // Statements that carry no model information.
 const SKIP_RE = new RegExp(
@@ -36,10 +34,11 @@ const SHAPES: [string, string][] = [
 
 // Complete connectors cannot become label openers. Unquoted labels stop at
 // their own style’s delimiter; other styles are text. Quotes/pipes delimit labels.
+// Dotted labels close with .-> or -.->; the optional dash belongs to the connector.
 const EDGE_RE = new RegExp(
   `^(?<src>${EDGE_ID})(?::::(?<src_css>${EDGE_CSS}))?${S}*` +
   "(?:" +
-    `-\\.(?![.ox-])${S}*(?<l1>"[^"]*"|(?:(?!\\.-)[^"])*?)${S}*\\.+->` + //       A -. label .-> B
+    `-\\.(?![.-])${S}*(?<l1>"[^"]*"|(?:(?!-?\\.+-)[^"])*?)${S}*-?\\.+->` + //       A -. label .-> B
     `|-\\.+->${S}*(?:\\|(?<l2>[^|]*)\\|)?` + //            A -.-> B  or  A -.->|label| B
     `|==(?![=>ox])${S}*(?<l3>"[^"]*"|(?:(?!==)[^"])*?)${S}*=+>` + //          A == label ==> B
     `|=+>${S}*(?:\\|(?<l4>[^|]*)\\|)?` + //               A ==> B   or  A ==>|label| B
@@ -147,9 +146,8 @@ export function matchNode(line: string): NodeMatch | null {
   const nodeId = m[1]!;
   const offset = m[0].length;
   const rest = line.slice(offset);
-  // A compact arrow's > is not a flag opener. Whitespace still permits a
-  // genuine flag definition whose ID happens to end in --.
-  if (nodeId.endsWith("--") && offset === nodeId.length && rest.startsWith(">")) return null;
+  // Double hyphens introduce edge syntax, including before a flag opener.
+  if (nodeId.includes("--")) return null;
   for (const [opening] of SHAPES) {
     if (!rest.startsWith(opening)) continue;
     // Choose the opening once and stop at the earliest of its closing variants.

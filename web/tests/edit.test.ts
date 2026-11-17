@@ -380,3 +380,24 @@ describe("new diagram", () => {
     expect(text).toBe('flowchart TB\n    A["a"]\n');
   });
 });
+
+test.each([
+  ['A:::node--selected --> C', 'A:::node--"updated" --> C'],
+  ['A -.o B -.-> C', 'A -."updated" -.-> C'],
+  ['A-.xB-.->C', 'A-."updated"-.->C'],
+])("editing a labelled relation preserves its connector and styles: %s", (line, updated) => {
+  const prefix = 'flowchart TB\nA["a"]\nC["c"]\n  ';
+  const suffix = '\n%% surrounding source\n';
+  const text = prefix + line + suffix;
+  expect(mermaid.parse(text).edges[0]!.kind).toBe("relation");
+  const result = apply(text, edit.updateArrow(text, 0, {
+    src: "A", dst: "C", kind: "relation", label: "updated",
+  }));
+  expect(result).toBe(prefix + updated + suffix);
+  const diagram = mermaid.parse(result);
+  expect(diagram.edges).toHaveLength(1);
+  expect(diagram.edges[0]).toMatchObject({ src: "A", dst: "C", kind: "relation", label: "updated" });
+  expect([...diagram.nodes.keys()]).toEqual(["A", "C"]);
+  expect(diagram.nodes.get("A")!.css).toEqual(new Set(line.includes(":::node") ? ["node"] : []));
+  expect(diagram.findings).toEqual([]);
+});

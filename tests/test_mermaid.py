@@ -121,6 +121,7 @@ STATEMENTS = json.loads((FIXTURES / "mermaid-statements.json").read_text())
 def test_unsupported_compound_statements(line):
     d = parse(f'flowchart TB\nKeep["keep"]\n{line}\nAfter["after"]\n')
     assert list(d.nodes) == ["Keep", "After"]
+    assert all(not n.css for n in d.nodes.values())
     assert d.edges == []
     assert [(f.level, f.check, f.message, f.where, f.details) for f in d.findings] == [
         ("warning", "parse", STATEMENTS["message"], "line 3", line)
@@ -151,18 +152,20 @@ def test_statement_edge_compatibility(case):
 def test_mixed_chains_with_declared_nodes(line):
     d = parse('flowchart TB\nA["a"]\nB["b"]\nC["c"]\nD["d"]\n' + line)
     assert [(n.id, n.label) for n in d.nodes.values()] == [("A", "a"), ("B", "b"), ("C", "c"), ("D", "d")]
+    assert all(not n.css for n in d.nodes.values())
     assert d.edges == []
-    assert [(f.check, f.message, f.where, f.details) for f in d.findings] == [
-        ("parse", STATEMENTS["message"], "line 6", line)
+    assert [(f.level, f.check, f.message, f.where, f.details) for f in d.findings] == [
+        ("warning", "parse", STATEMENTS["message"], "line 6", line)
     ]
 
 
 @pytest.mark.parametrize("case", STATEMENTS["endpoints"])
-def test_hyphenated_edge_endpoints(case):
+def test_edge_endpoint_and_label_boundaries(case):
     src, dst = case["src"], case["dst"]
     d = parse(f'{src}["source"]\n{dst}["target"]\n' + case["line"])
     assert list(d.nodes) == [src, dst]
-    assert [(e.src, e.dst, e.kind, e.label) for e in d.edges] == [(src, dst, "inherit", "")]
+    assert [(e.src, e.dst, e.kind, e.label) for e in d.edges] == [(src, dst, case["kind"], case["label"])]
+    assert d.edges[0].line == 3
     assert d.nodes[src].css == set(case["srcCss"])
     assert d.nodes[dst].css == set(case["dstCss"])
     assert d.findings == []
