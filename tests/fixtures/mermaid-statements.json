@@ -24,7 +24,11 @@
     "A[\\A\\]; B[/B/]",
     "A[\\A\\] --> B[/B/]",
     "A[\\A/]; B[\\B\\]",
-    "A[\\A/] --> B[\\B\\]"
+    "A[\\A/] --> B[\\B\\]",
+    "A-->B[\"B\"]",
+    "A-->|label|B[\"B\"]",
+    "A-->B-->C[\"C\"]",
+    "A---->B[\"B\"]"
   ],
   "nodes": [
     {
@@ -134,6 +138,34 @@
       "css": [
         "local"
       ]
+    },
+    {
+      "line": "A>\"flag with --> text\"]",
+      "label": "flag with --> text",
+      "css": []
+    },
+    {
+      "line": "A >\"flag with --> text\"]",
+      "label": "flag with --> text",
+      "css": []
+    },
+    {
+      "line": "A-- >\"flag\"]",
+      "id": "A--",
+      "label": "flag",
+      "css": []
+    },
+    {
+      "line": "A--\t>\"flag\"]",
+      "id": "A--",
+      "label": "flag",
+      "css": []
+    },
+    {
+      "line": "A--B>\"flag\"]",
+      "id": "A--B",
+      "label": "flag",
+      "css": []
     }
   ],
   "edges": [
@@ -212,6 +244,14 @@
     {
       "line": "A == x B ==> B",
       "label": "x B"
+    },
+    {
+      "line": "A -. o B .-> B",
+      "label": "o B"
+    },
+    {
+      "line": "A -. x B .-> B",
+      "label": "x B"
     }
   ],
   "chains": [
@@ -249,7 +289,11 @@
     "A ==x B ==> C",
     "A:::local---B-->C",
     "A-->B:::local---C",
-    "A---B---C"
+    "A---B---C",
+    "A -.o B -.-> C",
+    "A -.x B -.-> C",
+    "A-.oB-.->C",
+    "A-.xB-.->C"
   ],
   "endpoints": [
     {
@@ -333,6 +377,35 @@
       "dst": "C--D",
       "srcCss": [],
       "dstCss": []
+    },
+    {
+      "line": "A:::node--other --> B",
+      "src": "A",
+      "dst": "B",
+      "srcCss": [
+        "node--other"
+      ],
+      "dstCss": []
+    },
+    {
+      "line": "A --> B:::node--xray",
+      "src": "A",
+      "dst": "B",
+      "srcCss": [],
+      "dstCss": [
+        "node--xray"
+      ]
+    },
+    {
+      "line": "A:::node--xray-->B:::node--other",
+      "src": "A",
+      "dst": "B",
+      "srcCss": [
+        "node--xray"
+      ],
+      "dstCss": [
+        "node--other"
+      ]
     }
   ]
 }

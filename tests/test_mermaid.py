@@ -130,9 +130,10 @@ def test_unsupported_compound_statements(line):
 @pytest.mark.parametrize("case", STATEMENTS["nodes"])
 def test_statement_node_compatibility(case):
     d = parse(case["line"])
-    assert list(d.nodes) == ["A"]
-    assert d.nodes["A"].label == case["label"]
-    assert d.nodes["A"].css == set(case["css"])
+    node_id = case.get("id", "A")
+    assert list(d.nodes) == [node_id]
+    assert d.nodes[node_id].label == case["label"]
+    assert d.nodes[node_id].css == set(case["css"])
     assert d.edges == []
     assert d.findings == []
 

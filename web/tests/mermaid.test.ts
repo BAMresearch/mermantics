@@ -115,7 +115,7 @@ const statements: {
   unsupported: string[];
   chains: string[];
   endpoints: { line: string; src: string; dst: string; srcCss: string[]; dstCss: string[] }[];
-  nodes: { line: string; label: string; css: string[] }[];
+  nodes: { id?: string; line: string; label: string; css: string[] }[];
   edges: { line: string; label: string }[];
 } = JSON.parse(fixture("mermaid-statements.json"));
 
@@ -132,11 +132,11 @@ test.each(statements.unsupported)("unsupported compound statement: %s", (line) =
   expect(mermaid.matchEdge(line)).toBeNull();
 });
 
-test.each(statements.nodes)("statement node compatibility: $line", ({ line, label, css }) => {
+test.each(statements.nodes)("statement node compatibility: $line", ({ line, label, css, id = "A" }) => {
   const d = parse(line);
-  expect([...d.nodes.keys()]).toEqual(["A"]);
-  expect(d.nodes.get("A")!.label).toBe(label);
-  expect(d.nodes.get("A")!.css).toEqual(new Set(css));
+  expect([...d.nodes.keys()]).toEqual([id]);
+  expect(d.nodes.get(id)!.label).toBe(label);
+  expect(d.nodes.get(id)!.css).toEqual(new Set(css));
   expect(d.edges).toEqual([]);
   expect(d.findings).toEqual([]);
 });
