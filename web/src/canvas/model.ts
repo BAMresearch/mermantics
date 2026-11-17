@@ -369,6 +369,10 @@ export function fromMermaid(text: string): Imported {
     }
     boxes.push({ id: node.id, type: "box", position: { x: p?.[0] ?? 0, y: p?.[1] ?? 0 }, data: { ...data, ...extra, problems: [] } });
   }
+  // Data Store kinds come from the file metadata, never from the selected editor section.
+  const boxKinds = new Map(boxes.map((b) => [b.id, b.data.kind]));
+  const isDataStoreObject = (kind: ShapeKind | undefined) =>
+    kind !== undefined && kind !== "dataset" && DATASTORE_KINDS.has(kind);
   const arrows: Arrow[] = diagram.edges.map((e, i) => {
     if (e.kind === "inherit") {
       return { id: `a${i}`, source: e.dst, target: e.src,
@@ -376,12 +380,15 @@ export function fromMermaid(text: string): Imported {
     }
     const { name, curie, words, own } = readArrow(e.label);
     // Data Store files from before the arrows had openBIS names: "parent of" is now "is parent
-    // of", and "Step has dataset Data" is now "Data is attached to Step".
-    if (own && !curie && name === "parent of") {
+    // of", and "Step has dataset Data" is now "Data is attached to Step". Only migrate
+    // links whose endpoint kinds identify that legacy meaning; leave ambiguous links alone.
+    const sourceKind = boxKinds.get(e.src);
+    const targetKind = boxKinds.get(e.dst);
+    if (own && !curie && name === "parent of" && isDataStoreObject(sourceKind) && isDataStoreObject(targetKind)) {
       return { id: `a${i}`, source: e.src, target: e.dst,
                data: { kind: "relation", name: IS_PARENT_OF, curie, words: IS_PARENT_OF, own, problems: [] } };
     }
-    if (own && !curie && name === "has dataset") {
+    if (own && !curie && name === "has dataset" && isDataStoreObject(sourceKind) && targetKind === "dataset") {
       return { id: `a${i}`, source: e.dst, target: e.src,
                data: { kind: "relation", name: IS_ATTACHED_TO, curie, words: IS_ATTACHED_TO, own, problems: [] } };
     }
