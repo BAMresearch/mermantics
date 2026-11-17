@@ -88,11 +88,11 @@ const META: Meta[] = [
   },
   {
     id: "c-model-level", letter: "C", title: "One axis: model level",
-    summary: "simulation process split by the level of the model's physics equation: electronic, "
+    summary: "Proposed modeling computation classes split by the level of the model's physics equation: electronic, "
       + "atomistic, mesoscopic, continuum (CWA 17284), plus data-based (RoMM).",
-    kinds: "One asserted class per level. Methods only in domain ontologies. Intended task is part of a plan; solver is linked. Attempts use planned process, since PMDco computing processes imply completion.",
+    kinds: "One proposed class per level under modeling computation, a proposed planned-process subclass covering incomplete runs. DFT is electronic-structure computation; FEM is continuum computation. Intended task is part of a plan; solver is linked. PMDco simulation processes still require completion.",
     gains: "Simple. No method in the core. Covers materials science and engineering the same way.",
-    costs: "Multiscale and QM/MM need two parents. Task and solver are second class.",
+    costs: "Multiscale and QM/MM can span levels; data-based is not a physical scale. Task and solver are linked separately. Input purpose remains a label convention.",
     source: "Added for comparison.",
   },
   {

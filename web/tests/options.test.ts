@@ -226,7 +226,7 @@ test("results: use case, a verdict table and every option with its diagrams", ()
 const optionC = builtInOptions().find((o) => o.letter === "C")!;
 test.each(VIEWS)("C $id: intention is a plan part, not an achieved objective", (view) => {
   const { boxes, arrows, warnings } = fromMermaid(optionC.views[view.id]);
-  const process = view.id === "terms" ? "Planned" : view.id === "dft" ? "Relaxation" : "Analysis";
+  const process = view.id === "terms" ? "Modeling" : view.id === "dft" ? "Relaxation" : "Analysis";
   expect(warnings).toEqual([]);
   const ids = Object.fromEntries(boxes.map((b) => [b.id, b.data.classId]));
   expect(ids[process]).toBe("COB_0000082");
@@ -243,6 +243,54 @@ test.each(VIEWS)("C $id: intention is a plan part, not an achieved objective", (
     expect(arrows.some((a) => a.data!.curie === "RO_0002233")).toBe(false);
     expect(edges).toContainEqual([process, "RO_0000057", view.id === "dft" ? "Structure" : "Mesh"]);
     expect(arrows.some((a) => a.data!.curie === "RO_0002234")).toBe(true);
+  }
+});
+
+test("C: proposed levels classify runs without making all planned processes simulations", () => {
+  const d = mermaid.parse(optionC.views.terms);
+  const hierarchy = d.edges.filter((e) => !e.label).map((e) => [e.src, e.dst]);
+  expect(hierarchy).toContainEqual(["Planned", "Modeling"]);
+  expect(hierarchy).toContainEqual(["Planned", "Computing"]);
+  expect(hierarchy).toContainEqual(["Computing", "Simulation"]);
+  expect(hierarchy).toContainEqual(["Modeling", "Simulation"]);
+  expect(d.edges.filter((e) => e.src === "Planned" && e.label)).toEqual([]);
+  for (const id of ["Electronic", "Atomistic", "Mesoscopic", "Continuum", "DataBased"]) {
+    expect(hierarchy).toContainEqual(["Modeling", id]);
+    expect(hierarchy).not.toContainEqual(["Simulation", id]);
+    const pending = [id];
+    const ancestors = new Set<string>();
+    while (pending.length) {
+      const child = pending.pop()!;
+      for (const [parent, target] of hierarchy) {
+        if (target !== child || ancestors.has(parent!)) continue;
+        ancestors.add(parent!);
+        pending.push(parent!);
+      }
+    }
+    expect(ancestors.has("Planned")).toBe(true);
+    expect(ancestors.has("Computing")).toBe(false);
+    expect(ancestors.has("Simulation")).toBe(false);
+    const node = d.nodes.get(id)!;
+    expect(node.css.has("proposed")).toBe(true);
+    expect(node.label).toContain("proposed class");
+    expect(node.label).toContain("COB_0000082 planned process");
+  }
+  expect(d.nodes.get("Modeling")!.css.has("proposed")).toBe(true);
+  expect(d.nodes.get("Modeling")!.label).toContain("proposed class");
+  expect(optionC.kinds).toContain("proposed planned-process subclass");
+  for (const [view, process, level, input, output] of [
+    ["dft", "Relaxation", "Electronic", "Structure", "Relaxed"],
+    ["fem", "Analysis", "Continuum", "Mesh", "Stress"],
+  ] as const) {
+    const example = mermaid.parse(optionC.views[view]);
+    const levelName = labels.segments(d.nodes.get(level)!.label)[0]!;
+    expect(example.nodes.get(process)!.label).toContain(`is a: ${levelName} (proposed)`);
+    expect(example.nodes.get(process)!.css.has("proposed")).toBe(true);
+    expect(example.nodes.get(input)!.label).toContain("input information");
+    expect(example.nodes.get("Node")!.label).toContain("computing resource");
+    expect(example.nodes.get(output)!.label).toContain("IAO_0000030 information content entity");
+    expect(example.nodes.get("Note")!.label).toContain("has participant alone does not encode it");
+    expect(optionC.kinds).toContain(levelName);
   }
 });
 

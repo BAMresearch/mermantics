@@ -1,17 +1,18 @@
 flowchart TB
 
 %% Option C. One axis, model level: terms
-%% simulation process split by the level of the model's physics equation (CWA 17284; data-based from RoMM).
+%% Proposed modeling computation split by the level of the model's physics equation (CWA 17284; data-based from RoMM).
 %% The task is part of a plan; solver is linked, not a subclass. Added for comparison.
 
     Planned["<b>planned process</b><br>COB_0000082 planned process<br><br>includes attempts; success not asserted"]:::local
+    Modeling["<b>modeling computation</b><br>COB_0000082 planned process<br><br>proposed class: computation using a scientific model<br>includes static calculations and incomplete runs"]:::proposed
     Computing["<b>computing process</b><br>PMD_0000583 computing process"]:::local
     Simulation["<b>simulation process</b><br>PMD_0000933 simulation process"]:::local
-    Electronic["<b>electronic structure simulation</b><br>PMD_0000933 simulation process<br><br>model describes electrons"]:::proposed
-    Atomistic["<b>atomistic simulation</b><br>PMD_0000933 simulation process<br><br>model describes atoms"]:::proposed
-    Mesoscopic["<b>mesoscopic simulation</b><br>PMD_0000933 simulation process<br><br>model describes grains or groups of atoms"]:::proposed
-    Continuum["<b>continuum simulation</b><br>PMD_0000933 simulation process<br><br>model describes continuum volumes"]:::proposed
-    DataBased["<b>data-based simulation</b><br>PMD_0000933 simulation process<br><br>model fitted to data"]:::proposed
+    Electronic["<b>electronic-structure computation</b><br>COB_0000082 planned process<br><br>proposed class; model describes electrons"]:::proposed
+    Atomistic["<b>atomistic computation</b><br>COB_0000082 planned process<br><br>proposed class; model describes atoms"]:::proposed
+    Mesoscopic["<b>mesoscopic computation</b><br>COB_0000082 planned process<br><br>proposed class; model describes grains or groups of atoms"]:::proposed
+    Continuum["<b>continuum computation</b><br>COB_0000082 planned process<br><br>proposed class; model describes continuum volumes"]:::proposed
+    DataBased["<b>data-based computation</b><br>COB_0000082 planned process<br><br>proposed class; model fitted to data"]:::proposed
     AIMD["<b>ab initio molecular dynamics simulation</b><br>PMD_0000504 ab initio molecular dynamics simulation<br><br>now under electronic and atomistic"]:::changed
     EmpiricalMD["<b>empirical potential molecular dynamics simulation</b><br>PMD_0000631 empirical potential molecular dynamics simulation"]:::changed
     AtomisticMC["<b>atomistic Monte Carlo simulation</b><br>PMD_0000527 atomistic monte carlo simulation"]:::changed
@@ -30,15 +31,17 @@ flowchart TB
     OptimizationTask["<b>optimization task</b><br>IAO_0000005 objective specification<br><br>to find design variables that best meet an objective under constraints"]:::proposed
     Solver["<b>simulation method specification</b><br>PMD_0000931 simulation method specification"]:::local
     MCMethod["<b>Monte Carlo method</b><br>PMD_0000931 simulation method specification"]:::proposed
-    Note["<b>What to look at</b><br>One clear rule for the tree: the level of the model. Methods go to domain ontologies.<br>Ab initio MD and QM/MM need two parents. Multiscale does not fit one level.<br>Task is part of a plan; no achievement is asserted.<br>PMDco computing processes are completely executed. Attempts use planned process; the level tree here is for completed computations."]:::note
+    Note["<b>What to look at</b><br>Proposed level classes classify modeling computations, including incomplete runs.<br>PMDco computing and simulation processes still require complete execution.<br>Level placements of existing PMDco classes are proposals; AIMD spans electronic and atomistic levels.<br>Task is part of a plan, not evidence of achievement. Data-based is an additional category, not a physical scale."]:::note
 
+    Planned --> Modeling
     Planned --> Computing
     Computing --> Simulation
-    Simulation --> Electronic
-    Simulation --> Atomistic
-    Simulation --> Mesoscopic
-    Simulation --> Continuum
-    Simulation --> DataBased
+    Modeling --> Simulation
+    Modeling --> Electronic
+    Modeling --> Atomistic
+    Modeling --> Mesoscopic
+    Modeling --> Continuum
+    Modeling --> DataBased
     Electronic --> AIMD
     Atomistic --> AIMD
     Atomistic --> EmpiricalMD
@@ -53,9 +56,9 @@ flowchart TB
     Task --> ParameterTask
     Task --> OptimizationTask
     Solver --> MCMethod
-    Planned -. "concretizes<br>RO_0000059" .-> Spec
+    Modeling -. "concretizes<br>RO_0000059" .-> Spec
     Spec -. "has part<br>BFO_0000051" .-> Task
-    Planned -. "concretizes<br>RO_0000059" .-> Solver
+    Modeling -. "concretizes<br>RO_0000059" .-> Solver
 
     classDef local fill:#dbeafe,stroke:#1d4ed8,stroke-width:2px,color:#0f172a
     classDef note fill:#fffbeb,stroke:#d97706,color:#374151
@@ -63,5 +66,5 @@ flowchart TB
     classDef changed fill:#fff7ed,stroke:#ea580c,stroke-width:2px,color:#0f172a
     classDef deprecated fill:#f1f5f9,stroke:#94a3b8,stroke-dasharray:2 2,color:#64748b
 
-%% mermantics-layout {"Planned":[0,-160],"Spec":[1128,400],"Computing":[0,0],"Simulation":[26,83],"Electronic":[52,166],"AIMD":[78,294],"Atomistic":[52,422],"EmpiricalMD":[78,531],"AtomisticMC":[78,652],"Mesoscopic":[52,754],"CoarseGrained":[78,879],"Continuum":[52,981],"DataBased":[52,1090],"MachineLearning":[78,1199],"Multiscale":[52,1282],"Task":[408,0],"PropertyTask":[434,102],"EquilibriumTask":[434,227],"TimeTask":[434,368],"SamplingTask":[434,493],"ParameterTask":[434,634],"OptimizationTask":[434,778],"Solver":[768,0],"MCMethod":[794,102],"MonteCarlo":[768,185],"StructuralOpt":[768,310],"Note":[1128,0]}
-%% mermantics-kinds {"Planned":"process","Spec":"plan","Computing":"process","Simulation":"process","Electronic":"process","Atomistic":"process","Mesoscopic":"process","Continuum":"process","DataBased":"process","AIMD":"process","EmpiricalMD":"process","AtomisticMC":"process","CoarseGrained":"process","MachineLearning":"process","Multiscale":"process","MonteCarlo":"process","StructuralOpt":"process","Task":"plan","PropertyTask":"plan","EquilibriumTask":"plan","TimeTask":"plan","SamplingTask":"plan","ParameterTask":"plan","OptimizationTask":"plan","Solver":"plan","MCMethod":"plan"}
+%% mermantics-layout {"Planned":[0,-390],"Spec":[1128,450],"Computing":[0,0],"Simulation":[26,83],"Electronic":[52,230],"AIMD":[78,410],"Atomistic":[52,590],"EmpiricalMD":[78,770],"AtomisticMC":[78,950],"Mesoscopic":[52,1130],"CoarseGrained":[78,1310],"Continuum":[52,1490],"DataBased":[52,1670],"MachineLearning":[78,1850],"Multiscale":[52,2030],"Task":[408,0],"PropertyTask":[434,102],"EquilibriumTask":[434,227],"TimeTask":[434,368],"SamplingTask":[434,493],"ParameterTask":[434,634],"OptimizationTask":[434,778],"Solver":[768,0],"MCMethod":[794,102],"MonteCarlo":[768,185],"StructuralOpt":[768,310],"Note":[1128,0],"Modeling":[0,-220]}
+%% mermantics-kinds {"Planned":"process","Spec":"plan","Computing":"process","Simulation":"process","Electronic":"process","Atomistic":"process","Mesoscopic":"process","Continuum":"process","DataBased":"process","AIMD":"process","EmpiricalMD":"process","AtomisticMC":"process","CoarseGrained":"process","MachineLearning":"process","Multiscale":"process","MonteCarlo":"process","StructuralOpt":"process","Task":"plan","PropertyTask":"plan","EquilibriumTask":"plan","TimeTask":"plan","SamplingTask":"plan","ParameterTask":"plan","OptimizationTask":"plan","Solver":"plan","MCMethod":"plan","Modeling":"process"}

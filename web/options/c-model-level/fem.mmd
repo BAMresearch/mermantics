@@ -3,15 +3,15 @@ flowchart TB
 %% Option C. One axis, model level: static FEM analysis
 %% Engineering: a static finite element analysis of a loaded steel bracket.
 
-    Analysis["<b>Static analysis of a bracket</b><br>COB_0000082 planned process<br><br>continuum model; completion not asserted"]:::proposed
+    Analysis["<b>Static analysis of a bracket</b><br>COB_0000082 planned process<br><br>is a: continuum computation (proposed)<br>completion not asserted"]:::proposed
     Spec["<b>Simulation plan</b><br>IAO_0000104 plan specification<br><br>actions, settings and intended objective"]:::local
     Task["<b>Find the stresses under load</b><br>IAO_0000005 objective specification<br><br>is a: equilibrium task"]:::proposed
     Solver["<b>Finite element method</b><br>PMD_0000931 simulation method specification<br><br>element type, material law in the settings"]:::local
-    Mesh["<b>Mesh of the bracket, loads and supports</b><br>IAO_0000030 information content entity"]:::local
-    Stress["<b>Produced stress and displacement data</b><br>PMD_0025035 calculation datum"]:::local
+    Mesh["<b>Mesh of the bracket, loads and supports (input information)</b><br>IAO_0000030 information content entity"]:::local
+    Stress["<b>Produced stress and displacement data</b><br>IAO_0000030 information content entity"]:::local
     Code["<b>FE solver</b><br>IAO_0000010 software<br><br>name, version"]:::local
-    Node["<b>Workstation</b><br>PMD_0000582 computing device"]:::local
-    Note["<b>What to look at</b><br>Same plan/task pattern as DFT, with a continuum model.<br>Planned process allows failed, interrupted or unconverged attempts without asserting completion.<br>Output is shown only when produced; it does not establish convergence or achievement."]:::note
+    Node["<b>Workstation (computing resource)</b><br>PMD_0000582 computing device"]:::local
+    Note["<b>What to look at</b><br>Explicit type: proposed continuum computation; same plan/task pattern as DFT.<br>Planned process allows failed, interrupted or unconverged attempts without asserting completion.<br>Output is shown only when produced by an ended run; it does not establish convergence or achievement.<br>Input purpose is a label convention; has participant alone does not encode it."]:::note
 
     Analysis -. "concretizes<br>RO_0000059" .-> Spec
     Spec -. "has part<br>BFO_0000051" .-> Task
