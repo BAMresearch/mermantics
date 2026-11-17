@@ -124,7 +124,11 @@ jobs:
 ## Limitations
 
 - Only flowcharts. Nodes defined inline inside an arrow (`A["x"] --> B`) are not
-  supported; define the node on its own line.
+  supported; define the node on its own line. Compound node statements
+  (`A["x"]; B["y"]`) and chained arrows (`A --> B --> C`) are also unsupported.
+  These lines are ignored in full and reported with their line number; write one
+  node definition or one arrow per line. Quoted labels can contain brackets and
+  arrow-like text, for example `A["a ] --> b"]`.
 - The example-data check uses one instance per box. A box that is both input and output
   of the same process gets one instance for both.
 - Domain and range checks understand named classes, unions and intersections; other

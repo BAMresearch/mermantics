@@ -65,7 +65,16 @@ def _parse_node(line: str):
     for opening, closing in _SHAPES:
         if not rest.startswith(opening):
             continue
-        end = rest.rfind(closing)
+        # The first closing marker outside quotes ends the node. Searching from
+        # the right would absorb later node definitions into this node's label.
+        quoted = False
+        end = -1
+        for i in range(len(opening), len(rest)):
+            if rest[i] == '"':
+                quoted = not quoted
+            elif not quoted and rest.startswith(closing, i):
+                end = i
+                break
         if end < len(opening):
             continue
         body = rest[len(opening):end]
@@ -107,7 +116,11 @@ def parse(text: str) -> Diagram:
             pending_css.append((ids, m.group(2), number))
             continue
 
-        m = _EDGE_RE.match(line)
+        # Arrow-like text in quoted or pipe-delimited labels is ordinary text.
+        # Outside those labels, multiple arrowheads indicate an unsupported chain.
+        outside_labels = re.sub(r'"[^"]*"|\|[^|]*\|', "", line)
+        chained = len(re.findall(r"-+>|=+>", outside_labels)) > 1
+        m = None if chained else _EDGE_RE.match(line)
         if m:
             label = next((m.group(g) for g in ("l1", "l2", "l3", "l4", "l5", "l6") if m.group(g)), "")
             label = _unquote(label)
@@ -140,7 +153,8 @@ def parse(text: str) -> Diagram:
             continue
 
         diagram.findings.append(Finding(
-            WARNING, "parse", "line not understood, ignored", where=f"line {number}", details=line))
+            WARNING, "parse", "unsupported syntax, ignored (use one node definition or arrow per line)",
+            where=f"line {number}", details=line))
 
     for ids, css, number in pending_css:
         for node_id in ids:

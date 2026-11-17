@@ -118,6 +118,10 @@ export function matchClassStatement(line: string): ClassMatch | null {
 }
 
 export function matchEdge(line: string): EdgeMatch | null {
+  // Ignore arrow-like text inside quoted or pipe-delimited labels, but never
+  // absorb a chain's middle nodes into the label of a single arrow.
+  const outsideLabels = line.replace(/"[^"]*"|\|[^|]*\|/gu, "");
+  if ([...outsideLabels.matchAll(/-+>|=+>/gu)].length > 1) return null;
   const m = EDGE_RE.exec(line);
   if (!m) return null;
   const g = m.groups!;
@@ -144,7 +148,16 @@ export function matchNode(line: string): NodeMatch | null {
   const rest = line.slice(offset);
   for (const [opening, closing] of SHAPES) {
     if (!rest.startsWith(opening)) continue;
-    const end = rest.lastIndexOf(closing);
+    // Stop at the first closing marker outside quotes, not a later node's end.
+    let quoted = false;
+    let end = -1;
+    for (let i = opening.length; i < rest.length; i++) {
+      if (rest[i] === '"') quoted = !quoted;
+      else if (!quoted && rest.startsWith(closing, i)) {
+        end = i;
+        break;
+      }
+    }
     if (end < opening.length) continue;
     const body = rest.slice(opening.length, end);
     const after = rest.slice(end + closing.length);
@@ -227,7 +240,8 @@ export function parse(text: string): Diagram {
     }
 
     diagram.findings.push(finding(
-      WARNING, "parse", "line not understood, ignored", `line ${number}`, line, { line: number }));
+      WARNING, "parse", "unsupported syntax, ignored (use one node definition or arrow per line)",
+      `line ${number}`, line, { line: number }));
   }
 
   for (const [ids, css, number] of pendingCss) {

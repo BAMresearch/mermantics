@@ -108,3 +108,40 @@ test("style class on arrow ends", () => {
   expect(d.nodes.get("B")!.css).toEqual(new Set(["vocab"]));
   expect(d.edges[0]!.kind).toBe("inherit");
 });
+
+// Hand-written expectations shared with Python; not generated golden output.
+const statements: {
+  message: string;
+  unsupported: string[];
+  nodes: { line: string; label: string; css: string[] }[];
+  edges: { line: string; label: string }[];
+} = JSON.parse(fixture("mermaid-statements.json"));
+
+test.each(statements.unsupported)("unsupported compound statement: %s", (line) => {
+  const d = parse(`flowchart TB\nKeep["keep"]\n${line}\nAfter["after"]\n`);
+  expect([...d.nodes.keys()]).toEqual(["Keep", "After"]);
+  expect(d.edges).toEqual([]);
+  expect(d.findings).toHaveLength(1);
+  expect(d.findings[0]).toMatchObject({
+    level: "warning", check: "parse", message: statements.message,
+    where: "line 3", details: line, line: 3,
+  });
+  expect(mermaid.matchNode(line)).toBeNull();
+  expect(mermaid.matchEdge(line)).toBeNull();
+});
+
+test.each(statements.nodes)("statement node compatibility: $line", ({ line, label, css }) => {
+  const d = parse(line);
+  expect([...d.nodes.keys()]).toEqual(["A"]);
+  expect(d.nodes.get("A")!.label).toBe(label);
+  expect(d.nodes.get("A")!.css).toEqual(new Set(css));
+  expect(d.edges).toEqual([]);
+  expect(d.findings).toEqual([]);
+});
+
+test.each(statements.edges)("statement edge compatibility: $line", ({ line, label }) => {
+  const d = parse(`A["a"]\nB["b"]\n${line}`);
+  expect(d.edges).toHaveLength(1);
+  expect(d.edges[0]).toMatchObject({ src: "A", dst: "B", kind: "relation", label });
+  expect(d.findings).toEqual([]);
+});

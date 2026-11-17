@@ -1,0 +1,157 @@
+{
+  "message": "unsupported syntax, ignored (use one node definition or arrow per line)",
+  "unsupported": [
+    "A[\"A\"] --> B[\"B\"]",
+    "A[\"A\"]; B[\"B\"]",
+    "A --> B --> C",
+    "A[\"A\"] --> B",
+    "A --> B[\"B\"]",
+    "A[A] --> B[B]",
+    "A[A]; B[B]",
+    "A -.-> B -.-> C",
+    "A ==> B ==> C",
+    "A --> B -.-> C",
+    "A -- first --> B -- second --> C",
+    "A -->|first| B -->|second| C",
+    "A:::local --> B:::local --> C",
+    "A((\"A\")); B((\"B\"))",
+    "A[\"a ] --> b\"] --> B",
+    "A[\"A\"] B[\"B\"]"
+  ],
+  "nodes": [
+    {
+      "line": "A[\"a ] --> b\"]",
+      "label": "a ] --> b",
+      "css": []
+    },
+    {
+      "line": "A[plain label]:::local;",
+      "label": "plain label",
+      "css": [
+        "local"
+      ]
+    },
+    {
+      "line": "A[\"&quot; &#124; &amp; #59; <br>\"]",
+      "label": "&quot; &#124; &amp; #59; <br>",
+      "css": []
+    },
+    {
+      "line": "A[[\"a ]] --> b; B[other]\"]]:::local;",
+      "label": "a ]] --> b; B[other]",
+      "css": [
+        "local"
+      ]
+    },
+    {
+      "line": "A[(\"a )] --> b; B[other]\")]:::local;",
+      "label": "a )] --> b; B[other]",
+      "css": [
+        "local"
+      ]
+    },
+    {
+      "line": "A([\"a ]) --> b; B[other]\"]):::local;",
+      "label": "a ]) --> b; B[other]",
+      "css": [
+        "local"
+      ]
+    },
+    {
+      "line": "A((\"a )) --> b; B[other]\")):::local;",
+      "label": "a )) --> b; B[other]",
+      "css": [
+        "local"
+      ]
+    },
+    {
+      "line": "A{{\"a }} --> b; B[other]\"}}:::local;",
+      "label": "a }} --> b; B[other]",
+      "css": [
+        "local"
+      ]
+    },
+    {
+      "line": "A[/\"a /] --> b; B[other]\"/]:::local;",
+      "label": "a /] --> b; B[other]",
+      "css": [
+        "local"
+      ]
+    },
+    {
+      "line": "A[\\\"a \\] --> b; B[other]\"\\]:::local;",
+      "label": "a \\] --> b; B[other]",
+      "css": [
+        "local"
+      ]
+    },
+    {
+      "line": "A[/\"a \\] --> b; B[other]\"\\]:::local;",
+      "label": "a \\] --> b; B[other]",
+      "css": [
+        "local"
+      ]
+    },
+    {
+      "line": "A[\\\"a /] --> b; B[other]\"/]:::local;",
+      "label": "a /] --> b; B[other]",
+      "css": [
+        "local"
+      ]
+    },
+    {
+      "line": "A>\"a ] --> b; B[other]\"]:::local;",
+      "label": "a ] --> b; B[other]",
+      "css": [
+        "local"
+      ]
+    },
+    {
+      "line": "A[\"a ] --> b; B[other]\"]:::local;",
+      "label": "a ] --> b; B[other]",
+      "css": [
+        "local"
+      ]
+    },
+    {
+      "line": "A(\"a ) --> b; B[other]\"):::local;",
+      "label": "a ) --> b; B[other]",
+      "css": [
+        "local"
+      ]
+    },
+    {
+      "line": "A{\"a } --> b; B[other]\"}:::local;",
+      "label": "a } --> b; B[other]",
+      "css": [
+        "local"
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "line": "A -- \"a --> b .-> c ==> d\" --> B",
+      "label": "a --> b .-> c ==> d"
+    },
+    {
+      "line": "A -. \"a ] ; b\" .-> B",
+      "label": "a ] ; b"
+    },
+    {
+      "line": "A -->|a --> b| B",
+      "label": "a --> b"
+    },
+    {
+      "line": "A -- <b>has part</b> --> B",
+      "label": "<b>has part</b>"
+    },
+    {
+      "line": "A == \"a ==> b\" ==> B",
+      "label": "a ==> b"
+    },
+    {
+      "line": "A -->|&quot; &#124; &amp;| B",
+      "label": "&quot; &#124; &amp;"
+    }
+  ]
+}
