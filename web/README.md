@@ -66,6 +66,19 @@ change; that Mermaid text is what is checked, saved and downloaded. Box position
 (the shape a box is drawn as), use case notes and patterns go into `%% mermantics-...`
 comment lines, which Mermaid and the checker ignore.
 
+Box labels keep the name on the first line, ontology and BAM Data Store fields next,
+and free notes after a blank line (`<br><br>`). Import always reserves the first line
+for the name, including an empty name; surrounding name whitespace is trimmed, so a
+whitespace-only name becomes empty. After the separator, ontology IDs and prefixes
+such as `Project:` or `Object type:` are ordinary notes. Note and vocabulary boxes
+keep all lines after the name as text or vocabulary entries. No additional metadata
+is needed for this convention, and the labels remain readable in Mermaid.
+
+Older files without a blank separator still open, but an ID-leading line or BAM field
+prefix after the name can be ambiguous: it is read as a structured field where applicable.
+Insert a blank line before free notes to disambiguate such files. A field already lost
+by saving with an older importer cannot be reconstructed automatically.
+
 Click a box to edit its full details in the side panel, or double-click it to rename it
 on the canvas. Enter or clicking away saves the name; Esc cancels. Saved edits update
 the Mermaid source and rerun checks in sections that support checking.
