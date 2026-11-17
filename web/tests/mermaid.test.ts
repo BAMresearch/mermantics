@@ -113,6 +113,7 @@ test("style class on arrow ends", () => {
 const statements: {
   message: string;
   unsupported: string[];
+  chains: string[];
   nodes: { line: string; label: string; css: string[] }[];
   edges: { line: string; label: string }[];
 } = JSON.parse(fixture("mermaid-statements.json"));
@@ -144,4 +145,16 @@ test.each(statements.edges)("statement edge compatibility: $line", ({ line, labe
   expect(d.edges).toHaveLength(1);
   expect(d.edges[0]).toMatchObject({ src: "A", dst: "B", kind: "relation", label });
   expect(d.findings).toEqual([]);
+});
+
+
+test.each(statements.chains)("mixed chain with declared nodes: %s", (line) => {
+  const d = parse(`flowchart TB\nA["a"]\nB["b"]\nC["c"]\n${line}`);
+  expect([...d.nodes.values()].map((n) => [n.id, n.label])).toEqual([["A", "a"], ["B", "b"], ["C", "c"]]);
+  expect(d.edges).toEqual([]);
+  expect(d.findings).toHaveLength(1);
+  expect(d.findings[0]).toMatchObject({
+    check: "parse", message: statements.message, where: "line 5", details: line, line: 5,
+  });
+  expect(mermaid.matchEdge(line)).toBeNull();
 });

@@ -16,7 +16,15 @@
     "A:::local --> B:::local --> C",
     "A((\"A\")); B((\"B\"))",
     "A[\"a ] --> b\"] --> B",
-    "A[\"A\"] B[\"B\"]"
+    "A[\"A\"] B[\"B\"]",
+    "A[/A/]; B[\\B\\]",
+    "A[/A/] --> B[\\B\\]",
+    "A[/A\\]; B[/B/]",
+    "A[/A\\] --> B[/B/]",
+    "A[\\A\\]; B[/B/]",
+    "A[\\A\\] --> B[/B/]",
+    "A[\\A/]; B[\\B\\]",
+    "A[\\A/] --> B[\\B\\]"
   ],
   "nodes": [
     {
@@ -152,6 +160,29 @@
     {
       "line": "A -->|&quot; &#124; &amp;| B",
       "label": "&quot; &#124; &amp;"
+    },
+    {
+      "line": "A -- temperature -> pressure --> B",
+      "label": "temperature -> pressure"
+    },
+    {
+      "line": "A -. temperature -> pressure .-> B",
+      "label": "temperature -> pressure"
+    },
+    {
+      "line": "A == temperature -> pressure ==> B",
+      "label": "temperature -> pressure"
     }
+  ],
+  "chains": [
+    "A --- B --> C",
+    "A -.- B -.-> C",
+    "A === B ==> C",
+    "A --> B --- C",
+    "A -.-> B -.- C",
+    "A ==> B === C",
+    "A --- B -.-> C",
+    "A -.- B ==> C",
+    "A === B --> C"
   ]
 }

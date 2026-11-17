@@ -62,26 +62,30 @@ def _parse_node(line: str):
     if not m:
         return None
     node_id, rest = m.group(1), line[m.end():]
-    for opening, closing in _SHAPES:
+    for opening, _ in _SHAPES:
         if not rest.startswith(opening):
             continue
-        # The first closing marker outside quotes ends the node. Searching from
-        # the right would absorb later node definitions into this node's label.
+        # Choose the opening once, then stop at the earliest of all its closing
+        # variants. Retrying another variant can absorb a subsequent node.
+        closings = [close for op, close in _SHAPES if op == opening]
         quoted = False
         end = -1
+        closing = ""
         for i in range(len(opening), len(rest)):
             if rest[i] == '"':
                 quoted = not quoted
-            elif not quoted and rest.startswith(closing, i):
-                end = i
-                break
+            elif not quoted:
+                closing = next((close for close in closings if rest.startswith(close, i)), "")
+                if closing:
+                    end = i
+                    break
         if end < len(opening):
-            continue
+            return None
         body = rest[len(opening):end]
         tail = rest[end + len(closing):].strip().rstrip(";").strip()
         tm = re.fullmatch(r"(?::::([\w-]+))?", tail)
         if tm is None:
-            continue
+            return None
         return node_id, _unquote(body), tm.group(1)
     return None
 
@@ -117,9 +121,11 @@ def parse(text: str) -> Diagram:
             continue
 
         # Arrow-like text in quoted or pipe-delimited labels is ordinary text.
-        # Outside those labels, multiple arrowheads indicate an unsupported chain.
-        outside_labels = re.sub(r'"[^"]*"|\|[^|]*\|', "", line)
-        chained = len(re.findall(r"-+>|=+>", outside_labels)) > 1
+        # Count complete connectors, including undirected ones, rather than
+        # arrowheads: a single-dash -> can be ordinary unquoted label text.
+        # The -- / -. / == label openers are not complete connectors.
+        outside_labels = re.sub(r'"[^"]*"|\|[^|]*\|', " ", line)
+        chained = len(re.findall(r"-{2,}>|-\.+->|\.+->|=+>|-{3,}|-\.+-|={3,}", outside_labels)) > 1
         m = None if chained else _EDGE_RE.match(line)
         if m:
             label = next((m.group(g) for g in ("l1", "l2", "l3", "l4", "l5", "l6") if m.group(g)), "")

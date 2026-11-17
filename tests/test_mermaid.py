@@ -144,3 +144,13 @@ def test_statement_edge_compatibility(case):
         ("A", "B", "relation", case["label"])
     ]
     assert d.findings == []
+
+
+@pytest.mark.parametrize("line", STATEMENTS["chains"])
+def test_mixed_chains_with_declared_nodes(line):
+    d = parse('flowchart TB\nA["a"]\nB["b"]\nC["c"]\n' + line)
+    assert [(n.id, n.label) for n in d.nodes.values()] == [("A", "a"), ("B", "b"), ("C", "c")]
+    assert d.edges == []
+    assert [(f.check, f.message, f.where, f.details) for f in d.findings] == [
+        ("parse", STATEMENTS["message"], "line 5", line)
+    ]

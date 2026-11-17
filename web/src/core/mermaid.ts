@@ -118,10 +118,10 @@ export function matchClassStatement(line: string): ClassMatch | null {
 }
 
 export function matchEdge(line: string): EdgeMatch | null {
-  // Ignore arrow-like text inside quoted or pipe-delimited labels, but never
-  // absorb a chain's middle nodes into the label of a single arrow.
-  const outsideLabels = line.replace(/"[^"]*"|\|[^|]*\|/gu, "");
-  if ([...outsideLabels.matchAll(/-+>|=+>/gu)].length > 1) return null;
+  // Count complete connectors outside quoted/pipe labels, including undirected
+  // ones. A single-dash -> is label text; -- / -. / == are only label openers.
+  const outsideLabels = line.replace(/"[^"]*"|\|[^|]*\|/gu, " ");
+  if ([...outsideLabels.matchAll(/-{2,}>|-\.+->|\.+->|=+>|-{3,}|-\.+-|={3,}/gu)].length > 1) return null;
   const m = EDGE_RE.exec(line);
   if (!m) return null;
   const g = m.groups!;
@@ -146,24 +146,30 @@ export function matchNode(line: string): NodeMatch | null {
   const nodeId = m[1]!;
   const offset = m[0].length;
   const rest = line.slice(offset);
-  for (const [opening, closing] of SHAPES) {
+  for (const [opening] of SHAPES) {
     if (!rest.startsWith(opening)) continue;
-    // Stop at the first closing marker outside quotes, not a later node's end.
+    // Choose the opening once and stop at the earliest of its closing variants.
+    // Retrying a different variant can absorb a subsequent node.
+    const closings = SHAPES.filter(([op]) => op === opening).map(([, close]) => close);
     let quoted = false;
     let end = -1;
+    let closing = "";
     for (let i = opening.length; i < rest.length; i++) {
       if (rest[i] === '"') quoted = !quoted;
-      else if (!quoted && rest.startsWith(closing, i)) {
-        end = i;
-        break;
+      else if (!quoted) {
+        closing = closings.find((close) => rest.startsWith(close, i)) ?? "";
+        if (closing) {
+          end = i;
+          break;
+        }
       }
     }
-    if (end < opening.length) continue;
+    if (end < opening.length) return null;
     const body = rest.slice(opening.length, end);
     const after = rest.slice(end + closing.length);
     const tail = strip(rstrip(strip(after), ";"));
     const tm = NODE_TAIL_RE.exec(tail);
-    if (tm === null) continue;
+    if (tm === null) return null;
     const closeEnd = offset + end + closing.length;
     const css = tm[1];
     const cssStart = closeEnd + leading(after);
