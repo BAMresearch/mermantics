@@ -108,3 +108,78 @@ test("style class on arrow ends", () => {
   expect(d.nodes.get("B")!.css).toEqual(new Set(["vocab"]));
   expect(d.edges[0]!.kind).toBe("inherit");
 });
+
+// Hand-written expectations shared with Python; not generated golden output.
+const statements: {
+  message: string;
+  unsupported: string[];
+  chains: string[];
+  endpoints: { line: string; src: string; dst: string; srcCss: string[]; dstCss: string[]; kind: "inherit" | "relation"; label: string }[];
+  nodes: { id?: string; line: string; label: string; css: string[] }[];
+  edges: { line: string; label: string }[];
+} = JSON.parse(fixture("mermaid-statements.json"));
+
+test.each(statements.unsupported)("unsupported compound statement: %s", (line) => {
+  const d = parse(`flowchart TB\nKeep["keep"]\n${line}\nAfter["after"]\n`);
+  expect([...d.nodes.keys()]).toEqual(["Keep", "After"]);
+  for (const node of d.nodes.values()) expect(node.css).toEqual(new Set());
+  expect(d.edges).toEqual([]);
+  expect(d.findings).toHaveLength(1);
+  expect(d.findings[0]).toMatchObject({
+    level: "warning", check: "parse", message: statements.message,
+    where: "line 3", details: line, line: 3,
+  });
+  expect(mermaid.matchNode(line)).toBeNull();
+  expect(mermaid.matchEdge(line)).toBeNull();
+});
+
+test.each(statements.nodes)("statement node compatibility: $line", ({ line, label, css, id = "A" }) => {
+  const d = parse(line);
+  expect([...d.nodes.keys()]).toEqual([id]);
+  expect(d.nodes.get(id)!.label).toBe(label);
+  expect(d.nodes.get(id)!.css).toEqual(new Set(css));
+  expect(d.edges).toEqual([]);
+  expect(d.findings).toEqual([]);
+});
+
+test.each(statements.edges)("statement edge compatibility: $line", ({ line, label }) => {
+  const d = parse(`A["a"]\nB["b"]\n${line}`);
+  expect(d.edges).toHaveLength(1);
+  expect(d.edges[0]).toMatchObject({ src: "A", dst: "B", kind: "relation", label });
+  expect(d.findings).toEqual([]);
+});
+
+
+test.each(statements.chains)("mixed chain with declared nodes: %s", (line) => {
+  const d = parse(`flowchart TB\nA["a"]\nB["b"]\nC["c"]\nD["d"]\n${line}`);
+  expect([...d.nodes.values()].map((n) => [n.id, n.label])).toEqual([["A", "a"], ["B", "b"], ["C", "c"], ["D", "d"]]);
+  expect(d.edges).toEqual([]);
+  expect(d.findings).toHaveLength(1);
+  expect(d.findings[0]).toMatchObject({
+    level: "warning", check: "parse", message: statements.message, where: "line 6", details: line, line: 6,
+  });
+  expect(mermaid.matchEdge(line)).toBeNull();
+  for (const node of d.nodes.values()) expect(node.css).toEqual(new Set());
+});
+
+
+test.each(statements.endpoints)("edge endpoint and label boundaries: $line", ({ line, src, dst, srcCss, dstCss, kind, label }) => {
+  const d = parse(`${src}["source"]\n${dst}["target"]\n${line}`);
+  expect([...d.nodes.keys()]).toEqual([src, dst]);
+  expect(d.edges).toHaveLength(1);
+  expect(d.edges[0]).toMatchObject({ src, dst, kind, label, line: 3 });
+  expect(d.nodes.get(src)!.css).toEqual(new Set(srcCss));
+  expect(d.nodes.get(dst)!.css).toEqual(new Set(dstCss));
+  expect(d.findings).toEqual([]);
+  expect(mermaid.matchEdge(line)).toMatchObject({ src, dst, kind, label });
+});
+
+// The editor uses these exact spans when replacing labels and endpoints.
+test.each(statements.endpoints)("editable spans: $line", ({ line, src, dst, srcCss, label }) => {
+  const m = mermaid.matchEdge(line)!;
+  expect(line.slice(...m.srcSpan)).toBe(src);
+  expect(line.slice(...m.dstSpan)).toBe(dst);
+  expect(line.slice(m.srcSpan[1], m.connectorSpan[0])).toBe(srcCss.length ? `:::${srcCss[0]}` : "");
+  if (label) expect(line.slice(...m.labelSpan!)).toBe(label);
+  else expect(m.labelSpan).toBeNull();
+});

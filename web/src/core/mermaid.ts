@@ -12,6 +12,9 @@ import { S, W, W_MEMBERS, lstrip, rstrip, splitlines, strip } from "./py.js";
 const WORD = `[${W_MEMBERS}]+`; // Python \w+
 const CSS = `[${W_MEMBERS}-]+`; // Python [\w-]+
 const ID = `[A-Za-z_][${W_MEMBERS}-]*`;
+// Double hyphens begin a connector or label; single hyphens remain in names.
+const EDGE_ID = `[A-Za-z_](?:(?!--)[${W_MEMBERS}-])*`;
+const EDGE_CSS = `(?:(?!--)[${W_MEMBERS}-])+`;
 
 // Statements that carry no model information.
 const SKIP_RE = new RegExp(
@@ -29,23 +32,25 @@ const SHAPES: [string, string][] = [
   [">", "]"], ["[", "]"], ["(", ")"], ["{", "}"],
 ];
 
+// Complete connectors cannot become label openers. Unquoted labels stop at
+// their own style’s delimiter; other styles are text. Quotes/pipes delimit labels.
+// Dotted labels close with .-> or -.->; the optional dash belongs to the connector.
 const EDGE_RE = new RegExp(
-  `^(?<src>${ID})(?::::(?<src_css>${CSS}))?${S}*` +
+  `^(?<src>${EDGE_ID})(?::::(?<src_css>${EDGE_CSS}))?${S}*` +
   "(?:" +
-    `-\\.${S}*(?<l1>"[^"]*"|[^"]*?)${S}*\\.+->` + //       A -. label .-> B
+    `-\\.(?![.-])${S}*(?<l1>"[^"]*"|(?:(?!-?\\.+-)[^"])*?)${S}*-?\\.+->` + //       A -. label .-> B
     `|-\\.+->${S}*(?:\\|(?<l2>[^|]*)\\|)?` + //            A -.-> B  or  A -.->|label| B
-    `|==${S}*(?<l3>"[^"]*"|[^"]*?)${S}*=+>` + //          A == label ==> B
+    `|==(?![=>ox])${S}*(?<l3>"[^"]*"|(?:(?!==)[^"])*?)${S}*=+>` + //          A == label ==> B
     `|=+>${S}*(?:\\|(?<l4>[^|]*)\\|)?` + //               A ==> B   or  A ==>|label| B
-    `|--${S}*(?<l5>"[^"]*"|[^"]*?)${S}*-+>` + //          A -- label --> B
+    `|--(?![->ox])${S}*(?<l5>"[^"]*"|(?:(?!--)[^"])*?)${S}*-+>` + //          A -- label --> B
     `|-{2,}>${S}*(?:\\|(?<l6>[^|]*)\\|)?` + //            A --> B   or  A -->|label| B
-  `)${S}*(?<dst>${ID})(?::::(?<dst_css>${CSS}))?${S}*;?$`,
+  `)${S}*(?<dst>${EDGE_ID})(?::::(?<dst_css>${EDGE_CSS}))?${S}*;?$`,
   "du",
 );
 const UNDIRECTED_RE = new RegExp(
-  `^${ID}${S}*(?:-{3,}|-\\.+-|={3,})${S}*(?:\\|[^|]*\\|)?${S}*${ID}${S}*;?$`, "u");
+  `^${EDGE_ID}${S}*(?:-{3,}|-\\.+-|={3,})${S}*(?:\\|[^|]*\\|)?${S}*${EDGE_ID}${S}*;?$`, "u");
 const NODE_ID_RE = new RegExp(`^(${ID})${S}*`, "u");
 const NODE_TAIL_RE = new RegExp(`^(?::::(${CSS}))?$`, "u");
-const ARROW_CSS_RE = new RegExp(`^:::${CSS}`, "u");
 const INHERIT_ARROW_RE = /^-{2,}>$/u;
 const LABEL_GROUPS = ["l1", "l2", "l3", "l4", "l5", "l6"] as const;
 
@@ -124,8 +129,7 @@ export function matchEdge(line: string): EdgeMatch | null {
   const indices = m.indices!.groups!;
   const key = LABEL_GROUPS.find((k) => g[k]);
   const label = unquote(key ? g[key]! : "");
-  const arrow = strip(line.slice(indices.src![1], indices.dst![0]));
-  const arrowCore = strip(arrow.replace(ARROW_CSS_RE, ""));
+  const arrowCore = strip(line.slice((indices.src_css ?? indices.src!)[1], indices.dst![0]));
   const kind = INHERIT_ARROW_RE.test(arrowCore) ? "inherit" : "relation";
   return {
     src: g.src!, dst: g.dst!, kind, label, arrow: arrowCore, srcCss: g.src_css, dstCss: g.dst_css,
@@ -142,15 +146,32 @@ export function matchNode(line: string): NodeMatch | null {
   const nodeId = m[1]!;
   const offset = m[0].length;
   const rest = line.slice(offset);
-  for (const [opening, closing] of SHAPES) {
+  // Double hyphens introduce edge syntax, including before a flag opener.
+  if (nodeId.includes("--")) return null;
+  for (const [opening] of SHAPES) {
     if (!rest.startsWith(opening)) continue;
-    const end = rest.lastIndexOf(closing);
-    if (end < opening.length) continue;
+    // Choose the opening once and stop at the earliest of its closing variants.
+    // Retrying a different variant can absorb a subsequent node.
+    const closings = SHAPES.filter(([op]) => op === opening).map(([, close]) => close);
+    let quoted = false;
+    let end = -1;
+    let closing = "";
+    for (let i = opening.length; i < rest.length; i++) {
+      if (rest[i] === '"') quoted = !quoted;
+      else if (!quoted) {
+        closing = closings.find((close) => rest.startsWith(close, i)) ?? "";
+        if (closing) {
+          end = i;
+          break;
+        }
+      }
+    }
+    if (end < opening.length) return null;
     const body = rest.slice(opening.length, end);
     const after = rest.slice(end + closing.length);
     const tail = strip(rstrip(strip(after), ";"));
     const tm = NODE_TAIL_RE.exec(tail);
-    if (tm === null) continue;
+    if (tm === null) return null;
     const closeEnd = offset + end + closing.length;
     const css = tm[1];
     const cssStart = closeEnd + leading(after);
@@ -227,7 +248,8 @@ export function parse(text: string): Diagram {
     }
 
     diagram.findings.push(finding(
-      WARNING, "parse", "line not understood, ignored", `line ${number}`, line, { line: number }));
+      WARNING, "parse", "unsupported syntax, ignored (use one node definition or arrow per line)",
+      `line ${number}`, line, { line: number }));
   }
 
   for (const [ids, css, number] of pendingCss) {

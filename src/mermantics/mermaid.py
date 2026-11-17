@@ -13,6 +13,9 @@ from dataclasses import dataclass, field
 from .model import WARNING, Edge, Finding, Node
 
 ID = r"[A-Za-z_][\w-]*"
+# Double hyphens begin a connector or label; single hyphens remain in names.
+_EDGE_ID = r"[A-Za-z_](?:(?!--)[\w-])*"
+_EDGE_CSS = r"(?:(?!--)[\w-])+"
 
 # Statements that carry no model information.
 _SKIP_RE = re.compile(
@@ -28,19 +31,23 @@ _SHAPES = [
     (">", "]"), ("[", "]"), ("(", ")"), ("{", "}"),
 ]
 
+# A complete connector cannot be reinterpreted as a label opener. Unquoted
+# labels stop at their own style's delimiter; other styles are ordinary text.
+# Dotted labels close with .-> or -.->; consume the optional leading dash
+# as part of the connector, not the label. Quotes/pipes keep explicit boundaries.
 _EDGE_RE = re.compile(
-    rf"""^(?P<src>{ID})(?::::(?P<src_css>[\w-]+))?\s*
+    rf"""^(?P<src>{_EDGE_ID})(?::::(?P<src_css>{_EDGE_CSS}))?\s*
     (?:
-        -\.\s*(?P<l1>"[^"]*"|[^"]*?)\s*\.+->        # A -. label .-> B
+        -\.(?![.-])\s*(?P<l1>"[^"]*"|(?:(?!-?\.+-)[^"])*?)\s*-?\.+->  # A -. label .-> B
       | -\.+->\s*(?:\|(?P<l2>[^|]*)\|)?            # A -.-> B  or  A -.->|label| B
-      | ==\s*(?P<l3>"[^"]*"|[^"]*?)\s*=+>          # A == label ==> B
+      | ==(?![=>ox])\s*(?P<l3>"[^"]*"|(?:(?!==)[^"])*?)\s*=+>  # A == label ==> B
       | =+>\s*(?:\|(?P<l4>[^|]*)\|)?               # A ==> B   or  A ==>|label| B
-      | --\s*(?P<l5>"[^"]*"|[^"]*?)\s*-+>          # A -- label --> B
+      | --(?![->ox])\s*(?P<l5>"[^"]*"|(?:(?!--)[^"])*?)\s*-+>  # A -- label --> B
       | -{{2,}}>\s*(?:\|(?P<l6>[^|]*)\|)?           # A --> B   or  A -->|label| B
-    )\s*(?P<dst>{ID})(?::::(?P<dst_css>[\w-]+))?\s*;?$""",
+    )\s*(?P<dst>{_EDGE_ID})(?::::(?P<dst_css>{_EDGE_CSS}))?\s*;?$""",
     re.VERBOSE,
 )
-_UNDIRECTED_RE = re.compile(rf"^{ID}\s*(?:-{{3,}}|-\.+-|={{3,}})\s*(?:\|[^|]*\|)?\s*{ID}\s*;?$")
+_UNDIRECTED_RE = re.compile(rf"^{_EDGE_ID}\s*(?:-{{3,}}|-\.+-|={{3,}})\s*(?:\|[^|]*\|)?\s*{_EDGE_ID}\s*;?$")
 
 
 @dataclass
@@ -62,17 +69,33 @@ def _parse_node(line: str):
     if not m:
         return None
     node_id, rest = m.group(1), line[m.end():]
-    for opening, closing in _SHAPES:
+    # Double hyphens introduce edge syntax, including before a flag opener.
+    if "--" in node_id:
+        return None
+    for opening, _ in _SHAPES:
         if not rest.startswith(opening):
             continue
-        end = rest.rfind(closing)
+        # Choose the opening once, then stop at the earliest of all its closing
+        # variants. Retrying another variant can absorb a subsequent node.
+        closings = [close for op, close in _SHAPES if op == opening]
+        quoted = False
+        end = -1
+        closing = ""
+        for i in range(len(opening), len(rest)):
+            if rest[i] == '"':
+                quoted = not quoted
+            elif not quoted:
+                closing = next((close for close in closings if rest.startswith(close, i)), "")
+                if closing:
+                    end = i
+                    break
         if end < len(opening):
-            continue
+            return None
         body = rest[len(opening):end]
         tail = rest[end + len(closing):].strip().rstrip(";").strip()
         tm = re.fullmatch(r"(?::::([\w-]+))?", tail)
         if tm is None:
-            continue
+            return None
         return node_id, _unquote(body), tm.group(1)
     return None
 
@@ -111,8 +134,8 @@ def parse(text: str) -> Diagram:
         if m:
             label = next((m.group(g) for g in ("l1", "l2", "l3", "l4", "l5", "l6") if m.group(g)), "")
             label = _unquote(label)
-            arrow = line[m.end("src"):m.start("dst")].strip()
-            arrow_core = re.sub(r"^:::[\w-]+", "", arrow).strip()
+            connector_start = m.end("src_css") if m.group("src_css") else m.end("src")
+            arrow_core = line[connector_start:m.start("dst")].strip()
             kind = "inherit" if re.fullmatch(r"-{2,}>", arrow_core) else "relation"
             diagram.edges.append(Edge(m.group("src"), m.group("dst"), kind, label, number, arrow_core))
             for end in ("src", "dst"):
@@ -140,7 +163,8 @@ def parse(text: str) -> Diagram:
             continue
 
         diagram.findings.append(Finding(
-            WARNING, "parse", "line not understood, ignored", where=f"line {number}", details=line))
+            WARNING, "parse", "unsupported syntax, ignored (use one node definition or arrow per line)",
+            where=f"line {number}", details=line))
 
     for ids, css, number in pending_css:
         for node_id in ids:

@@ -1,5 +1,6 @@
 """Parser tests. No Java or network needed."""
 
+import json
 from pathlib import Path
 
 import pytest
@@ -109,3 +110,62 @@ def test_style_class_on_arrow_ends():
     d = parse('flowchart TB\nA["a"]\nB["b"]\nA:::local --> B:::vocab\n')
     assert d.nodes["A"].css == {"local"} and d.nodes["B"].css == {"vocab"}
     assert d.edges[0].kind == "inherit"
+
+
+# Hand-written expectations shared with the TypeScript suite; not parser output.
+
+STATEMENTS = json.loads((FIXTURES / "mermaid-statements.json").read_text())
+
+
+@pytest.mark.parametrize("line", STATEMENTS["unsupported"])
+def test_unsupported_compound_statements(line):
+    d = parse(f'flowchart TB\nKeep["keep"]\n{line}\nAfter["after"]\n')
+    assert list(d.nodes) == ["Keep", "After"]
+    assert all(not n.css for n in d.nodes.values())
+    assert d.edges == []
+    assert [(f.level, f.check, f.message, f.where, f.details) for f in d.findings] == [
+        ("warning", "parse", STATEMENTS["message"], "line 3", line)
+    ]
+
+
+@pytest.mark.parametrize("case", STATEMENTS["nodes"])
+def test_statement_node_compatibility(case):
+    d = parse(case["line"])
+    node_id = case.get("id", "A")
+    assert list(d.nodes) == [node_id]
+    assert d.nodes[node_id].label == case["label"]
+    assert d.nodes[node_id].css == set(case["css"])
+    assert d.edges == []
+    assert d.findings == []
+
+
+@pytest.mark.parametrize("case", STATEMENTS["edges"])
+def test_statement_edge_compatibility(case):
+    d = parse('A["a"]\nB["b"]\n' + case["line"])
+    assert [(e.src, e.dst, e.kind, e.label) for e in d.edges] == [
+        ("A", "B", "relation", case["label"])
+    ]
+    assert d.findings == []
+
+
+@pytest.mark.parametrize("line", STATEMENTS["chains"])
+def test_mixed_chains_with_declared_nodes(line):
+    d = parse('flowchart TB\nA["a"]\nB["b"]\nC["c"]\nD["d"]\n' + line)
+    assert [(n.id, n.label) for n in d.nodes.values()] == [("A", "a"), ("B", "b"), ("C", "c"), ("D", "d")]
+    assert all(not n.css for n in d.nodes.values())
+    assert d.edges == []
+    assert [(f.level, f.check, f.message, f.where, f.details) for f in d.findings] == [
+        ("warning", "parse", STATEMENTS["message"], "line 6", line)
+    ]
+
+
+@pytest.mark.parametrize("case", STATEMENTS["endpoints"])
+def test_edge_endpoint_and_label_boundaries(case):
+    src, dst = case["src"], case["dst"]
+    d = parse(f'{src}["source"]\n{dst}["target"]\n' + case["line"])
+    assert list(d.nodes) == [src, dst]
+    assert [(e.src, e.dst, e.kind, e.label) for e in d.edges] == [(src, dst, case["kind"], case["label"])]
+    assert d.edges[0].line == 3
+    assert d.nodes[src].css == set(case["srcCss"])
+    assert d.nodes[dst].css == set(case["dstCss"])
+    assert d.findings == []

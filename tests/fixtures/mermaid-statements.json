@@ -1,0 +1,450 @@
+{
+  "message": "unsupported syntax, ignored (use one node definition or arrow per line)",
+  "unsupported": [
+    "A[\"A\"] --> B[\"B\"]",
+    "A[\"A\"]; B[\"B\"]",
+    "A --> B --> C",
+    "A[\"A\"] --> B",
+    "A --> B[\"B\"]",
+    "A[A] --> B[B]",
+    "A[A]; B[B]",
+    "A -.-> B -.-> C",
+    "A ==> B ==> C",
+    "A --> B -.-> C",
+    "A -- first --> B -- second --> C",
+    "A -->|first| B -->|second| C",
+    "A:::local --> B:::local --> C",
+    "A((\"A\")); B((\"B\"))",
+    "A[\"a ] --> b\"] --> B",
+    "A[\"A\"] B[\"B\"]",
+    "A[/A/]; B[\\B\\]",
+    "A[/A/] --> B[\\B\\]",
+    "A[/A\\]; B[/B/]",
+    "A[/A\\] --> B[/B/]",
+    "A[\\A\\]; B[/B/]",
+    "A[\\A\\] --> B[/B/]",
+    "A[\\A/]; B[\\B\\]",
+    "A[\\A/] --> B[\\B\\]",
+    "A-->B[\"B\"]",
+    "A-->|label|B[\"B\"]",
+    "A-->B-->C[\"C\"]",
+    "A---->B[\"B\"]",
+    "A-- >\"flag\"]",
+    "A--\t>\"flag\"]",
+    "A--B>\"flag\"]",
+    "A --> B--C",
+    "A --> B:::local--variant",
+    "A--B:::node--selected --> C--D:::local--variant;",
+    "A--B\t-->\tC--D"
+  ],
+  "nodes": [
+    {
+      "line": "A[\"a ] --> b\"]",
+      "label": "a ] --> b",
+      "css": []
+    },
+    {
+      "line": "A[plain label]:::local;",
+      "label": "plain label",
+      "css": [
+        "local"
+      ]
+    },
+    {
+      "line": "A[\"&quot; &#124; &amp; #59; <br>\"]",
+      "label": "&quot; &#124; &amp; #59; <br>",
+      "css": []
+    },
+    {
+      "line": "A[[\"a ]] --> b; B[other]\"]]:::local;",
+      "label": "a ]] --> b; B[other]",
+      "css": [
+        "local"
+      ]
+    },
+    {
+      "line": "A[(\"a )] --> b; B[other]\")]:::local;",
+      "label": "a )] --> b; B[other]",
+      "css": [
+        "local"
+      ]
+    },
+    {
+      "line": "A([\"a ]) --> b; B[other]\"]):::local;",
+      "label": "a ]) --> b; B[other]",
+      "css": [
+        "local"
+      ]
+    },
+    {
+      "line": "A((\"a )) --> b; B[other]\")):::local;",
+      "label": "a )) --> b; B[other]",
+      "css": [
+        "local"
+      ]
+    },
+    {
+      "line": "A{{\"a }} --> b; B[other]\"}}:::local;",
+      "label": "a }} --> b; B[other]",
+      "css": [
+        "local"
+      ]
+    },
+    {
+      "line": "A[/\"a /] --> b; B[other]\"/]:::local;",
+      "label": "a /] --> b; B[other]",
+      "css": [
+        "local"
+      ]
+    },
+    {
+      "line": "A[\\\"a \\] --> b; B[other]\"\\]:::local;",
+      "label": "a \\] --> b; B[other]",
+      "css": [
+        "local"
+      ]
+    },
+    {
+      "line": "A[/\"a \\] --> b; B[other]\"\\]:::local;",
+      "label": "a \\] --> b; B[other]",
+      "css": [
+        "local"
+      ]
+    },
+    {
+      "line": "A[\\\"a /] --> b; B[other]\"/]:::local;",
+      "label": "a /] --> b; B[other]",
+      "css": [
+        "local"
+      ]
+    },
+    {
+      "line": "A>\"a ] --> b; B[other]\"]:::local;",
+      "label": "a ] --> b; B[other]",
+      "css": [
+        "local"
+      ]
+    },
+    {
+      "line": "A[\"a ] --> b; B[other]\"]:::local;",
+      "label": "a ] --> b; B[other]",
+      "css": [
+        "local"
+      ]
+    },
+    {
+      "line": "A(\"a ) --> b; B[other]\"):::local;",
+      "label": "a ) --> b; B[other]",
+      "css": [
+        "local"
+      ]
+    },
+    {
+      "line": "A{\"a } --> b; B[other]\"}:::local;",
+      "label": "a } --> b; B[other]",
+      "css": [
+        "local"
+      ]
+    },
+    {
+      "line": "A>\"flag with --> text\"]",
+      "label": "flag with --> text",
+      "css": []
+    },
+    {
+      "line": "A >\"flag with --> text\"]",
+      "label": "flag with --> text",
+      "css": []
+    }
+  ],
+  "edges": [
+    {
+      "line": "A -- \"a --> b .-> c ==> d\" --> B",
+      "label": "a --> b .-> c ==> d"
+    },
+    {
+      "line": "A -. \"a ] ; b\" .-> B",
+      "label": "a ] ; b"
+    },
+    {
+      "line": "A -->|a --> b| B",
+      "label": "a --> b"
+    },
+    {
+      "line": "A -- <b>has part</b> --> B",
+      "label": "<b>has part</b>"
+    },
+    {
+      "line": "A == \"a ==> b\" ==> B",
+      "label": "a ==> b"
+    },
+    {
+      "line": "A -->|&quot; &#124; &amp;| B",
+      "label": "&quot; &#124; &amp;"
+    },
+    {
+      "line": "A -- temperature -> pressure --> B",
+      "label": "temperature -> pressure"
+    },
+    {
+      "line": "A -. temperature -> pressure .-> B",
+      "label": "temperature -> pressure"
+    },
+    {
+      "line": "A == temperature -> pressure ==> B",
+      "label": "temperature -> pressure"
+    },
+    {
+      "line": "A -- x === y --> B",
+      "label": "x === y"
+    },
+    {
+      "line": "A == x --- y ==> B",
+      "label": "x --- y"
+    },
+    {
+      "line": "A -. x === y .-> B",
+      "label": "x === y"
+    },
+    {
+      "line": "A -- x -.- y --> B",
+      "label": "x -.- y"
+    },
+    {
+      "line": "A == x -.-> y ==> B",
+      "label": "x -.-> y"
+    },
+    {
+      "line": "A -. x --> y .-> B",
+      "label": "x --> y"
+    },
+    {
+      "line": "A -- x B --> B",
+      "label": "x B"
+    },
+    {
+      "line": "A -- o B --> B",
+      "label": "o B"
+    },
+    {
+      "line": "A == o B ==> B",
+      "label": "o B"
+    },
+    {
+      "line": "A == x B ==> B",
+      "label": "x B"
+    },
+    {
+      "line": "A -. o B .-> B",
+      "label": "o B"
+    },
+    {
+      "line": "A -. x B .-> B",
+      "label": "x B"
+    },
+    {
+      "line": "A -. part- .-> B",
+      "label": "part-"
+    },
+    {
+      "line": "A -. \"part-\".-> B",
+      "label": "part-"
+    }
+  ],
+  "chains": [
+    "A --- B --> C",
+    "A -.- B -.-> C",
+    "A === B ==> C",
+    "A --> B --- C",
+    "A -.-> B -.- C",
+    "A ==> B === C",
+    "A --- B -.-> C",
+    "A -.- B ==> C",
+    "A === B --> C",
+    "A --- B; C --> D",
+    "A === B; C ==> D",
+    "A -.- B; C -.-> D",
+    "A --o B --> C",
+    "A --x B --> C",
+    "A --o B; C --> D",
+    "A --x B; C --> D",
+    "A -- first --> B -- second --> C",
+    "A == first ==> B == second ==> C",
+    "A -. first .-> B -. second .-> C",
+    "A---B-->C",
+    "A-->B---C",
+    "A---B --> C",
+    "A-----B-->C",
+    "A-->B-----C",
+    "A--oB-->C",
+    "A-->B--xC",
+    "A--xB-->C",
+    "A-->B--oC",
+    "A==oB==>C",
+    "A==xB==>C",
+    "A ==o B ==> C",
+    "A ==x B ==> C",
+    "A:::local---B-->C",
+    "A-->B:::local---C",
+    "A---B---C",
+    "A:::node--other --> B",
+    "A --> B:::node--xray",
+    "A:::node--xray-->B:::node--other",
+    "A:::local--oB-->C",
+    "A:::local--xB-->C",
+    "A-->B:::local--oC",
+    "A-->B:::local--xC"
+  ],
+  "endpoints": [
+    {
+      "line": "A-B-->C",
+      "src": "A-B",
+      "dst": "C",
+      "srcCss": [],
+      "dstCss": [],
+      "kind": "inherit",
+      "label": ""
+    },
+    {
+      "line": "A-->B-C",
+      "src": "A",
+      "dst": "B-C",
+      "srcCss": [],
+      "dstCss": [],
+      "kind": "inherit",
+      "label": ""
+    },
+    {
+      "line": "A-B---->C-D",
+      "src": "A-B",
+      "dst": "C-D",
+      "srcCss": [],
+      "dstCss": [],
+      "kind": "inherit",
+      "label": ""
+    },
+    {
+      "line": "A-B:::local-style-->C-D:::other-style",
+      "src": "A-B",
+      "dst": "C-D",
+      "srcCss": [
+        "local-style"
+      ],
+      "dstCss": [
+        "other-style"
+      ],
+      "kind": "inherit",
+      "label": ""
+    },
+    {
+      "line": "A--B --> C",
+      "src": "A",
+      "dst": "C",
+      "kind": "relation",
+      "label": "B",
+      "srcCss": [],
+      "dstCss": []
+    },
+    {
+      "line": "A:::node--selected --> C",
+      "src": "A",
+      "dst": "C",
+      "kind": "relation",
+      "label": "selected",
+      "srcCss": [
+        "node"
+      ],
+      "dstCss": []
+    },
+    {
+      "line": "A--contains-->B",
+      "src": "A",
+      "dst": "B",
+      "kind": "relation",
+      "label": "contains",
+      "srcCss": [],
+      "dstCss": []
+    },
+    {
+      "line": "A -.owns .-> B",
+      "src": "A",
+      "dst": "B",
+      "kind": "relation",
+      "label": "owns",
+      "srcCss": [],
+      "dstCss": []
+    },
+    {
+      "line": "A -.xray .-> B",
+      "src": "A",
+      "dst": "B",
+      "kind": "relation",
+      "label": "xray",
+      "srcCss": [],
+      "dstCss": []
+    },
+    {
+      "line": "A-.owns.->B",
+      "src": "A",
+      "dst": "B",
+      "kind": "relation",
+      "label": "owns",
+      "srcCss": [],
+      "dstCss": []
+    },
+    {
+      "line": "A-.xray.->B",
+      "src": "A",
+      "dst": "B",
+      "kind": "relation",
+      "label": "xray",
+      "srcCss": [],
+      "dstCss": []
+    },
+    {
+      "line": "A -.o B -.-> C",
+      "src": "A",
+      "dst": "C",
+      "kind": "relation",
+      "label": "o B",
+      "srcCss": [],
+      "dstCss": []
+    },
+    {
+      "line": "A -.x B -.-> C",
+      "src": "A",
+      "dst": "C",
+      "kind": "relation",
+      "label": "x B",
+      "srcCss": [],
+      "dstCss": []
+    },
+    {
+      "line": "A-.oB-.->C",
+      "src": "A",
+      "dst": "C",
+      "kind": "relation",
+      "label": "oB",
+      "srcCss": [],
+      "dstCss": []
+    },
+    {
+      "line": "A-.xB-.->C",
+      "src": "A",
+      "dst": "C",
+      "kind": "relation",
+      "label": "xB",
+      "srcCss": [],
+      "dstCss": []
+    }
+  ],
+  "reference": {
+    "version": "Mermaid 12.3.0",
+    "method": "Independent mermaidAPI.getDiagramFromText with jsdom in an isolated temporary npm harness; expectations hand-written from getVertices()/getEdges(), not mermantics output.",
+    "notes": [
+      "Double hyphens begin edge syntax, not endpoint or inline class names.",
+      "Dotted labels may begin with o/x; both .-> and -.-> close the label.",
+      "Styled --o/--x examples are multiple links; the three double-hyphen flag examples are invalid Mermaid."
+    ]
+  }
+}
