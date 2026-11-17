@@ -13,6 +13,9 @@ from dataclasses import dataclass, field
 from .model import WARNING, Edge, Finding, Node
 
 ID = r"[A-Za-z_][\w-]*"
+# In an edge, a double hyphen starts a connector, not an endpoint or style.
+_EDGE_ID = r"[A-Za-z_](?:(?!--)[\w-])*"
+_EDGE_CSS = r"(?:(?!--)[\w-])+"
 
 # Statements that carry no model information.
 _SKIP_RE = re.compile(
@@ -32,18 +35,18 @@ _SHAPES = [
 # labels stop at their own style's delimiter; other styles are ordinary text.
 # Quoted and pipe-delimited labels retain their explicit boundaries.
 _EDGE_RE = re.compile(
-    rf"""^(?P<src>{ID})(?::::(?P<src_css>[\w-]+))?\s*
+    rf"""^(?P<src>{_EDGE_ID})(?::::(?P<src_css>{_EDGE_CSS}))?\s*
     (?:
         -\.(?![.-])\s*(?P<l1>"[^"]*"|(?:(?!\.-)[^"])*?)\s*\.+->  # A -. label .-> B
       | -\.+->\s*(?:\|(?P<l2>[^|]*)\|)?            # A -.-> B  or  A -.->|label| B
-      | ==(?![=>])\s*(?P<l3>"[^"]*"|(?:(?!==)[^"])*?)\s*=+>  # A == label ==> B
+      | ==(?![=>ox])\s*(?P<l3>"[^"]*"|(?:(?!==)[^"])*?)\s*=+>  # A == label ==> B
       | =+>\s*(?:\|(?P<l4>[^|]*)\|)?               # A ==> B   or  A ==>|label| B
       | --(?![->ox])\s*(?P<l5>"[^"]*"|(?:(?!--)[^"])*?)\s*-+>  # A -- label --> B
       | -{{2,}}>\s*(?:\|(?P<l6>[^|]*)\|)?           # A --> B   or  A -->|label| B
-    )\s*(?P<dst>{ID})(?::::(?P<dst_css>[\w-]+))?\s*;?$""",
+    )\s*(?P<dst>{_EDGE_ID})(?::::(?P<dst_css>{_EDGE_CSS}))?\s*;?$""",
     re.VERBOSE,
 )
-_UNDIRECTED_RE = re.compile(rf"^{ID}\s*(?:-{{3,}}|-\.+-|={{3,}})\s*(?:\|[^|]*\|)?\s*{ID}\s*;?$")
+_UNDIRECTED_RE = re.compile(rf"^{_EDGE_ID}\s*(?:-{{3,}}|-\.+-|={{3,}})\s*(?:\|[^|]*\|)?\s*{_EDGE_ID}\s*;?$")
 
 
 @dataclass
@@ -127,8 +130,8 @@ def parse(text: str) -> Diagram:
         if m:
             label = next((m.group(g) for g in ("l1", "l2", "l3", "l4", "l5", "l6") if m.group(g)), "")
             label = _unquote(label)
-            arrow = line[m.end("src"):m.start("dst")].strip()
-            arrow_core = re.sub(r"^:::[\w-]+", "", arrow).strip()
+            connector_start = m.end("src_css") if m.group("src_css") else m.end("src")
+            arrow_core = line[connector_start:m.start("dst")].strip()
             kind = "inherit" if re.fullmatch(r"-{2,}>", arrow_core) else "relation"
             diagram.edges.append(Edge(m.group("src"), m.group("dst"), kind, label, number, arrow_core))
             for end in ("src", "dst"):

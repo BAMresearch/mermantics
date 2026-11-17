@@ -204,6 +204,14 @@
     {
       "line": "A -- o B --> B",
       "label": "o B"
+    },
+    {
+      "line": "A == o B ==> B",
+      "label": "o B"
+    },
+    {
+      "line": "A == x B ==> B",
+      "label": "x B"
     }
   ],
   "chains": [
@@ -225,6 +233,44 @@
     "A --x B; C --> D",
     "A -- first --> B -- second --> C",
     "A == first ==> B == second ==> C",
-    "A -. first .-> B -. second .-> C"
+    "A -. first .-> B -. second .-> C",
+    "A---B-->C",
+    "A-->B---C",
+    "A---B --> C",
+    "A-----B-->C",
+    "A-->B-----C",
+    "A--oB-->C",
+    "A-->B--xC",
+    "A--xB-->C",
+    "A-->B--oC",
+    "A==oB==>C",
+    "A==xB==>C",
+    "A ==o B ==> C",
+    "A ==x B ==> C",
+    "A:::local---B-->C",
+    "A-->B:::local---C",
+    "A---B---C"
+  ],
+  "endpoints": [
+    {
+      "line": "A-B-->C",
+      "src": "A-B",
+      "dst": "C"
+    },
+    {
+      "line": "A-->B-C",
+      "src": "A",
+      "dst": "B-C"
+    },
+    {
+      "line": "A-B---->C-D",
+      "src": "A-B",
+      "dst": "C-D"
+    },
+    {
+      "line": "A-B:::local-style-->C-D:::other-style",
+      "src": "A-B",
+      "dst": "C-D"
+    }
   ]
 }

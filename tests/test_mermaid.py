@@ -154,3 +154,12 @@ def test_mixed_chains_with_declared_nodes(line):
     assert [(f.check, f.message, f.where, f.details) for f in d.findings] == [
         ("parse", STATEMENTS["message"], "line 6", line)
     ]
+
+
+@pytest.mark.parametrize("case", STATEMENTS["endpoints"])
+def test_hyphenated_edge_endpoints(case):
+    src, dst = case["src"], case["dst"]
+    d = parse(f'{src}["source"]\n{dst}["target"]\n' + case["line"])
+    assert list(d.nodes) == [src, dst]
+    assert [(e.src, e.dst, e.kind, e.label) for e in d.edges] == [(src, dst, "inherit", "")]
+    assert d.findings == []
