@@ -60,6 +60,57 @@ describe("Data Store boxes in Mermaid", () => {
       ["A", IS_PARENT_OF, "B"],
       ["D", IS_ATTACHED_TO, "A"],
     ]);
+    const current = toMermaid(read.boxes, read.arrows);
+    const again = fromMermaid(current);
+    expect(toMermaid(again.boxes, again.arrows)).toBe(current);
+  });
+
+  test.each(["step", "sample", "chemical", "instrument", "object"])(
+    "legacy links are recognised from stored %s kinds without type fields or styles", (kind) => {
+      const read = fromMermaid([
+        "flowchart TB",
+        'A -. "parent of" .-> B',
+        'A -. "has dataset" .-> D',
+        `%% mermantics-kinds ${JSON.stringify({ A: kind, B: kind, D: "dataset" })}`,
+      ].join("\n"));
+      expect(read.arrows.map((a) => [a.source, a.data!.name, a.data!.words, a.target])).toEqual([
+        ["A", IS_PARENT_OF, IS_PARENT_OF, "B"],
+        ["D", IS_ATTACHED_TO, IS_ATTACHED_TO, "A"],
+      ]);
+    },
+  );
+
+  test("mixed diagrams migrate only unambiguous legacy BAM links", () => {
+    const unchanged = [
+      ["P", "has dataset", "R"], ["P", "parent of", "R"],
+      ["A", "has dataset", "B"], ["D", "has dataset", "A"],
+      ["D", "has dataset", "E"], ["D", "parent of", "E"],
+      ["A", "parent of", "D"], ["D", "parent of", "A"],
+      ["A", "parent of", "P"], ["P", "has dataset", "D"],
+      ["A", "has dataset", "Unknown"], ["Unknown", "parent of", "B"],
+      ["Styled", "has dataset", "D"], ["Note", "parent of", "B"],
+      ["Invalid", "has dataset", "D"],
+    ];
+    const read = fromMermaid([
+      "flowchart TB",
+      'Styled["Object<br>Object type: SAMPLE"]:::dsmake',
+      'Note["Note"]:::note',
+      'A -. "parent of" .-> B',
+      'A -. "has dataset" .-> D',
+      ...unchanged.map(([src, name, dst]) => `${src} -. "${name}" .-> ${dst}`),
+      'A -. "parent of<br>RO_0000057 has participant" .-> B',
+      'A -. "has dataset<br>RO_0000057 has participant" .-> D',
+      '%% mermantics-kinds {"A":"step","B":"sample","D":"dataset","E":"dataset",' +
+        '"P":"process","R":"information","Note":"sample","Invalid":"invalid"}',
+    ].join("\n"));
+    expect(read.arrows.map((a) => [a.source, a.data!.words, a.target])).toEqual([
+      ["A", IS_PARENT_OF, "B"], ["D", IS_ATTACHED_TO, "A"], ...unchanged,
+      ["A", "parent of", "B"], ["A", "has dataset", "D"],
+    ]);
+    expect(read.arrows.slice(-2).map((a) => a.data!.curie)).toEqual(["RO_0000057", "RO_0000057"]);
+    const current = toMermaid(read.boxes, read.arrows);
+    const again = fromMermaid(current);
+    expect(toMermaid(again.boxes, again.arrows)).toBe(current);
   });
 
   test("is child of is the same link read the other way", () => {

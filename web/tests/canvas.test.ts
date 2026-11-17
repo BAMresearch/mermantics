@@ -59,6 +59,25 @@ test("process model arrows are plain words, not linked to an ontology", () => {
   expect(meaning(toMermaid(imported.boxes, imported.arrows))).toEqual(meaning(example("coffee-example.mmd")));
 });
 
+test.each(["", '%% mermantics-kinds {"Experiment":"process","Results":"information"}'])(
+  "ordinary relation names and directions survive import and export (%s)", (metadata) => {
+    const text = [
+      "flowchart TB",
+      'Experiment["Experiment"]',
+      'Results["Results"]',
+      'Experiment -. "has dataset" .-> Results',
+      'Experiment -. "parent of" .-> Results',
+      metadata,
+    ].join("\n");
+    const imported = fromMermaid(text);
+    expect(imported.arrows.map((a) => [a.source, a.data!.name, a.data!.words, a.target])).toEqual([
+      ["Experiment", "has dataset", "has dataset", "Results"],
+      ["Experiment", "parent of", "parent of", "Results"],
+    ]);
+    expect(meaning(toMermaid(imported.boxes, imported.arrows)).edges).toEqual(meaning(text).edges);
+  },
+);
+
 test("own kinds of thing ('something else' boxes) survive a round trip", () => {
   const imported = fromMermaid(example("coffee-example.mmd"));
   const box = imported.boxes.find((b) => b.id === "Beans")!;
