@@ -255,22 +255,84 @@
     {
       "line": "A-B-->C",
       "src": "A-B",
-      "dst": "C"
+      "dst": "C",
+      "srcCss": [],
+      "dstCss": []
     },
     {
       "line": "A-->B-C",
       "src": "A",
-      "dst": "B-C"
+      "dst": "B-C",
+      "srcCss": [],
+      "dstCss": []
     },
     {
       "line": "A-B---->C-D",
       "src": "A-B",
-      "dst": "C-D"
+      "dst": "C-D",
+      "srcCss": [],
+      "dstCss": []
     },
     {
       "line": "A-B:::local-style-->C-D:::other-style",
       "src": "A-B",
-      "dst": "C-D"
+      "dst": "C-D",
+      "srcCss": [
+        "local-style"
+      ],
+      "dstCss": [
+        "other-style"
+      ]
+    },
+    {
+      "line": "A--B --> C",
+      "src": "A--B",
+      "dst": "C",
+      "srcCss": [],
+      "dstCss": []
+    },
+    {
+      "line": "A --> B--C",
+      "src": "A",
+      "dst": "B--C",
+      "srcCss": [],
+      "dstCss": []
+    },
+    {
+      "line": "A:::node--selected --> C",
+      "src": "A",
+      "dst": "C",
+      "srcCss": [
+        "node--selected"
+      ],
+      "dstCss": []
+    },
+    {
+      "line": "A --> B:::local--variant",
+      "src": "A",
+      "dst": "B",
+      "srcCss": [],
+      "dstCss": [
+        "local--variant"
+      ]
+    },
+    {
+      "line": "A--B:::node--selected --> C--D:::local--variant;",
+      "src": "A--B",
+      "dst": "C--D",
+      "srcCss": [
+        "node--selected"
+      ],
+      "dstCss": [
+        "local--variant"
+      ]
+    },
+    {
+      "line": "A--B\t-->\tC--D",
+      "src": "A--B",
+      "dst": "C--D",
+      "srcCss": [],
+      "dstCss": []
     }
   ]
 }

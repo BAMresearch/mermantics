@@ -12,9 +12,10 @@ import { S, W, W_MEMBERS, lstrip, rstrip, splitlines, strip } from "./py.js";
 const WORD = `[${W_MEMBERS}]+`; // Python \w+
 const CSS = `[${W_MEMBERS}-]+`; // Python [\w-]+
 const ID = `[A-Za-z_][${W_MEMBERS}-]*`;
-// In an edge, a double hyphen starts a connector, not an endpoint or style.
-const EDGE_ID = `[A-Za-z_](?:(?!--)[${W_MEMBERS}-])*`;
-const EDGE_CSS = `(?:(?!--)[${W_MEMBERS}-])+`;
+// Stop names at complete solid connectors (---, -->, --o, --x), not at every
+// double hyphen: A--B and node--selected can be endpoint and style names.
+const EDGE_ID = `[A-Za-z_](?:(?!--[-ox>])[${W_MEMBERS}-])*`;
+const EDGE_CSS = `(?:(?!--[-ox>])[${W_MEMBERS}-])+`;
 
 // Statements that carry no model information.
 const SKIP_RE = new RegExp(

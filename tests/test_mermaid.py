@@ -162,4 +162,6 @@ def test_hyphenated_edge_endpoints(case):
     d = parse(f'{src}["source"]\n{dst}["target"]\n' + case["line"])
     assert list(d.nodes) == [src, dst]
     assert [(e.src, e.dst, e.kind, e.label) for e in d.edges] == [(src, dst, "inherit", "")]
+    assert d.nodes[src].css == set(case["srcCss"])
+    assert d.nodes[dst].css == set(case["dstCss"])
     assert d.findings == []

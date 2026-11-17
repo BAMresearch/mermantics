@@ -13,9 +13,10 @@ from dataclasses import dataclass, field
 from .model import WARNING, Edge, Finding, Node
 
 ID = r"[A-Za-z_][\w-]*"
-# In an edge, a double hyphen starts a connector, not an endpoint or style.
-_EDGE_ID = r"[A-Za-z_](?:(?!--)[\w-])*"
-_EDGE_CSS = r"(?:(?!--)[\w-])+"
+# Stop names at complete solid connectors (---, -->, --o, --x), not at every
+# double hyphen: A--B and node--selected can be endpoint and style names.
+_EDGE_ID = r"[A-Za-z_](?:(?!--[-ox>])[\w-])*"
+_EDGE_CSS = r"(?:(?!--[-ox>])[\w-])+"
 
 # Statements that carry no model information.
 _SKIP_RE = re.compile(

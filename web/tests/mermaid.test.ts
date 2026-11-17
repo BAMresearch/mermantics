@@ -114,7 +114,7 @@ const statements: {
   message: string;
   unsupported: string[];
   chains: string[];
-  endpoints: { line: string; src: string; dst: string }[];
+  endpoints: { line: string; src: string; dst: string; srcCss: string[]; dstCss: string[] }[];
   nodes: { line: string; label: string; css: string[] }[];
   edges: { line: string; label: string }[];
 } = JSON.parse(fixture("mermaid-statements.json"));
@@ -161,11 +161,13 @@ test.each(statements.chains)("mixed chain with declared nodes: %s", (line) => {
 });
 
 
-test.each(statements.endpoints)("hyphenated edge endpoints: $line", ({ line, src, dst }) => {
+test.each(statements.endpoints)("hyphenated edge endpoints: $line", ({ line, src, dst, srcCss, dstCss }) => {
   const d = parse(`${src}["source"]\n${dst}["target"]\n${line}`);
   expect([...d.nodes.keys()]).toEqual([src, dst]);
   expect(d.edges).toHaveLength(1);
   expect(d.edges[0]).toMatchObject({ src, dst, kind: "inherit", label: "" });
+  expect(d.nodes.get(src)!.css).toEqual(new Set(srcCss));
+  expect(d.nodes.get(dst)!.css).toEqual(new Set(dstCss));
   expect(d.findings).toEqual([]);
   expect(mermaid.matchEdge(line)).toMatchObject({ src, dst, kind: "inherit", label: "" });
 });
