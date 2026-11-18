@@ -20,6 +20,7 @@ import { BoxNode, worst } from "./BoxNode.js";
 import { check, loadOntology, supers } from "./checker.js";
 import { DatastoreLinkMenu, WhereThingsGo } from "./DatastorePanel.js";
 import { ArrowDetails, BoxDetails, Overview, SelectionPanel, type GlobalFinding } from "./Details.js";
+import { separateArrows } from "./edgeLanes.js";
 import { FloatingEdge } from "./FloatingEdge.js";
 import { layout } from "./layout.js";
 import { MermaidPanel } from "./MermaidPanel.js";
@@ -789,9 +790,9 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
     return [...lanes, ...placed] as unknown as Box[];
   }, [openbis, shownBoxes, arrows]);
   const viewArrows = useMemo(() => {
-    if (!openbis) return shownArrows;
+    if (!openbis) return separateArrows(shownArrows);
     const ids = new Set(viewNodes.map((n) => n.id));
-    return shownArrows.filter((a) => ids.has(a.source) && ids.has(a.target));
+    return separateArrows(shownArrows.filter((a) => ids.has(a.source) && ids.has(a.target)));
   }, [openbis, shownArrows, viewNodes]);
   useEffect(() => {
     const document = work.current();
