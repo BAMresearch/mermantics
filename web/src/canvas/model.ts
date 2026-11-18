@@ -38,6 +38,8 @@ export interface BoxData extends Record<string, unknown> {
 }
 
 export interface ArrowData extends Record<string, unknown> {
+  lane?: number; // drawing only: offset among arrows joining the same pair
+  laneLabelWidth?: number; // drawing only: space reserved for the widest label
   kind: "relation" | "inherit";
   name: string; // the ontology's label for `curie` (for an own relation without a parent: its name)
   curie: string; // property ID, "" for none
