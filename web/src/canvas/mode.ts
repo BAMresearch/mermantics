@@ -53,7 +53,7 @@ export interface Mode {
 export const MODES: Record<ModeId, Mode> = {
   process: {
     id: "process",
-    title: "Domain-agnostic process modelling",
+    title: "Model anything",
     description: "Draw any process: its steps, what goes in and comes out, and who or what carries it out. "
       + "Name the arrows in your own words. No ontology needed.",
     ontology: false,
