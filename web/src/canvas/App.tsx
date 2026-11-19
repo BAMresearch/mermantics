@@ -19,6 +19,7 @@ import logo from "../../../assets/mermantics-logo.svg";
 import { BoxNode, worst } from "./BoxNode.js";
 import { check, loadOntology, supers } from "./checker.js";
 import { DatastoreLinkMenu, WhereThingsGo } from "./DatastorePanel.js";
+import { DetailsResize } from "./DetailsResize.js";
 import { ArrowDetails, BoxDetails, Overview, SelectionPanel, type GlobalFinding } from "./Details.js";
 import { separateArrows } from "./edgeLanes.js";
 import { FloatingEdge } from "./FloatingEdge.js";
@@ -241,6 +242,14 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
   const [wheel, setWheel] = useState<WheelMode>(loadWheelMode);
   // On a phone: the shapes are a drawer from the left, the details a sheet from the bottom.
   const narrow = useMedia(NARROW);
+  const body = useRef<HTMLDivElement>(null);
+  const [detailsCollapsed, setDetailsCollapsed] = useState(false);
+  const detailsToggle = useRef<HTMLButtonElement>(null);
+  const detailsClose = useRef<HTMLButtonElement>(null);
+  const toggleDetails = (collapsed: boolean) => {
+    setDetailsCollapsed(collapsed);
+    requestAnimationFrame(() => (collapsed ? detailsToggle : detailsClose).current?.focus());
+  };
   const touch = useMedia(TOUCH);
   const [drawer, setDrawer] = useState<"shapes" | "details" | null>(null);
   useEffect(() => { if (!narrow) setDrawer(null); }, [narrow]);
@@ -950,7 +959,7 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
                    onCompare={() => { closeConnections(); flushedOptions(); setComparing(true); }} />
       )}
 
-      <div className={`body${drawer ? ` open-${drawer}` : ""}`}>
+      <div ref={body} className={`body${drawer ? ` open-${drawer}` : ""}${!narrow && detailsCollapsed ? " details-collapsed" : ""}`}>
         {/* Phone: tapping a shape adds it and closes the drawer. */}
         <aside className="palette" onClick={(e) => { if (narrow && (e.target as Element).closest(".shape")) setDrawer(null); }}>
           <h2>Add to the model</h2>
@@ -1080,7 +1089,16 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
         )}
 
         {drawer === "shapes" && <div className="drawer-backdrop" onClick={() => setDrawer(null)} />}
-        <aside className="details">
+        <DetailsResize body={body} narrow={narrow} collapsed={detailsCollapsed} />
+        {!narrow && detailsCollapsed && (
+          <button ref={detailsToggle} type="button" className="details-reopen" aria-controls="details-panel" aria-expanded={false}
+                  onClick={() => toggleDetails(false)}>‹ Details</button>
+        )}
+        <aside id="details-panel" className="details" hidden={!narrow && detailsCollapsed}>
+          {!narrow && <div className="details-controls">
+            <button ref={detailsClose} type="button" aria-label="Collapse details panel" aria-controls="details-panel" aria-expanded={true}
+                    onClick={() => toggleDetails(true)}>Collapse ›</button>
+          </div>}
           <div className="tabs" role="tablist">
             <button type="button" role="tab" aria-selected={tab === "model"} className={tab === "model" ? "on" : ""}
                     onClick={() => setTab("model")}>Model</button>
