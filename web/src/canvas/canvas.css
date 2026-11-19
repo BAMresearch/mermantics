@@ -48,7 +48,19 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .bar button { border: 1px solid var(--line); background: #fff; border-radius: 8px; padding: 6px 12px; cursor: pointer; }
 .bar button:hover { border-color: #cbd5e1; background: #f8fafc; }
 
-.body { flex: 1; display: grid; grid-template-columns: 236px 1fr 340px; min-height: 0; }
+.body { --details-size: min(var(--details-width, 340px), max(240px, calc(100% - 556px)));
+  position: relative; flex: 1; display: grid; grid-template-columns: 236px minmax(0, 1fr) var(--details-size); min-height: 0; }
+.body.details-collapsed { grid-template-columns: 236px minmax(0, 1fr); }
+.details[hidden] { display: none; }
+.details-resizer { position: absolute; top: 0; bottom: 0; right: calc(var(--details-size) - 5px); width: 10px;
+  z-index: 10; cursor: col-resize; touch-action: none; user-select: none; }
+.details-resizer::after { content: ""; position: absolute; top: 0; bottom: 0; left: 4px; width: 2px; }
+.details-resizer:hover::after, .details-resizer:focus-visible::after { background: var(--accent); }
+.details-resizer:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.details-controls { display: flex; justify-content: flex-end; padding: 6px 12px 0; }
+.details-controls button, .details-reopen { border: 1px solid var(--line); border-radius: 7px; background: var(--panel);
+  color: var(--text); padding: 5px 9px; cursor: pointer; }
+.details-reopen { position: absolute; top: 10px; right: 12px; z-index: 10; box-shadow: 0 2px 10px rgb(15 23 42 / 0.1); }
 
 /* ---- palette ---- */
 .palette { background: var(--panel); border-right: 1px solid var(--line); padding: 14px 12px; overflow-y: auto; }
@@ -143,7 +155,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .primary:disabled { opacity: 0.5; }
 
 /* ---- details panel ---- */
-.details { background: var(--panel); border-left: 1px solid var(--line); overflow-y: auto; }
+.details { min-width: 0; background: var(--panel); border-left: 1px solid var(--line); overflow-y: auto; overflow-wrap: anywhere; }
 .panel { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
 .panel-kind { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; color: var(--kc, var(--muted)); display: flex; gap: 8px; align-items: center; }
 .panel-kind .dot { margin-top: 0; }
@@ -191,7 +203,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 
 /* ---- use case workshop ---- */
 .details { display: flex; flex-direction: column; }
-.tabs { display: flex; gap: 4px; padding: 10px 12px 0; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--panel); z-index: 2; }
+.tabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 10px 12px 0; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--panel); z-index: 2; }
 .tabs button { border: 0; background: none; padding: 8px 12px; border-bottom: 2px solid transparent; cursor: pointer; color: var(--muted); font-weight: 600; }
 .tabs button.on { color: var(--text); border-bottom-color: var(--accent); }
 .usecase .hint { margin: -4px 0 0; font-size: 12.5px; color: var(--muted); }

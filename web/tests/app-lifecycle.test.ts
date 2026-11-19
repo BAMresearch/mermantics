@@ -105,6 +105,35 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
+test("details can be resized, collapsed, and reopened without losing their width", async () => {
+  await mount();
+  const divider = container.querySelector<HTMLElement>('[role="separator"]')!;
+  const panel = container.querySelector<HTMLElement>("#details-panel")!;
+  divider.setPointerCapture = vi.fn();
+  divider.hasPointerCapture = () => true;
+  divider.releasePointerCapture = vi.fn();
+  vi.spyOn(panel, "getBoundingClientRect").mockReturnValue({ width: 340 } as DOMRect);
+  await act(async () => {
+    divider.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, pointerId: 1, clientX: 700 }));
+    divider.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerId: 1, clientX: 760 }));
+    divider.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 1 }));
+  });
+  expect(divider.getAttribute("aria-valuenow")).toBe("280");
+  await act(async () => divider.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Home" })));
+  expect(divider.getAttribute("aria-valuenow")).toBe("240");
+  await click("Collapse details panel");
+  flushFrames();
+  expect(panel.hidden).toBe(true);
+  expect(container.querySelector('[role="separator"]')).toBeNull();
+  const reopen = container.querySelector<HTMLButtonElement>(".details-reopen")!;
+  expect(document.activeElement).toBe(reopen);
+  await act(async () => reopen.click());
+  flushFrames();
+  expect(panel.hidden).toBe(false);
+  expect(container.querySelector('[role="separator"]')!.getAttribute("aria-valuenow")).toBe("240");
+  expect(document.activeElement?.getAttribute("aria-label")).toBe("Collapse details panel");
+});
+
 test("Tidy then New never restores old boxes or fits the old document", async () => {
   await mount();
   flushFrames(); mocks.fit.mockClear();
