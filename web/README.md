@@ -37,6 +37,36 @@ The parity tests compare the TypeScript checks with JSON output of the Python CL
 `tests/golden/`. `npm run golden:fast` makes those files again (it needs the Python package
 installed in `web/.venv`, see `scripts/make-golden-fast.sh`).
 
+### Optional details-panel browser check
+
+`scripts/check-details-panel.mjs` checks actual Chromium layout, pointer and keyboard resizing,
+preferred-width retention, collapse/reopen, and mobile transitions. It needs an existing
+Playwright installation with its matching Chromium browser and system libraries available.
+Playwright is not a project dependency.
+
+From `web/`, start the app in one terminal:
+
+```bash
+npm run dev -- --host 127.0.0.1
+```
+
+In another terminal, also in `web/`, run:
+
+```bash
+PLAYWRIGHT_MODULE=/absolute/path/to/playwright/index.mjs \
+PANEL_TEST_URL=http://127.0.0.1:5173/ \
+node scripts/check-details-panel.mjs
+```
+
+Use the URL printed by Vite if it chooses a different port. Omit `PLAYWRIGHT_MODULE` if
+Node can already resolve `playwright`; the default URL is `http://127.0.0.1:5173/`.
+The script prints a success message or exits with an error if an assertion fails.
+
+This check remains optional: the existing CI runs Node tests and builds, with no Playwright
+or browser setup. Adding it would require provisioning Playwright, Chromium and system
+libraries, plus starting and waiting for a server. No browser dependencies are added solely
+for this feature; the lifecycle regressions run in the existing CI test suite.
+
 ## Build
 
 ```bash

@@ -42,7 +42,11 @@ export function DetailsResize({ body, narrow, collapsed }: {
     };
   }, [narrow, collapsed]);
 
-  const resize = (value: number) => setPreferred(Math.max(MIN_WIDTH, Math.min(maximum, value)));
+  const resize = (value: number) => setPreferred((previous) => {
+    const next = Math.max(MIN_WIDTH, Math.min(maximum, value));
+    // A blocked expansion must not replace a larger preference with the temporary limit.
+    return next === Math.min(previous, maximum) ? previous : next;
+  });
   const finish = (event: PointerEvent<HTMLDivElement>) => {
     if (drag.current?.pointerId !== event.pointerId) return;
     drag.current = null;

@@ -1,4 +1,5 @@
 /** Optional browser regression check. Run against `npm run dev` with Playwright available.
+ * See web/README.md for execution instructions.
  * PLAYWRIGHT_MODULE may point to an existing Playwright installation; no project dependency is required.
  */
 import assert from "node:assert/strict";
@@ -22,6 +23,23 @@ try {
   await checkWidth(600);
   await page.setViewportSize({ width: 1000, height: 900 });
   await checkWidth(444);
+  // Expansion at the temporary limit must not discard the saved 600px preference.
+  for (const input of ["ArrowLeft", "End", "pointer"]) {
+    if (input === "pointer") {
+      const edge = await divider.boundingBox();
+      await page.mouse.move(edge.x + edge.width / 2, edge.y + 100);
+      await page.mouse.down();
+      await page.mouse.move(edge.x + edge.width / 2 - 40, edge.y + 100, { steps: 4 });
+      await page.mouse.up();
+    } else {
+      await divider.press(input);
+    }
+    await checkWidth(444);
+    await page.setViewportSize({ width: 1200, height: 900 });
+    await checkWidth(600);
+    await page.setViewportSize({ width: 1000, height: 900 });
+    await checkWidth(444);
+  }
   await page.setViewportSize({ width: 1200, height: 900 });
   await checkWidth(600);
   await page.setViewportSize({ width: 1000, height: 900 });

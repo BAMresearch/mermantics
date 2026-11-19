@@ -199,6 +199,42 @@ test("details use the effective width after layout changes and retain preference
   expectWidth(444);
 });
 
+test.each(["ArrowLeft", "End", "pointer"])("blocked expansion preserves the preferred width (%s)", async (input) => {
+  await mount();
+  const divider = container.querySelector<HTMLElement>('[role="separator"]')!;
+  divider.setPointerCapture = vi.fn();
+  divider.hasPointerCapture = () => true;
+  divider.releasePointerCapture = vi.fn();
+  const key = async (key: string) => act(async () => {
+    divider.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key }));
+  });
+  const drag = async (delta: number) => act(async () => {
+    divider.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, pointerId: 1, clientX: 700 }));
+    divider.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerId: 1, clientX: 700 - delta }));
+    divider.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 1 }));
+  });
+  const viewport = async (size: number) => act(async () => { layoutWidth = size; measureDetails(); });
+  const expectWidth = (width: number) => {
+    expect(divider.getAttribute("aria-valuenow")).toBe(String(width));
+    expect(container.querySelector<HTMLElement>(".body")!.style.getPropertyValue("--details-width")).toBe(`${width}px`);
+  };
+  await key("End");
+  expectWidth(600);
+  await viewport(1000);
+  expectWidth(444);
+  if (input === "pointer") await drag(20);
+  else await key(input);
+  expectWidth(444);
+  await viewport(1200);
+  expectWidth(600);
+  await viewport(1000);
+  if (input === "pointer") await drag(-20);
+  else await key("ArrowRight");
+  expectWidth(424);
+  await viewport(1200);
+  expectWidth(424);
+});
+
 test("details drag ignores unrelated pointers and stops on cancellation or capture loss", async () => {
   await mount();
   const divider = container.querySelector<HTMLElement>('[role="separator"]')!;
