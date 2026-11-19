@@ -48,7 +48,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .bar button { border: 1px solid var(--line); background: #fff; border-radius: 8px; padding: 6px 12px; cursor: pointer; }
 .bar button:hover { border-color: #cbd5e1; background: #f8fafc; }
 
-.body { --details-size: min(var(--details-width, 340px), max(240px, calc(100% - 556px)));
+.body { --details-size: var(--details-width, 340px);
   position: relative; flex: 1; display: grid; grid-template-columns: 236px minmax(0, 1fr) var(--details-size); min-height: 0; }
 .body.details-collapsed { grid-template-columns: 236px minmax(0, 1fr); }
 .details[hidden] { display: none; }

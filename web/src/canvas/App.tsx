@@ -11,7 +11,7 @@ import {
   useReactFlow,
   type Connection, type EdgeTypes, type NodeChange, type IsValidConnection, type NodeTypes, type OnConnectEnd,
 } from "@xyflow/react";
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 
 import { applyPositions, DocumentWork } from "./document.js";
 
@@ -19,6 +19,7 @@ import logo from "../../../assets/mermantics-logo.svg";
 import { BoxNode, worst } from "./BoxNode.js";
 import { check, loadOntology, supers } from "./checker.js";
 import { DatastoreLinkMenu, WhereThingsGo } from "./DatastorePanel.js";
+import { DetailsResize } from "./DetailsResize.js";
 import { ArrowDetails, BoxDetails, Overview, SelectionPanel, type GlobalFinding } from "./Details.js";
 import { separateArrows } from "./edgeLanes.js";
 import { FloatingEdge } from "./FloatingEdge.js";
@@ -241,12 +242,10 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
   const [wheel, setWheel] = useState<WheelMode>(loadWheelMode);
   // On a phone: the shapes are a drawer from the left, the details a sheet from the bottom.
   const narrow = useMedia(NARROW);
-  const [detailsWidth, setDetailsWidth] = useState(340);
+  const body = useRef<HTMLDivElement>(null);
   const [detailsCollapsed, setDetailsCollapsed] = useState(false);
-  const detailsDrag = useRef<{ x: number; width: number } | null>(null);
   const detailsToggle = useRef<HTMLButtonElement>(null);
   const detailsClose = useRef<HTMLButtonElement>(null);
-  const resizeDetails = (width: number) => setDetailsWidth(Math.max(240, Math.min(600, window.innerWidth - 556, width)));
   const toggleDetails = (collapsed: boolean) => {
     setDetailsCollapsed(collapsed);
     requestAnimationFrame(() => (collapsed ? detailsToggle : detailsClose).current?.focus());
@@ -960,8 +959,7 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
                    onCompare={() => { closeConnections(); flushedOptions(); setComparing(true); }} />
       )}
 
-      <div className={`body${drawer ? ` open-${drawer}` : ""}${!narrow && detailsCollapsed ? " details-collapsed" : ""}`}
-           style={{ "--details-width": `${detailsWidth}px` } as CSSProperties}>
+      <div ref={body} className={`body${drawer ? ` open-${drawer}` : ""}${!narrow && detailsCollapsed ? " details-collapsed" : ""}`}>
         {/* Phone: tapping a shape adds it and closes the drawer. */}
         <aside className="palette" onClick={(e) => { if (narrow && (e.target as Element).closest(".shape")) setDrawer(null); }}>
           <h2>Add to the model</h2>
@@ -1091,31 +1089,7 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
         )}
 
         {drawer === "shapes" && <div className="drawer-backdrop" onClick={() => setDrawer(null)} />}
-        {!narrow && !detailsCollapsed && (
-          <div className="details-resizer" role="separator" aria-label="Resize details panel" aria-orientation="vertical"
-               aria-controls="details-panel" aria-valuemin={240} aria-valuemax={600} aria-valuenow={detailsWidth} tabIndex={0}
-               onPointerDown={(e) => {
-                 if (e.button !== 0) return;
-                 e.preventDefault();
-                 e.currentTarget.focus();
-                 e.currentTarget.setPointerCapture(e.pointerId);
-                 detailsDrag.current = { x: e.clientX, width: document.getElementById("details-panel")!.getBoundingClientRect().width };
-               }}
-               onPointerMove={(e) => {
-                 if (detailsDrag.current) resizeDetails(detailsDrag.current.width + detailsDrag.current.x - e.clientX);
-               }}
-               onPointerUp={(e) => {
-                 detailsDrag.current = null;
-                 if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
-               }}
-               onPointerCancel={() => { detailsDrag.current = null; }}
-               onLostPointerCapture={() => { detailsDrag.current = null; }}
-               onKeyDown={(e) => {
-                 if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return;
-                 e.preventDefault();
-                 resizeDetails(e.key === "Home" ? 240 : e.key === "End" ? 600 : detailsWidth + (e.key === "ArrowLeft" ? 20 : -20));
-               }} />
-        )}
+        <DetailsResize body={body} narrow={narrow} collapsed={detailsCollapsed} />
         {!narrow && detailsCollapsed && (
           <button ref={detailsToggle} type="button" className="details-reopen" aria-controls="details-panel" aria-expanded={false}
                   onClick={() => toggleDetails(false)}>‹ Details</button>

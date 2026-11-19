@@ -5,14 +5,14 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { Box } from "../src/canvas/model.js";
 
-const mocks = vi.hoisted(() => ({ layout: vi.fn(), check: vi.fn(), supers: vi.fn(), fit: vi.fn(), initialized: false, cloneOnSet: false, nodes: [] as Box[], flowProps: {} as any, optionProps: {} as any, panelProps: {} as any, relationProps: {} as any, linkProps: {} as any, arrowProps: {} as any }));
+const mocks = vi.hoisted(() => ({ narrow: false, flowRenders: 0, layout: vi.fn(), check: vi.fn(), supers: vi.fn(), fit: vi.fn(), initialized: false, cloneOnSet: false, nodes: [] as Box[], flowProps: {} as any, optionProps: {} as any, panelProps: {} as any, relationProps: {} as any, linkProps: {} as any, arrowProps: {} as any }));
 vi.mock("../src/canvas/layout.js", () => ({ layout: mocks.layout }));
 vi.mock("@xyflow/react", async () => {
   const { useState, useCallback } = await import("react");
   return {
     Background: () => null, MiniMap: () => null,
     ConnectionMode: { Loose: "loose" }, SelectionMode: { Full: "full" }, MarkerType: { ArrowClosed: "closed" },
-    ReactFlow: (props: any) => { mocks.nodes = props.nodes; mocks.flowProps = props; return null; },
+    ReactFlow: (props: any) => { mocks.flowRenders++; mocks.nodes = props.nodes; mocks.flowProps = props; return null; },
     useReactFlow: () => flow,
     useNodesInitialized: () => mocks.initialized,
     useNodesState: (initial: Box[]) => {
@@ -30,7 +30,7 @@ vi.mock("@xyflow/react", async () => {
   };
 });
 const flow = { fitView: mocks.fit, screenToFlowPosition: (p: unknown) => p };
-vi.mock("../src/canvas/media.js", () => ({ NARROW: "", TOUCH: "", useMedia: () => false }));
+vi.mock("../src/canvas/media.js", () => ({ NARROW: "narrow", TOUCH: "touch", useMedia: (query: string) => query === "narrow" && mocks.narrow }));
 vi.mock("../src/canvas/checker.js", () => ({ check: mocks.check, supers: mocks.supers, loadOntology: vi.fn(async () => ({ title: "Test ontology" })) }));
 vi.mock("../src/canvas/ZoomBar.js", () => ({ ZoomBar: () => null, loadWheelMode: () => "move", saveWheelMode: () => {} }));
 vi.mock("../src/canvas/BoxNode.js", () => ({ BoxNode: () => null, worst: () => null }));
@@ -68,6 +68,8 @@ let app: Root;
 let container: HTMLDivElement;
 let frames: FrameRequestCallback[];
 let storage: Map<string, string>;
+let layoutWidth: number;
+let measureDetails: () => void;
 const plain: Mode = { ...MODES.process!, ontology: false, options: false, patterns: false,
   examples: [{ title: "Example", name: "example.mmd", text: 'flowchart TD\nA["Original"]' }] };
 const deferred = <T,>() => {
@@ -83,6 +85,16 @@ const flushFrames = () => { const pending = frames.splice(0); pending.forEach((f
 
 beforeEach(() => {
   vi.useFakeTimers();
+  mocks.narrow = false;
+  layoutWidth = 1200;
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+    return { width: this.classList.contains("body") ? layoutWidth : this.classList.contains("palette") ? 236 : 0 } as DOMRect;
+  });
+  vi.stubGlobal("ResizeObserver", class {
+    constructor(callback: () => void) { measureDetails = callback; }
+    observe() {}
+    disconnect() {}
+  });
   mocks.layout.mockReset().mockImplementation(async (bs: Box[]) => bs);
   mocks.check.mockReset();
   mocks.supers.mockReset().mockImplementation(async (ids: string[]) => ids.map(() => []));
@@ -103,10 +115,12 @@ afterEach(async () => {
   container.remove();
   vi.useRealTimers();
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 test("details can be resized, collapsed, and reopened without losing their width", async () => {
   await mount();
+  const rendersBeforeResize = mocks.flowRenders;
   const divider = container.querySelector<HTMLElement>('[role="separator"]')!;
   const panel = container.querySelector<HTMLElement>("#details-panel")!;
   divider.setPointerCapture = vi.fn();
@@ -118,6 +132,7 @@ test("details can be resized, collapsed, and reopened without losing their width
     divider.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerId: 1, clientX: 760 }));
     divider.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 1 }));
   });
+  expect(mocks.flowRenders).toBe(rendersBeforeResize);
   expect(divider.getAttribute("aria-valuenow")).toBe("280");
   await act(async () => divider.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Home" })));
   expect(divider.getAttribute("aria-valuenow")).toBe("240");
@@ -132,6 +147,89 @@ test("details can be resized, collapsed, and reopened without losing their width
   expect(panel.hidden).toBe(false);
   expect(container.querySelector('[role="separator"]')!.getAttribute("aria-valuenow")).toBe("240");
   expect(document.activeElement?.getAttribute("aria-label")).toBe("Collapse details panel");
+});
+
+test("details use the effective width after layout changes and retain preferences across mobile", async () => {
+  const mode = { ...plain, examples: [{ title: "Connected", name: "connected.mmd", text: 'flowchart TD\nA["First"]\nB["Second"]\nA --> B' }] };
+  await mount(mode);
+  const selectedId = mocks.flowProps.edges[0].id;
+  await act(async () => mocks.flowProps.onEdgesChange([{ type: "select", id: selectedId, selected: true }]));
+  const divider = () => container.querySelector<HTMLElement>('[role="separator"]')!;
+  const key = async (key: string) => act(async () => { divider().dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key })); });
+  const expectWidth = (width: number) => {
+    expect(divider().getAttribute("aria-valuenow")).toBe(String(width));
+    expect(container.querySelector<HTMLElement>(".body")!.style.getPropertyValue("--details-width")).toBe(`${width}px`);
+  };
+  const originalNodes = nodes();
+  const originalEdges = mocks.flowProps.edges;
+  const documentBefore = toMermaid(nodes(), originalEdges);
+  expect(originalEdges[0].selected).toBe(true);
+  const renders = mocks.flowRenders;
+  await key("End");
+  expectWidth(600);
+  await key("ArrowLeft");
+  expectWidth(600);
+  await act(async () => { layoutWidth = 1000; measureDetails(); });
+  expectWidth(444);
+  expect(divider().getAttribute("aria-valuemax")).toBe("444");
+  await act(async () => { layoutWidth = 1200; measureDetails(); });
+  expectWidth(600);
+  await act(async () => { layoutWidth = 1000; measureDetails(); });
+  await key("ArrowRight");
+  expectWidth(424);
+  await key("Home");
+  await key("ArrowRight");
+  expectWidth(240);
+  await key("End");
+  expectWidth(444);
+  expect(mocks.flowRenders).toBe(renders);
+  expect(nodes()).toBe(originalNodes);
+  expect(mocks.flowProps.edges).toBe(originalEdges);
+  expect(mocks.flowProps.edges[0].selected).toBe(true);
+  expect(toMermaid(nodes(), mocks.flowProps.edges)).toBe(documentBefore);
+  await click("Collapse details panel");
+  await act(async () => { mocks.narrow = true; layoutWidth = 900; app.render(createElement(App, { mode, onHome: () => {} })); });
+  expect(container.querySelector(".details-resizer")).toBeNull();
+  expect(container.querySelector<HTMLElement>("#details-panel")!.hidden).toBe(false);
+  await act(async () => { mocks.narrow = false; layoutWidth = 901; app.render(createElement(App, { mode, onHome: () => {} })); });
+  expect(container.querySelector<HTMLElement>("#details-panel")!.hidden).toBe(true);
+  await act(async () => container.querySelector<HTMLButtonElement>(".details-reopen")!.click());
+  expectWidth(345);
+  await act(async () => { layoutWidth = 1200; measureDetails(); });
+  expectWidth(444);
+});
+
+test("details drag ignores unrelated pointers and stops on cancellation or capture loss", async () => {
+  await mount();
+  const divider = container.querySelector<HTMLElement>('[role="separator"]')!;
+  divider.setPointerCapture = vi.fn();
+  divider.hasPointerCapture = () => true;
+  divider.releasePointerCapture = vi.fn();
+  const pointer = async (type: string, pointerId: number, clientX: number) => act(async () => {
+    divider.dispatchEvent(new PointerEvent(type, { bubbles: true, button: 0, pointerId, clientX }));
+  });
+  for (const termination of ["pointercancel", "lostpointercapture"]) {
+    await pointer("pointerdown", 1, 700);
+    await pointer("pointerdown", 2, 700);
+    await pointer("pointermove", 2, 500);
+    await pointer("pointerup", 2, 500);
+    await pointer("pointercancel", 2, 500);
+    await pointer("lostpointercapture", 2, 500);
+    expect(divider.getAttribute("aria-valuenow")).toBe("340");
+    await pointer("pointermove", 1, 680);
+    expect(divider.getAttribute("aria-valuenow")).toBe("360");
+    await pointer(termination, 1, 680);
+    await pointer("pointermove", 1, 500);
+    expect(divider.getAttribute("aria-valuenow")).toBe("360");
+    await act(async () => divider.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "ArrowRight" })));
+  }
+  await pointer("pointerdown", 1, 700);
+  await click("Collapse details panel");
+  expect(divider.releasePointerCapture).toHaveBeenLastCalledWith(1);
+  await act(async () => container.querySelector<HTMLButtonElement>(".details-reopen")!.click());
+  const reopened = container.querySelector<HTMLElement>('[role="separator"]')!;
+  await act(async () => reopened.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerId: 1, clientX: 500 })));
+  expect(reopened.getAttribute("aria-valuenow")).toBe("340");
 });
 
 test("Tidy then New never restores old boxes or fits the old document", async () => {
