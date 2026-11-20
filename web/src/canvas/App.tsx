@@ -21,7 +21,7 @@ import { check, loadOntology, supers } from "./checker.js";
 import { DatastoreLinkMenu, WhereThingsGo } from "./DatastorePanel.js";
 import { DetailsResize } from "./DetailsResize.js";
 import { ArrowDetails, BoxDetails, Overview, SelectionPanel, type GlobalFinding } from "./Details.js";
-import { afterPaint, canvasImage, type ImageFormat } from "./canvasImage.js";
+import { afterPaint, canvasImage, drawnBounds, type ImageFormat } from "./canvasImage.js";
 import { separateArrows } from "./edgeLanes.js";
 import { FloatingEdge } from "./FloatingEdge.js";
 import { layout } from "./layout.js";
@@ -217,8 +217,9 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
   const [tab, setTab] = useState<"model" | "usecase" | "option">("model");
   const [workshop, setWorkshop] = useState(false);
   const [showMermaid, setShowMermaid] = useState(false);
-  /** While the canvas is saved as a picture: drawn without the selection. */
+  /** While the canvas is saved as a picture: drawn without the selection, and no second export. */
   const [exporting, setExporting] = useState(false);
+  const exportBusy = useRef(false); // set at once, before the state above is rendered
   const [focused, setFocused] = useState<string | null>(null); // competency question shown on the canvas
   const [patternUses, setPatternUses] = useState<PatternUse[]>([]);
   const [myPatterns, setMyPatterns] = useState<Pattern[]>(loadMine);
@@ -828,18 +829,18 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
 
   // ---- files ----------------------------------------------------------------------------
 
-  const saveUrl = (url: string, name: string) => {
+  /** Downloads `blob` as `name`. The URL is revoked a minute later, not at once: Safari reads
+   * the file only after the click has returned, and the download fails if the URL is gone. */
+  const saveBlob = (blob: Blob, name: string) => {
+    const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
     a.download = name;
     a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
   };
 
-  const save = (text: string, name: string) => {
-    const url = URL.createObjectURL(new Blob([text], { type: "text/plain" }));
-    saveUrl(url, name);
-    URL.revokeObjectURL(url);
-  };
+  const save = (text: string, name: string) => saveBlob(new Blob([text], { type: "text/plain" }), name);
 
   const download = () => {
     save(textNow(), docName.endsWith(".mmd") ? docName : `${docName}.mmd`);
@@ -848,20 +849,18 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
   /** The canvas as you see it, saved as a picture. */
   const exportImage = async (format: ImageFormat) => {
     const viewport = wrapper.current?.querySelector<HTMLElement>(".react-flow__viewport");
-    const nodes = flow.getNodes();
-    if (!viewport || nodes.length === 0) {
-      setNotice("There is nothing on the canvas to save as a picture yet.");
-      return;
-    }
+    if (!viewport || exportBusy.current) return;
+    exportBusy.current = true;
     setExporting(true);
     try {
       await afterPaint();
-      const url = await canvasImage(viewport, flow.getNodesBounds(nodes), format);
-      saveUrl(url, `${docName.replace(/\.mmd$/, "")}.${format}`);
-      if (url.startsWith("blob:")) URL.revokeObjectURL(url);
+      const bounds = drawnBounds(viewport, flow.screenToFlowPosition);
+      if (!bounds) setNotice("There is nothing on the canvas to save as a picture yet.");
+      else saveBlob(await canvasImage(viewport, bounds, format), `${docName.replace(/\.mmd$/, "")}.${format}`);
     } catch (error) {
       setNotice(`Could not save the picture: ${(error as Error).message}`);
     } finally {
+      exportBusy.current = false;
       setExporting(false);
     }
   };
@@ -949,11 +948,11 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
             <button type="button" aria-label="Import" title="Import" onClick={() => fileInput.current?.click()}><ToolbarIcon name="import" /><span className="toolbar-label">Import</span></button>
             <ToolbarMenu label="Export" icon="export">
               <button type="button" onClick={download}>Mermaid diagram <span className="toolbar-format">.mmd</span></button>
-              <button type="button" onClick={() => void exportImage("png")}
+              <button type="button" disabled={exporting} onClick={() => void exportImage("png")}
                       title="The canvas as you see it, as a picture for slides, papers and documents">
                 Picture <span className="toolbar-format">.png</span>
               </button>
-              <button type="button" onClick={() => void exportImage("svg")}
+              <button type="button" disabled={exporting} onClick={() => void exportImage("svg")}
                       title="The canvas as you see it, sharp at any size; opens in browsers and on GitHub, not in PowerPoint or Word">
                 Picture <span className="toolbar-format">.svg</span>
               </button>
