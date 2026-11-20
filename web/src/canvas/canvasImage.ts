@@ -10,7 +10,6 @@
  */
 
 import type { Rect, XYPosition } from "@xyflow/react";
-import { domToBlob, domToForeignObjectSvg } from "modern-screenshot";
 
 export type ImageFormat = "png" | "svg";
 
@@ -52,6 +51,8 @@ export function pngScale(width: number, height: number): number {
 
 /** The snapshot of `viewport` (React Flow's `.react-flow__viewport`) cropped to `bounds`. */
 export async function canvasImage(viewport: HTMLElement, bounds: Rect, format: ImageFormat): Promise<Blob> {
+  // Only loaded when a picture is saved, so the page does not carry it for everyone (as ELK in layout.ts).
+  const { domToBlob, domToForeignObjectSvg } = await import("modern-screenshot");
   const width = Math.ceil(bounds.width + 2 * MARGIN);
   const height = Math.ceil(bounds.height + 2 * MARGIN);
   const options = {
