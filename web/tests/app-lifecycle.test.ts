@@ -5,14 +5,14 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { Box } from "../src/canvas/model.js";
 
-const mocks = vi.hoisted(() => ({ narrow: false, flowRenders: 0, layout: vi.fn(), check: vi.fn(), supers: vi.fn(), fit: vi.fn(), initialized: false, cloneOnSet: false, nodes: [] as Box[], flowProps: {} as any, optionProps: {} as any, panelProps: {} as any, relationProps: {} as any, linkProps: {} as any, arrowProps: {} as any }));
+const mocks = vi.hoisted(() => ({ narrow: false, flowRenders: 0, layout: vi.fn(), check: vi.fn(), supers: vi.fn(), fit: vi.fn(), initialized: false, cloneOnSet: false, picture: vi.fn(), nodes: [] as Box[], flowProps: {} as any, optionProps: {} as any, panelProps: {} as any, relationProps: {} as any, linkProps: {} as any, arrowProps: {} as any }));
 vi.mock("../src/canvas/layout.js", () => ({ layout: mocks.layout }));
 vi.mock("@xyflow/react", async () => {
   const { useState, useCallback } = await import("react");
   return {
     Background: () => null, MiniMap: () => null,
     ConnectionMode: { Loose: "loose" }, SelectionMode: { Full: "full" }, MarkerType: { ArrowClosed: "closed" },
-    ReactFlow: (props: any) => { mocks.flowRenders++; mocks.nodes = props.nodes; mocks.flowProps = props; return null; },
+    ReactFlow: (props: any) => { mocks.flowRenders++; mocks.nodes = props.nodes; mocks.flowProps = props; return createElement("div", { className: "react-flow__viewport" }); },
     useReactFlow: () => flow,
     useNodesInitialized: () => mocks.initialized,
     useNodesState: (initial: Box[]) => {
@@ -30,6 +30,9 @@ vi.mock("@xyflow/react", async () => {
   };
 });
 const flow = { fitView: mocks.fit, screenToFlowPosition: (p: unknown) => p };
+vi.mock("../src/canvas/canvasImage.js", () => ({
+  afterPaint: async () => {}, drawnBounds: () => ({ x: 0, y: 0, width: 100, height: 50 }), canvasImage: mocks.picture,
+}));
 vi.mock("../src/canvas/media.js", () => ({ NARROW: "narrow", TOUCH: "touch", useMedia: (query: string) => query === "narrow" && mocks.narrow }));
 vi.mock("../src/canvas/checker.js", () => ({ check: mocks.check, supers: mocks.supers, loadOntology: vi.fn(async () => ({ title: "Test ontology" })) }));
 vi.mock("../src/canvas/ZoomBar.js", () => ({ ZoomBar: () => null, loadWheelMode: () => "move", saveWheelMode: () => {} }));
@@ -810,4 +813,49 @@ test.each(["classification", "layout"])("failed pattern %s preserves content wit
   // A subsequent insertion still works after the failure.
   await insertFirstPattern();
   expect(nodes()).toHaveLength(11);
+});
+
+test("a failed picture export reports why, brings the selection back and allows the next one", async () => {
+  const mode = { ...plain, examples: [{ title: "Connected", name: "connected.mmd", text: 'flowchart TD\nA["First"]\nB["Second"]\nA --> B' }] };
+  await mount(mode);
+  const arrowId = mocks.flowProps.edges[0].id;
+  await act(async () => mocks.flowProps.onEdgesChange([{ type: "select", id: arrowId, selected: true }]));
+  const picture = (format: string) => [...container.querySelectorAll("button")].find((b) => b.textContent === `Picture .${format}`)!;
+  const drawing = deferred<Blob>();
+  mocks.picture.mockReset().mockReturnValue(drawing.promise);
+
+  // Two clicks before React has drawn the first export's state: still one export.
+  await act(async () => { picture("png").click(); picture("svg").click(); });
+  expect(mocks.picture).toHaveBeenCalledTimes(1);
+  expect(mocks.flowProps.edges[0].selected).toBe(false); // the picture is taken without the selection
+  expect(picture("png").disabled && picture("svg").disabled).toBe(true);
+
+  await act(async () => drawing.reject(new Error("out of memory")));
+  expect(container.querySelector(".notice")!.textContent).toBe("Could not save the picture: out of memory");
+  expect(mocks.flowProps.edges[0].selected).toBe(true);
+  expect(picture("png").disabled || picture("svg").disabled).toBe(false);
+
+  mocks.picture.mockResolvedValue(new Blob(["<svg/>"], { type: "image/svg+xml" }));
+  await act(async () => picture("svg").click());
+  expect(mocks.picture).toHaveBeenCalledTimes(2);
+});
+
+test("a picture is downloaded once, and its URL revoked only after the browser has read it", async () => {
+  const mode = { ...plain, examples: [{ title: "Connected", name: "connected.mmd", text: 'flowchart TD\nA["First"]\nB["Second"]\nA --> B' }] };
+  await mount(mode);
+  const blob = new Blob(["png"], { type: "image/png" });
+  mocks.picture.mockReset().mockResolvedValue(blob);
+  const created = vi.fn((_: Blob) => "blob:picture");
+  const revoked = vi.fn();
+  vi.stubGlobal("URL", Object.assign(Object.create(URL), { createObjectURL: created, revokeObjectURL: revoked }));
+  const downloads: string[] = [];
+  vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (this: HTMLAnchorElement) { downloads.push(`${this.download} ${this.href}`); });
+
+  const png = [...container.querySelectorAll("button")].find((b) => b.textContent === "Picture .png")!;
+  await act(async () => png.click());
+  expect(created).toHaveBeenCalledWith(blob);
+  expect(downloads).toEqual(["connected.png blob:picture"]);
+  expect(revoked).not.toHaveBeenCalled(); // Safari reads the file after the click
+  await act(async () => { vi.advanceTimersByTime(60_000); });
+  expect(revoked).toHaveBeenCalledWith("blob:picture");
 });

@@ -67,6 +67,18 @@ or browser setup. Adding it would require provisioning Playwright, Chromium and 
 libraries, plus starting and waiting for a server. No browser dependencies are added solely
 for this feature; the lifecycle regressions run in the existing CI test suite.
 
+### Optional picture export browser check
+
+`scripts/check-picture-export.mjs` exports the coffee example, a diagram with parallel arrows,
+long labels and boxes far apart, and the Data Store example in the openBIS view. It draws the
+pictures in the browser and checks their pixels: nothing is cut off and the white margin is the
+same on every side, there are no transparent strips, the picture is the same after panning and
+zooming, and the large PNG stays within 4096 × 4096 pixels in all. It also checks that the
+selection and connection dots are left out and the selection comes back, and that the SVG has
+no CSS variables and stays small. Run it like the details-panel check, with `PICTURE_TEST_URL`
+for the address. `CHROMIUM_PATH` points it at a Chromium other than Playwright's own, and
+`PICTURE_OUT=<dir>` keeps the pictures to look at.
+
 ## Build
 
 ```bash
@@ -95,6 +107,15 @@ The canvas keeps the boxes and arrows in memory and writes them as Mermaid after
 change; that Mermaid text is what is checked, saved and downloaded. Box positions, box kinds
 (the shape a box is drawn as), use case notes and patterns go into `%% mermantics-...`
 comment lines, which Mermaid and the checker ignore.
+
+"Export → Picture" saves the canvas as you see it, as PNG (twice the pixels, for slides and
+documents) or SVG (sharp at any size; the boxes stay HTML inside it, so it opens in browsers
+and on GitHub but not in PowerPoint or Word). It is a snapshot of the drawn canvas
+(`src/canvas/canvasImage.ts`, with modern-screenshot), cropped to everything drawn (boxes,
+arrows and their labels, measured where the browser drew them), without the selection,
+connection dots, zoom bar or minimap. A large diagram gets fewer than twice the pixels, so the
+PNG stays within what every browser can draw (iOS Safari: 4096 × 4096 pixels in all); for very
+large diagrams the SVG is the sharper choice.
 
 Box labels keep the name on the first line, ontology and BAM Data Store fields next,
 and free notes after a blank line (`<br><br>`). Import always reserves the first line
