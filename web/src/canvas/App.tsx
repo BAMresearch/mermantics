@@ -21,6 +21,7 @@ import { check, loadOntology, supers } from "./checker.js";
 import { DatastoreLinkMenu, WhereThingsGo } from "./DatastorePanel.js";
 import { DetailsResize } from "./DetailsResize.js";
 import { ArrowDetails, BoxDetails, Overview, SelectionPanel, type GlobalFinding } from "./Details.js";
+import { afterPaint, canvasImage, type ImageFormat } from "./canvasImage.js";
 import { separateArrows } from "./edgeLanes.js";
 import { FloatingEdge } from "./FloatingEdge.js";
 import { layout } from "./layout.js";
@@ -216,6 +217,8 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
   const [tab, setTab] = useState<"model" | "usecase" | "option">("model");
   const [workshop, setWorkshop] = useState(false);
   const [showMermaid, setShowMermaid] = useState(false);
+  /** While the canvas is saved as a picture: drawn without the selection. */
+  const [exporting, setExporting] = useState(false);
   const [focused, setFocused] = useState<string | null>(null); // competency question shown on the canvas
   const [patternUses, setPatternUses] = useState<PatternUse[]>([]);
   const [myPatterns, setMyPatterns] = useState<Pattern[]>(loadMine);
@@ -744,12 +747,14 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
 
   const shownArrows = useMemo(() => arrows.map((a) => {
     const d = a.data!;
+    const selected = a.selected && !exporting;
     if (mode.datastore && d.kind === "relation" && !d.curie && DATASTORE_LINKS.has(d.name)) {
       // openBIS links: solid for parent and child, dotted red for a dataset and its object.
       const dataset = d.name === IS_ATTACHED_TO;
       const color = dataset ? "#b85450" : "#334155";
       return {
         ...a,
+        selected,
         type: "floating",
         label: d.name,
         labelBgPadding: [5, 2] as [number, number],
@@ -757,13 +762,14 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
         labelStyle: { fontSize: 11, fill: dataset ? "#9f1239" : "#334155", fontWeight: 500 },
         labelBgStyle: { fill: "#ffffff", fillOpacity: 0.95 },
         markerEnd: { type: MarkerType.ArrowClosed, color, width: 16, height: 16 },
-        style: { stroke: color, strokeWidth: a.selected ? 2.5 : 1.5, strokeDasharray: dataset ? "3 4" : undefined },
+        style: { stroke: color, strokeWidth: selected ? 2.5 : 1.5, strokeDasharray: dataset ? "3 4" : undefined },
       };
     }
     const level = workshop || !mode.ontology ? null : worst(d.problems);
     const color = level === "error" ? "#dc2626" : level === "warning" ? "#d97706" : d.kind === "inherit" ? "#475569" : "#64748b";
     return {
       ...a,
+      selected,
       type: "floating",
       label: d.words,
       labelBgPadding: [6, 3] as [number, number],
@@ -771,9 +777,9 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
       labelStyle: { fontSize: 12, fill: level ? color : "#334155", fontWeight: 500 },
       labelBgStyle: { fill: "#ffffff", fillOpacity: 0.95 },
       markerEnd: { type: MarkerType.ArrowClosed, color, width: 18, height: 18 },
-      style: { stroke: color, strokeWidth: a.selected ? 2.5 : 1.6, strokeDasharray: d.kind === "inherit" ? undefined : "6 4" },
+      style: { stroke: color, strokeWidth: selected ? 2.5 : 1.6, strokeDasharray: d.kind === "inherit" ? undefined : "6 4" },
     };
-  }), [arrows, workshop, mode.ontology, mode.datastore]);
+  }), [arrows, exporting, workshop, mode.ontology, mode.datastore]);
 
   // ---- boxes as drawn: question tags, and dimming for the question shown ------------------
 
@@ -784,13 +790,14 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
     const lit = new Set(focus?.boxes ?? []);
     return boxes.map((b) => ({
       ...b,
+      selected: b.selected && !exporting,
       className: focus ? (lit.has(b.id) ? "lit" : "dimmed") : undefined,
       data: { ...b.data, tags: tags.get(b.id) ?? [], plain: !mode.ontology,
               onRename: (name: string) => patchBox(b.id, { name }),
               caption: mode.options ? mode.shapes.find((s) => s.kind === b.data.kind)?.title : undefined,
               status: mode.options ? statusOf(b.data.css) || undefined : undefined },
     }));
-  }, [boxes, useCase.questions, focused, mode.ontology, mode.options, mode.shapes, patchBox]);
+  }, [boxes, exporting, useCase.questions, focused, mode.ontology, mode.options, mode.shapes, patchBox]);
 
   // The openBIS view: the same boxes, placed by their Space, Project and Collection.
   const viewNodes = useMemo(() => {
@@ -821,17 +828,42 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
 
   // ---- files ----------------------------------------------------------------------------
 
-  const save = (text: string, name: string) => {
-    const blob = new Blob([text], { type: "text/plain" });
+  const saveUrl = (url: string, name: string) => {
     const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
+    a.href = url;
     a.download = name;
     a.click();
-    URL.revokeObjectURL(a.href);
+  };
+
+  const save = (text: string, name: string) => {
+    const url = URL.createObjectURL(new Blob([text], { type: "text/plain" }));
+    saveUrl(url, name);
+    URL.revokeObjectURL(url);
   };
 
   const download = () => {
     save(textNow(), docName.endsWith(".mmd") ? docName : `${docName}.mmd`);
+  };
+
+  /** The canvas as you see it, saved as a picture. */
+  const exportImage = async (format: ImageFormat) => {
+    const viewport = wrapper.current?.querySelector<HTMLElement>(".react-flow__viewport");
+    const nodes = flow.getNodes();
+    if (!viewport || nodes.length === 0) {
+      setNotice("There is nothing on the canvas to save as a picture yet.");
+      return;
+    }
+    setExporting(true);
+    try {
+      await afterPaint();
+      const url = await canvasImage(viewport, flow.getNodesBounds(nodes), format);
+      saveUrl(url, `${docName.replace(/\.mmd$/, "")}.${format}`);
+      if (url.startsWith("blob:")) URL.revokeObjectURL(url);
+    } catch (error) {
+      setNotice(`Could not save the picture: ${(error as Error).message}`);
+    } finally {
+      setExporting(false);
+    }
   };
 
   const exportResults = async () => {
@@ -917,6 +949,14 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
             <button type="button" aria-label="Import" title="Import" onClick={() => fileInput.current?.click()}><ToolbarIcon name="import" /><span className="toolbar-label">Import</span></button>
             <ToolbarMenu label="Export" icon="export">
               <button type="button" onClick={download}>Mermaid diagram <span className="toolbar-format">.mmd</span></button>
+              <button type="button" onClick={() => void exportImage("png")}
+                      title="The canvas as you see it, as a picture for slides, papers and documents">
+                Picture <span className="toolbar-format">.png</span>
+              </button>
+              <button type="button" onClick={() => void exportImage("svg")}
+                      title="The canvas as you see it, sharp at any size; opens in browsers and on GitHub, not in PowerPoint or Word">
+                Picture <span className="toolbar-format">.svg</span>
+              </button>
               <button type="button" onClick={exportUseCase}
                       title={mode.options ? "The use case notes and every option with its notes and diagrams, as one Markdown file"
                         : "The use case, its questions and the diagram as one Markdown file"}>

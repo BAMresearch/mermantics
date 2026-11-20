@@ -67,6 +67,15 @@ or browser setup. Adding it would require provisioning Playwright, Chromium and 
 libraries, plus starting and waiting for a server. No browser dependencies are added solely
 for this feature; the lifecycle regressions run in the existing CI test suite.
 
+### Optional picture export browser check
+
+`scripts/check-picture-export.mjs` exports the coffee example as SVG and PNG and the Data Store
+example in the openBIS view, and checks what only a real browser shows: every arrow is in the
+picture and not clipped, the selection and connection dots are left out and the selection comes
+back, the SVG has no CSS variables and stays small, and the PNG has twice the pixels. Run it like
+the details-panel check, with `PICTURE_TEST_URL` for the address. `CHROMIUM_PATH` points it at a
+Chromium other than Playwright's own, and `PICTURE_OUT=<dir>` keeps the pictures to look at.
+
 ## Build
 
 ```bash
@@ -95,6 +104,12 @@ The canvas keeps the boxes and arrows in memory and writes them as Mermaid after
 change; that Mermaid text is what is checked, saved and downloaded. Box positions, box kinds
 (the shape a box is drawn as), use case notes and patterns go into `%% mermantics-...`
 comment lines, which Mermaid and the checker ignore.
+
+"Export → Picture" saves the canvas as you see it, as PNG (twice the pixels, for slides and
+documents) or SVG (sharp at any size; the boxes stay HTML inside it, so it opens in browsers
+and on GitHub but not in PowerPoint or Word). It is a snapshot of the drawn canvas
+(`src/canvas/canvasImage.ts`, with modern-screenshot), cropped to the boxes, without the
+selection, connection dots, zoom bar or minimap.
 
 Box labels keep the name on the first line, ontology and BAM Data Store fields next,
 and free notes after a blank line (`<br><br>`). Import always reserves the first line
