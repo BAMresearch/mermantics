@@ -330,15 +330,22 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
     try {
       const placed = await layout(snapshot, arrowsRef.current);
       if (!valid()) return;
-      if (explicit) changed.current = true;
       setBoxes((current) => valid() ? applyPositions(current, snapshot, placed) : current);
-      // "Tidy up" is a step; the layout that follows opening a diagram is part of opening it.
-      if (!explicit) history.amend((s) => snapshotOf(applyPositions(s.boxes, snapshot, placed), s.arrows, s.uses, s.useCase));
+      if (explicit) {
+        // "Tidy up" is a step of its own, even if a field was clicked into while it ran.
+        changed.current = true;
+        recordEdit(true);
+        boxesRef.current = applyPositions(boxesRef.current, snapshot, placed);
+        recordEdit(true);
+      } else {
+        // The layout that follows opening a diagram is part of opening it.
+        history.amend((s) => snapshotOf(applyPositions(s.boxes, snapshot, placed), s.arrows, s.uses, s.useCase));
+      }
       fitDocument(valid);
     } catch (error) {
       if (valid()) setNotice(`Could not arrange the diagram: ${(error as Error).message}`);
     }
-  }, [fitDocument, history, setBoxes, work]);
+  }, [fitDocument, history, recordEdit, setBoxes, work]);
 
   useEffect(() => {
     if (!relayout.current || !nodesReady) return;
@@ -619,12 +626,15 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
       placed = placed.map((b) => ({ ...b, selected: true, position: { x: where.x + b.position.x - minX, y: where.y + b.position.y - minY } }));
       const final = remapInsertion({ ...inserted, boxes: placed },
                                    { boxes: current, arrows: arrowsRef.current, uses: usesRef.current });
+      // A step of its own, even if a field was clicked into while the pattern was being placed.
+      recordEdit(true);
       append(final); // synchronously after choosing IDs, so the next ID choice sees them
+      recordEdit(true);
       if (!at) setTimeout(() => fitDocument(valid), 50);
     } catch (error) {
       if (valid()) setNotice(`Could not insert the pattern: ${(error as Error).message}`);
     }
-  }, [append, flow, fitDocument, work]);
+  }, [append, flow, fitDocument, recordEdit, work]);
 
   const onDrop = useCallback((e: DragEvent) => {
     e.preventDefault();

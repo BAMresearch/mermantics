@@ -5,13 +5,13 @@
  * design options, the use case), not a list of edit commands. Any edit, whichever handler or
  * React Flow made it, is undone the same way, and a new kind of edit needs nothing here.
  *
- * A snapshot holds only the fields the document is made of, named below; everything else React
- * Flow or the view keeps on a box or arrow (selection, dragging, measured size, and whatever is
- * added later) is not history. Of the data, only the check's findings are left out. Zoom and pan
- * are not in the boxes at all.
+ * Two snapshots are the same step when the diagram's Mermaid text, what is saved, is the same.
+ * So whatever the file does not keep is not history: the selection, a box being dragged, sizes,
+ * the check's findings and the fields only used for drawing. Zoom and pan are not in the boxes
+ * at all. A snapshot holds only the document's fields, so restoring one brings none of that back.
  */
 
-import type { Arrow, Box, UseCase } from "./model.js";
+import { emptyUseCase, toMermaid, type Arrow, type Box, type UseCase } from "./model.js";
 import type { PatternUse } from "./patterns.js";
 
 export interface Snapshot {
@@ -24,7 +24,7 @@ export interface Snapshot {
 
 interface Entry { snapshot: Snapshot; key: string }
 
-/** What a box and an arrow are in the document: what is saved, and so what can be undone. */
+/** The fields of a box and an arrow that the document is made of. */
 const BOX_FIELDS = ["id", "type", "position", "parentId", "data"] as const;
 const ARROW_FIELDS = ["id", "type", "source", "target", "sourceHandle", "targetHandle", "data"] as const;
 
@@ -42,7 +42,8 @@ function pick<T extends { data?: Record<string, unknown> }>(x: T, fields: readon
 export function snapshotOf(boxes: Box[], arrows: Arrow[], uses: PatternUse[], useCase: UseCase | null): Entry {
   const plainBoxes = boxes.map((b) => pick(b, BOX_FIELDS));
   const plainArrows = arrows.map((a) => pick(a, ARROW_FIELDS));
-  const key = JSON.stringify([plainBoxes, plainArrows, uses, useCase]);
+  // As saved (App.textNow): a step is a change to the file, and only that.
+  const key = toMermaid(boxes, arrows, useCase ?? emptyUseCase(), uses);
   const snapshot: Snapshot = {
     // The size is kept only so a restored box is drawn at once; it is measured again anyway.
     boxes: plainBoxes.map((b, i) => ({ ...b, measured: boxes[i]!.measured, data: { ...b.data, problems: [] } })),

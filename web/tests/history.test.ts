@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, expect, test } from "vitest";
 import { History, isTextEntry, restoreOnto, snapshotOf, undoKey } from "../src/canvas/history.js";
-import { fromMermaid, type Box } from "../src/canvas/model.js";
+import { fromMermaid, toMermaid, type Box } from "../src/canvas/model.js";
 
 const doc = () => fromMermaid('flowchart TD\nA["A"]\nB["B"]\nA -- "has part" --> B');
 const entry = (boxes: Box[], arrows = doc().arrows) => snapshotOf(boxes, arrows, [], null);
@@ -18,13 +18,23 @@ describe("snapshots", () => {
     expect(entry(boxes.map((b) => ({ ...b, data: { ...b.data, name: "renamed" } })), arrows).key).not.toBe(plain);
   });
 
-  test("only the document's fields are history: anything else on a box or arrow is not", () => {
+  test("a step is a change to the saved text, and only that", () => {
     const { boxes, arrows } = doc();
     const plain = entry(boxes, arrows).key;
+    expect(plain).toBe(toMermaid(boxes, arrows));
+    // Fields used only for drawing, and anything else on a box or arrow, are not history.
     const extra = { className: "lit", hidden: false, zIndex: 3, somethingNew: 1 };
-    expect(entry(boxes.map((b) => ({ ...b, ...extra })), arrows.map((a) => ({ ...a, ...extra, animated: true }))).key).toBe(plain);
-    // A new field in the data is part of the document, so it is history.
-    expect(entry(boxes.map((b) => ({ ...b, data: { ...b.data, note: "new" } })), arrows).key).not.toBe(plain);
+    const drawn = boxes.map((b) => ({ ...b, ...extra, data: { ...b.data, tags: ["Q1"], plain: true, caption: "Step", status: "changed" } }));
+    const lanes = arrows.map((a) => ({ ...a, ...extra, animated: true, data: { ...a.data!, lane: 2, laneLabelWidth: 80 } }));
+    expect(entry(drawn, lanes).key).toBe(plain);
+    // Everything the file keeps is.
+    const edits: [string, (b: Box[]) => Box[]][] = [
+      ["kind", (bs) => bs.map((b) => ({ ...b, data: { ...b.data, kind: "process" as const } }))],
+      ["class", (bs) => bs.map((b) => ({ ...b, data: { ...b.data, classId: "X_1", classLabel: "x" } }))],
+      ["lines", (bs) => bs.map((b) => ({ ...b, data: { ...b.data, lines: ["more"] } }))],
+    ];
+    for (const [, edit] of edits) expect(entry(edit(boxes), arrows).key).not.toBe(plain);
+    expect(entry(boxes, arrows.map((a) => ({ ...a, data: { ...a.data!, words: "other words" } }))).key).not.toBe(plain);
   });
 
   test("a restored snapshot keeps the current selection and findings", () => {

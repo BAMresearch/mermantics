@@ -1032,3 +1032,21 @@ test("a pattern still being placed is dropped by undo, so redo stays possible", 
   await click("Redo");
   expect(nodes()[0]!.position).toEqual({ x: 50, y: 0 });
 });
+
+test.each(["Tidy up", "a pattern"])("%s finishing while a field has focus is a step of its own, not part of the typing", async (what) => {
+  await mount({ ...plain, patterns: true });
+  const start = nodes().map((b) => [b.id, b.position]);
+  const field = document.createElement("input");
+  container.append(field);
+  field.focus();
+  await act(async () => nodes()[0]!.data.onRename!("Typed"));
+  mocks.layout.mockImplementationOnce(async (bs: Box[]) => bs.map((b) => ({ ...b, position: { x: 900, y: 900 } })));
+  if (what === "Tidy up") await click("Tidy up");
+  else await insertFirstPattern();
+  expect(document.activeElement).toBe(field);
+  await click("Undo");
+  expect(nodes().map((b) => [b.id, b.position])).toEqual(start);
+  expect(nodes()[0]!.data.name).toBe("Typed");
+  await click("Undo");
+  expect(nodes()[0]!.data.name).toBe("Original");
+});
