@@ -89,7 +89,7 @@ describe("keys", () => {
     expect(press("Z", { ctrl: true, shift: true })).toBe("redo");
     expect(press("Z", { meta: true, shift: true })).toBe("redo");
     expect(press("y", { ctrl: true })).toBe("redo");
-    expect(press("y", { meta: true })).toBe("redo");
+    expect(press("y", { meta: true })).toBeNull(); // Cmd+Y stays the browser's
     expect(press("z")).toBeNull();
     expect(press("z", { ctrl: true, alt: true })).toBeNull();
     expect(press("x", { ctrl: true })).toBeNull();

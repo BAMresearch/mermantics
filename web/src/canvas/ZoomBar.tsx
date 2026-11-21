@@ -131,7 +131,7 @@ function ControlsHelp({ wheel }: { wheel: WheelMode }) {
               <Row what="Whole diagram">{k("Shift")} {k("1")}</Row>
               <Row what="Delete">{k("Delete")} or {k("Backspace")}</Row>
               <Row what="Undo">{k(MOD)} {k("Z")}</Row>
-              <Row what="Redo">{k(MOD)} {k("Shift")} {k("Z")} or {k(MOD)} {k("Y")}</Row>
+              <Row what="Redo">{k(MOD)} {k("Shift")} {k("Z")}{MOD === "Ctrl" && <> or {k("Ctrl")} {k("Y")}</>}</Row>
             </tbody>
           </table>
           <p className="help-foot">Scroll does something else? Change "Scroll" in this bar.</p>

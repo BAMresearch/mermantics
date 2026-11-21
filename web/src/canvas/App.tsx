@@ -987,7 +987,7 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
     }
   }, [closeConnections, history, recordEdit, setArrows, setBoxes, work]);
 
-  // Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z and Ctrl/Cmd+Y. In a text field they undo the typing, as usual.
+  // Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z and Ctrl+Y. In a text field they undo the typing, as usual.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const which = undoKey(e);

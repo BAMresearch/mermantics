@@ -144,13 +144,16 @@ export function isTextEntry(el: Element | null): boolean {
   return (el as HTMLElement).isContentEditable === true;
 }
 
-/** "undo", "redo" or null for a key press: Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z and Ctrl/Cmd+Y. */
+/**
+ * "undo", "redo" or null for a key press: Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z and Ctrl+Y. Cmd+Y is not
+ * redo on a Mac (browsers open their history with it), so it is left alone.
+ */
 export function undoKey(e: Pick<KeyboardEvent, "key" | "code" | "ctrlKey" | "metaKey" | "shiftKey" | "altKey">): "undo" | "redo" | null {
   if (!(e.ctrlKey || e.metaKey) || e.altKey) return null;
   // The letter as typed; the key position only on layouts without Latin letters.
   const letter = /^[a-z]$/i.test(e.key) ? e.key.toLowerCase()
     : e.code === "KeyZ" ? "z" : e.code === "KeyY" ? "y" : "";
   if (letter === "z") return e.shiftKey ? "redo" : "undo";
-  if (letter === "y" && !e.shiftKey) return "redo";
+  if (letter === "y" && e.ctrlKey && !e.metaKey && !e.shiftKey) return "redo";
   return null;
 }
