@@ -99,7 +99,7 @@ workflow change).
 | `src/canvas/` | The page: a canvas editor (React and React Flow) that writes the diagram as Mermaid and checks it in the worker. |
 | `examples/` | The example diagrams in the page's Examples menu. |
 | `patterns/` | The built-in patterns in the canvas palette. |
-| `options/` | The design options of the computations section: one folder per option, with `terms.mmd`, `dft.mmd` and `fem.mmd`. Written by `scripts/gen-options.py`; change the script, not the files. |
+| `options/` | The design options of Semantic Pattern Design: one folder per option, with `terms.mmd`, `dft.mmd` and `fem.mmd`. Written by `scripts/gen-options.py`; change the script, not the files. |
 | `scripts/` | Downloading PMDco, making the golden files, `bam-types.py`, which writes the BAM Data Store object and dataset types (`src/canvas/bamTypes.ts`) from a bam-masterdata checkout, and `gen-options.py`, which writes the design options in `options/` with their labels looked up in PMDco. |
 | `tests/` | vitest tests. |
 
@@ -134,16 +134,16 @@ Click a box to edit its full details in the side panel, or double-click it to re
 on the canvas. Enter or clicking away saves the name; Esc cancels. Saved edits update
 the Mermaid source and rerun checks in sections that support checking.
 
-The canvas has four sections, set up in `src/canvas/mode.ts`: process modelling (plain
-shapes and relations, no ontology, no checks), materials science and engineering (PMDco,
-checked as you draw), BAM Data Store (openBIS object types, no ontology) and PMD Hackathon -
-Computations (PMDco, with design options). The start page picks one; `?mode=process`,
+The canvas has four sections, set up in `src/canvas/mode.ts`: Model anything (plain
+shapes and relations, no ontology, no checks), Explore PMDco (PMDco,
+checked as you draw), BAM Data Store (openBIS object types, no ontology) and Semantic Pattern Design
+(PMDco, with design options). The start page picks one; `?mode=process`,
 `?mode=mse`, `?mode=datastore` or `?mode=comp` in the URL opens a section directly. Each
 section keeps its own diagram in the browser tab (`src/canvas/saved.ts`): reloading or going
 back to the page keeps it, a new tab starts from the current examples, and nothing is kept
 until something is changed. Closing a tab that holds work asks first.
 
-The computations section works with design options instead of one diagram: each option in
+Semantic Pattern Design works with design options instead of one diagram: each option in
 `options/` has three diagrams (its terms, a DFT geometry optimization and a static FEM
 analysis), and the section shows them one at a time or side by side (`src/canvas/options.ts`,
 `Options.tsx`). Boxes have the style class `proposed`, `changed` or `deprecated` when an option
