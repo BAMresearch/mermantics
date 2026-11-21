@@ -4,6 +4,7 @@ import type { Box } from "./model.js";
 export class DocumentWork {
   private document = 0;
   private layout = 0;
+  private restored = 0;
 
   replace(): number {
     this.layout++;
@@ -19,8 +20,21 @@ export class DocumentWork {
     return () => this.owns(document) && layout === this.layout;
   }
 
-  /** A layout still running must not move the boxes any more (after undo or redo). */
-  cancelLayout() { this.layout++; }
+  /**
+   * Undo or redo put an earlier state back. Work started for the state before (a layout, a
+   * pattern being placed, a box's shape being looked up) must not change the canvas any more.
+   */
+  restore() {
+    this.layout++;
+    this.restored++;
+  }
+
+  /** For work started from the canvas as it is now: still valid unless the document was replaced or restored. */
+  beginEdit(): () => boolean {
+    const document = this.document;
+    const restored = this.restored;
+    return () => this.owns(document) && restored === this.restored;
+  }
 }
 
 /** Layout owns positions only. User moves, additions, deletions and all other edits win. */

@@ -34,7 +34,7 @@ import { emptyUseCase, fromMermaid, makeId, toMermaid, type Arrow, type ArrowDat
          type UseCase } from "./model.js";
 import type { Mode } from "./mode.js";
 import { onLeaving, saveDiagram, savedDiagram } from "./saved.js";
-import { checkStatus, Compare, OptionBar, OptionPanel, TermsTree } from "./Options.js";
+import { checkStatus, Compare, OptionBar, OptionPanel, TermsTree } from "./OptionsPanel.js";
 import { EMPTY_VIEW, newOptionId, nextLetter, originalView, readState, resultsMarkdown, VIEWS, type DesignOption,
          type OptionsState, type ViewId } from "./options.js";
 import { DATASTORE_LINKS, IS_ATTACHED_TO, IS_CHILD_OF, IS_PARENT_OF, KIND_BY_ANCESTOR, openbisFor, shapeOf, statusOf,
@@ -598,14 +598,15 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
 
   const insertPattern = useCallback(async (pattern: Pattern, at?: { x: number; y: number }) => {
     if (loading.current !== null) return;
-    const document = work.current();
+    // Undo or redo while the pattern is being placed drops it, like any other work for the state before.
+    const valid = work.beginEdit();
     try {
       // Prepare with pattern-local IDs; free IDs and the position depend on the diagram at commit.
       const inserted = instantiate(pattern, { x: 0, y: 0 });
       let placed = await classify(inserted.boxes);
-      if (!work.owns(document)) return;
+      if (!valid()) return;
       if (!inserted.positioned) placed = await layout(placed, inserted.arrows);
-      if (!work.owns(document)) return;
+      if (!valid()) return;
       // Clicked (not dropped): place it to the right of the model, so it does not cover any box.
       const current = boxesRef.current;
       const rect = wrapper.current!.getBoundingClientRect();
@@ -619,9 +620,9 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
       const final = remapInsertion({ ...inserted, boxes: placed },
                                    { boxes: current, arrows: arrowsRef.current, uses: usesRef.current });
       append(final); // synchronously after choosing IDs, so the next ID choice sees them
-      if (!at) setTimeout(() => fitDocument(() => work.owns(document)), 50);
+      if (!at) setTimeout(() => fitDocument(valid), 50);
     } catch (error) {
-      if (work.owns(document)) setNotice(`Could not insert the pattern: ${(error as Error).message}`);
+      if (valid()) setNotice(`Could not insert the pattern: ${(error as Error).message}`);
     }
   }, [append, flow, fitDocument, work]);
 
@@ -749,25 +750,30 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
     });
   const nameOf = (id: string) => boxes.find((b) => b.id === id)?.data.name ?? id;
 
+  /**
+   * A box that is "something else" gets a shape once its class is known. This belongs to
+   * choosing the class, not a step of its own. After undo or redo the answer is dropped: the
+   * state it was for is gone, and the class is looked up again if it comes back (see step).
+   */
+  const shapeFromClass = useCallback((id: string, classId: string) => {
+    const valid = work.beginEdit();
+    void supers([classId]).then(([anc]) => {
+      if (!valid()) return;
+      const hit = KIND_BY_ANCESTOR.find(([cid]) => (anc ?? []).includes(cid));
+      if (!hit) return;
+      const shaped = (bs: Box[]) => bs.map((b) => (b.id === id && b.data.classId === classId && b.data.kind === "other"
+        ? { ...b, data: { ...b.data, kind: hit[1] } } : b));
+      setBoxes(shaped);
+      history.amend((s) => snapshotOf(shaped(s.boxes), s.arrows, s.uses, s.useCase));
+    }).catch((error: Error) => {
+      if (valid()) setNotice(`Could not classify the box: ${error.message}`);
+    });
+  }, [history, setBoxes, work]);
+
   const patchBox = useCallback((id: string, patch: Partial<BoxData>) => {
     setBoxes((bs) => bs.map((b) => (b.id === id ? { ...b, data: { ...b.data, ...patch } } : b)));
-    // A box that is "something else" gets a shape once its class is known.
-    if (patch.classId && loading.current === null) {
-      const document = work.current();
-      void supers([patch.classId]).then(([anc]) => {
-        if (!work.owns(document)) return;
-        const hit = KIND_BY_ANCESTOR.find(([cid]) => (anc ?? []).includes(cid));
-        if (!hit) return;
-        const shaped = (bs: Box[]) => bs.map((b) => (b.id === id && b.data.classId === patch.classId && b.data.kind === "other"
-          ? { ...b, data: { ...b.data, kind: hit[1] } } : b));
-        setBoxes(shaped);
-        // Part of choosing the class, not a step of its own.
-        history.amend((s) => snapshotOf(shaped(s.boxes), s.arrows, s.uses, s.useCase));
-      }).catch((error: Error) => {
-        if (work.owns(document)) setNotice(`Could not classify the box: ${error.message}`);
-      });
-    }
-  }, [history, setBoxes, work]);
+    if (patch.classId && loading.current === null) shapeFromClass(id, patch.classId);
+  }, [setBoxes, shapeFromClass]);
 
   const patchArrow = useCallback((id: string, patch: Partial<ArrowData>) => {
     setArrows((as) => as.map((a) => (a.id === id ? { ...a, data: { ...a.data!, ...patch } } : a)));
@@ -970,9 +976,10 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
     const s = which === "undo" ? history.undo() : history.redo();
     setUndoable({ undo: history.canUndo, redo: history.canRedo });
     if (!s) return;
-    work.cancelLayout();
+    work.restore();
     relayout.current = false;
     closeConnections();
+    const classBefore = new Map(boxesRef.current.map((b) => [b.id, b.data.classId]));
     const restored = restoreOnto(s, boxesRef.current, arrowsRef.current);
     changed.current = true;
     boxesRef.current = restored.boxes;
@@ -985,7 +992,11 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
       useCaseRef.current = s.useCase;
       setUseCase(s.useCase);
     }
-  }, [closeConnections, history, recordEdit, setArrows, setBoxes, work]);
+    // A class that comes back may still be waiting for its shape, as when it was first chosen.
+    for (const b of restored.boxes) {
+      if (b.data.kind === "other" && b.data.classId && b.data.classId !== classBefore.get(b.id)) shapeFromClass(b.id, b.data.classId);
+    }
+  }, [closeConnections, history, recordEdit, setArrows, setBoxes, shapeFromClass, work]);
 
   // Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z and Ctrl+Y. In a text field they undo the typing, as usual.
   useEffect(() => {

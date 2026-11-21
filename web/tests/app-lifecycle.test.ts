@@ -5,7 +5,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { Box } from "../src/canvas/model.js";
 
-const mocks = vi.hoisted(() => ({ narrow: false, flowRenders: 0, layout: vi.fn(), check: vi.fn(), supers: vi.fn(), fit: vi.fn(), initialized: false, cloneOnSet: false, picture: vi.fn(), nodes: [] as Box[], flowProps: {} as any, optionProps: {} as any, panelProps: {} as any, relationProps: {} as any, linkProps: {} as any, arrowProps: {} as any }));
+const mocks = vi.hoisted(() => ({ narrow: false, flowRenders: 0, layout: vi.fn(), check: vi.fn(), supers: vi.fn(), fit: vi.fn(), initialized: false, cloneOnSet: false, picture: vi.fn(), nodes: [] as Box[], flowProps: {} as any, optionProps: {} as any, panelProps: {} as any, relationProps: {} as any, linkProps: {} as any, arrowProps: {} as any, boxProps: {} as any }));
 vi.mock("../src/canvas/layout.js", () => ({ layout: mocks.layout }));
 vi.mock("@xyflow/react", async () => {
   const { useState, useCallback } = await import("react");
@@ -21,10 +21,11 @@ vi.mock("@xyflow/react", async () => {
         const next = typeof update === "function" ? update(previous) : update;
         return mocks.cloneOnSet ? next.map((b) => ({ ...b, measured: { width: 220, height: 90 } })) : next;
       }), []);
-      return [nodes, set, (changes: { id: string; position?: { x: number; y: number }; dragging?: boolean }[]) =>
+      return [nodes, set, (changes: { id: string; type?: string; selected?: boolean; position?: { x: number; y: number }; dragging?: boolean }[]) =>
         setNodes((bs) => bs.filter((b) => !changes.some((c: any) => c.type === "remove" && c.id === b.id)).map((b) => {
           const c = changes.find((x) => x.id === b.id);
-          return { ...b, position: c?.position ?? b.position, ...(c && "dragging" in c ? { dragging: c.dragging } : {}) };
+          return { ...b, position: c?.position ?? b.position, ...(c && "dragging" in c ? { dragging: c.dragging } : {}),
+                   ...(c?.type === "select" ? { selected: c.selected } : {}) };
         }))];
     },
     useEdgesState: (initial: unknown[]) => { const [edges, setEdges] = useState(initial); return [edges, setEdges, (changes: any[]) => setEdges((es: any[]) => es
@@ -43,9 +44,10 @@ vi.mock("../src/canvas/BoxNode.js", () => ({ BoxNode: () => null, worst: () => n
 vi.mock("../src/canvas/FloatingEdge.js", () => ({ FloatingEdge: () => null }));
 vi.mock("../src/canvas/OpenbisLane.js", () => ({ LaneNode: () => null }));
 vi.mock("../src/canvas/Details.js", () => ({
-  Overview: () => null, ArrowDetails: (props: any) => { mocks.arrowProps = props; return null; }, BoxDetails: () => null, SelectionPanel: () => null,
+  Overview: () => null, ArrowDetails: (props: any) => { mocks.arrowProps = props; return null; },
+  BoxDetails: (props: any) => { mocks.boxProps = props; return null; }, SelectionPanel: () => null,
 }));
-vi.mock("../src/canvas/Options.js", () => ({
+vi.mock("../src/canvas/OptionsPanel.js", () => ({
   OptionBar: (props: object) => { mocks.optionProps = props; return null; }, OptionPanel: (props: object) => { mocks.panelProps = props; return null; },
   Compare: () => null, TermsTree: () => null, checkStatus: vi.fn(),
 }));
@@ -975,4 +977,42 @@ test("history belongs to the document on the canvas", async () => {
   expect(button("Undo").disabled).toBe(true);
   await press("z");
   expect(nodes()).toEqual([]);
+});
+
+test("a class brought back by redo gets its shape, and an answer for an undone state is dropped", async () => {
+  mocks.check.mockResolvedValue({ result: { findings: [] } });
+  await mount({ ...plain, ontology: true });
+  await act(async () => mocks.flowProps.onNodesChange([{ type: "select", id: "A", selected: true }]));
+  const box = () => nodes().find((b) => b.id === "A")!.data;
+  expect(box().kind).toBe("other");
+  const late = deferred<string[][]>();
+  mocks.supers.mockImplementationOnce(() => late.promise);
+  await act(async () => mocks.boxProps.onChange({ classId: "TEST_1", classLabel: "a process" }));
+  await click("Undo"); // before the class has been looked up
+  await act(async () => late.resolve([["COB_0000035"]]));
+  expect([box().classId, box().kind]).toEqual(["", "other"]);
+  mocks.supers.mockResolvedValueOnce([["COB_0000035"]]);
+  await click("Redo");
+  expect([box().classId, box().kind]).toEqual(["TEST_1", "process"]);
+  // The shape is part of that step: undoing it again and redoing needs no new lookup.
+  const lookups = mocks.supers.mock.calls.length;
+  await click("Undo");
+  await click("Redo");
+  expect(box().kind).toBe("process");
+  expect(mocks.supers.mock.calls.length).toBe(lookups);
+});
+
+test("a pattern still being placed is dropped by undo, so redo stays possible", async () => {
+  await mount({ ...plain, patterns: true });
+  await act(async () => move("A", 50));
+  const placing = deferred<Box[]>();
+  let prepared: Box[] = [];
+  mocks.layout.mockImplementationOnce((bs: Box[]) => { prepared = bs; return placing.promise; });
+  await insertFirstPattern();
+  await click("Undo");
+  await act(async () => placing.resolve(prepared));
+  expect(nodes().map((b) => b.id)).toEqual(["A"]);
+  expect(button("Redo").disabled).toBe(false);
+  await click("Redo");
+  expect(nodes()[0]!.position).toEqual({ x: 50, y: 0 });
 });

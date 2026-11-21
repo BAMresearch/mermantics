@@ -18,6 +18,15 @@ describe("snapshots", () => {
     expect(entry(boxes.map((b) => ({ ...b, data: { ...b.data, name: "renamed" } })), arrows).key).not.toBe(plain);
   });
 
+  test("only the document's fields are history: anything else on a box or arrow is not", () => {
+    const { boxes, arrows } = doc();
+    const plain = entry(boxes, arrows).key;
+    const extra = { className: "lit", hidden: false, zIndex: 3, somethingNew: 1 };
+    expect(entry(boxes.map((b) => ({ ...b, ...extra })), arrows.map((a) => ({ ...a, ...extra, animated: true }))).key).toBe(plain);
+    // A new field in the data is part of the document, so it is history.
+    expect(entry(boxes.map((b) => ({ ...b, data: { ...b.data, note: "new" } })), arrows).key).not.toBe(plain);
+  });
+
   test("a restored snapshot keeps the current selection and findings", () => {
     const { boxes, arrows } = doc();
     const old = entry(boxes, arrows).snapshot;

@@ -5,8 +5,10 @@
  * design options, the use case), not a list of edit commands. Any edit, whichever handler or
  * React Flow made it, is undone the same way, and a new kind of edit needs nothing here.
  *
- * What a snapshot leaves out decides what is not history: the selection, a box being dragged,
- * measured sizes and the check's findings. Zoom and pan are not in the boxes at all.
+ * A snapshot holds only the fields the document is made of, named below; everything else React
+ * Flow or the view keeps on a box or arrow (selection, dragging, measured size, and whatever is
+ * added later) is not history. Of the data, only the check's findings are left out. Zoom and pan
+ * are not in the boxes at all.
  */
 
 import type { Arrow, Box, UseCase } from "./model.js";
@@ -22,12 +24,13 @@ export interface Snapshot {
 
 interface Entry { snapshot: Snapshot; key: string }
 
-/** Fields that are about the view or the checker, not about what the diagram says. */
-const TRANSIENT = new Set(["selected", "dragging", "resizing", "measured"]);
+/** What a box and an arrow are in the document: what is saved, and so what can be undone. */
+const BOX_FIELDS = ["id", "type", "position", "parentId", "data"] as const;
+const ARROW_FIELDS = ["id", "type", "source", "target", "sourceHandle", "targetHandle", "data"] as const;
 
-function strip<T extends { data?: Record<string, unknown> }>(x: T): T {
+function pick<T extends { data?: Record<string, unknown> }>(x: T, fields: readonly string[]): T {
   const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(x)) if (!TRANSIENT.has(k)) out[k] = v;
+  for (const k of fields) if ((x as Record<string, unknown>)[k] !== undefined) out[k] = (x as Record<string, unknown>)[k];
   if (x.data) {
     const { problems: _problems, ...data } = x.data;
     out.data = data;
@@ -37,8 +40,8 @@ function strip<T extends { data?: Record<string, unknown> }>(x: T): T {
 
 /** The document on the canvas, without what is not history, and the key it is compared by. */
 export function snapshotOf(boxes: Box[], arrows: Arrow[], uses: PatternUse[], useCase: UseCase | null): Entry {
-  const plainBoxes = boxes.map(strip);
-  const plainArrows = arrows.map(strip);
+  const plainBoxes = boxes.map((b) => pick(b, BOX_FIELDS));
+  const plainArrows = arrows.map((a) => pick(a, ARROW_FIELDS));
   const key = JSON.stringify([plainBoxes, plainArrows, uses, useCase]);
   const snapshot: Snapshot = {
     // The size is kept only so a restored box is drawn at once; it is measured again anyway.
