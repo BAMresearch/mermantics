@@ -67,9 +67,8 @@ export const MODES: Record<ModeId, Mode> = {
   },
   mse: {
     id: "mse",
-    title: "Materials science and engineering",
-    description: "Build a data model grounded in PMDco. Boxes and arrows get ontology terms, "
-      + "and the model is checked as you draw.",
+    title: "Explore PMDco",
+    description: "Sketch a data model grounded in PMDco.",
     ontology: true,
     datastore: false,
     patterns: true,
