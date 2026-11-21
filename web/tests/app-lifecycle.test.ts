@@ -21,8 +21,11 @@ vi.mock("@xyflow/react", async () => {
         const next = typeof update === "function" ? update(previous) : update;
         return mocks.cloneOnSet ? next.map((b) => ({ ...b, measured: { width: 220, height: 90 } })) : next;
       }), []);
-      return [nodes, set, (changes: { id: string; position: { x: number; y: number } }[]) =>
-        setNodes((bs) => bs.filter((b) => !changes.some((c: any) => c.type === "remove" && c.id === b.id)).map((b) => ({ ...b, position: changes.find((c) => c.id === b.id)?.position ?? b.position })))];
+      return [nodes, set, (changes: { id: string; position?: { x: number; y: number }; dragging?: boolean }[]) =>
+        setNodes((bs) => bs.filter((b) => !changes.some((c: any) => c.type === "remove" && c.id === b.id)).map((b) => {
+          const c = changes.find((x) => x.id === b.id);
+          return { ...b, position: c?.position ?? b.position, ...(c && "dragging" in c ? { dragging: c.dragging } : {}) };
+        }))];
     },
     useEdgesState: (initial: unknown[]) => { const [edges, setEdges] = useState(initial); return [edges, setEdges, (changes: any[]) => setEdges((es: any[]) => es
       .filter((e) => !changes.some((c) => c.type === "remove" && c.id === e.id))
@@ -858,4 +861,118 @@ test("a picture is downloaded once, and its URL revoked only after the browser h
   expect(revoked).not.toHaveBeenCalled(); // Safari reads the file after the click
   await act(async () => { vi.advanceTimersByTime(60_000); });
   expect(revoked).toHaveBeenCalledWith("blob:picture");
+});
+
+// ---- undo and redo ----------------------------------------------------------------------
+
+const connected = { ...plain, examples: [{ title: "Connected", name: "connected.mmd", text: 'flowchart TD\nA["First"]\nB["Second"]\nA -- "feeds" --> B' }] };
+const button = (label: string) => container.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)!;
+const press = async (key: string, opts: KeyboardEventInit = {}, target: EventTarget = window) =>
+  act(async () => { target.dispatchEvent(new KeyboardEvent("keydown", { key, ctrlKey: true, bubbles: true, cancelable: true, ...opts })); });
+const move = (id: string, x: number, dragging?: boolean) =>
+  mocks.flowProps.onNodesChange([{ type: "position", id, position: { x, y: 0 }, ...(dragging === undefined ? {} : { dragging }) }]);
+
+test("a whole drag is one step, and undo and redo move the box back and forth", async () => {
+  await mount(connected);
+  const start = nodes().find((b) => b.id === "A")!.position;
+  expect(button("Undo").disabled).toBe(true);
+  expect(button("Redo").disabled).toBe(true);
+  for (const x of [10, 20, 30]) await act(async () => move("A", x, true));
+  expect(button("Undo").disabled).toBe(true); // still dragging
+  await act(async () => move("A", 40, false));
+  expect(button("Undo").disabled).toBe(false);
+  await click("Undo");
+  expect(nodes().find((b) => b.id === "A")!.position).toEqual(start);
+  expect(button("Undo").disabled).toBe(true);
+  expect(button("Redo").disabled).toBe(false);
+  await press("z", { shiftKey: true });
+  expect(nodes().find((b) => b.id === "A")!.position).toEqual({ x: 40, y: 0 });
+  await press("z");
+  await press("y");
+  expect(nodes().find((b) => b.id === "A")!.position).toEqual({ x: 40, y: 0 });
+});
+
+test("undoing a deletion brings the box back with its arrows, and the restored diagram is saved", async () => {
+  await mount(connected);
+  const before = toMermaid(nodes(), mocks.flowProps.edges);
+  const arrow = mocks.flowProps.edges[0].id;
+  await act(async () => {
+    mocks.flowProps.onNodesChange([{ type: "remove", id: "A" }]);
+    mocks.flowProps.onEdgesChange([{ type: "remove", id: arrow }]);
+  });
+  expect(nodes().map((b) => b.id)).toEqual(["B"]);
+  expect(mocks.flowProps.edges).toHaveLength(0);
+  await press("z", { metaKey: true, ctrlKey: false });
+  expect(nodes().map((b) => b.id).sort()).toEqual(["A", "B"]);
+  expect(mocks.flowProps.edges.map((a: { id: string }) => a.id)).toEqual([arrow]);
+  await act(async () => vi.advanceTimersByTime(801));
+  expect(storage.get(plain.storageKey)).toBe(toMermaid(nodes(), mocks.flowProps.edges));
+  expect(toMermaid(nodes(), mocks.flowProps.edges)).toBe(before);
+});
+
+test("selecting is not a step, and a new edit after undo clears redo", async () => {
+  await mount(connected);
+  await act(async () => mocks.flowProps.onEdgesChange([{ type: "select", id: mocks.flowProps.edges[0].id, selected: true }]));
+  expect(button("Undo").disabled).toBe(true);
+  await act(async () => move("A", 50));
+  await click("Undo");
+  expect(button("Redo").disabled).toBe(false);
+  await act(async () => move("B", 70));
+  expect(button("Redo").disabled).toBe(true);
+  expect(button("Undo").disabled).toBe(false);
+});
+
+test("typing in a field keeps the field's own undo and becomes one step when the field is left", async () => {
+  await mount(connected);
+  const field = document.createElement("input");
+  container.append(field);
+  field.focus();
+  for (const name of ["F", "Fi", "Fin"]) await act(async () => nodes().find((b) => b.id === "A")!.data.onRename!(name));
+  expect(button("Undo").disabled).toBe(false); // the typing can be undone from the toolbar
+  await press("z", {}, field);
+  expect(nodes().find((b) => b.id === "A")!.data.name).toBe("Fin"); // Ctrl+Z in the field is the field's
+  await act(async () => field.blur());
+  await act(async () => nodes().find((b) => b.id === "A")!.data.onRename!("Final"));
+  await click("Undo");
+  expect(nodes().find((b) => b.id === "A")!.data.name).toBe("Fin");
+  await click("Undo");
+  expect(nodes().find((b) => b.id === "A")!.data.name).toBe("First");
+  expect(button("Undo").disabled).toBe(true);
+});
+
+test("Tidy up is one step, and a layout still running cannot overwrite what undo restored", async () => {
+  await mount(connected);
+  const start = nodes().map((b) => b.position);
+  mocks.layout.mockImplementationOnce(async (bs: Box[]) => bs.map((b) => ({ ...b, position: { x: 900, y: 900 } })));
+  await click("Tidy up");
+  expect(nodes().every((b) => b.position.x === 900)).toBe(true);
+  await click("Undo");
+  expect(nodes().map((b) => b.position)).toEqual(start);
+  const pending = deferred<Box[]>();
+  mocks.layout.mockImplementationOnce(() => pending.promise);
+  await act(async () => move("A", 5));
+  await click("Tidy up");
+  await click("Undo");
+  await act(async () => pending.resolve(nodes().map((b) => ({ ...b, position: { x: 1, y: 1 } }))));
+  expect(nodes().map((b) => b.position)).toEqual(start);
+});
+
+test("a pattern insertion is undone as one step", async () => {
+  await mount({ ...plain, patterns: true });
+  const before = nodes().map((b) => b.id);
+  await insertFirstPattern();
+  expect(nodes().length).toBeGreaterThan(before.length + 1);
+  await click("Undo");
+  expect(nodes().map((b) => b.id)).toEqual(before);
+  expect(button("Undo").disabled).toBe(true);
+});
+
+test("history belongs to the document on the canvas", async () => {
+  await mount(connected);
+  await act(async () => move("A", 50));
+  expect(button("Undo").disabled).toBe(false);
+  await click("New");
+  expect(button("Undo").disabled).toBe(true);
+  await press("z");
+  expect(nodes()).toEqual([]);
 });

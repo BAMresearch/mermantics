@@ -18,6 +18,9 @@ export class DocumentWork {
     const layout = ++this.layout;
     return () => this.owns(document) && layout === this.layout;
   }
+
+  /** A layout still running must not move the boxes any more (after undo or redo). */
+  cancelLayout() { this.layout++; }
 }
 
 /** Layout owns positions only. User moves, additions, deletions and all other edits win. */

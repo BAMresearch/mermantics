@@ -24,6 +24,7 @@ import { ArrowDetails, BoxDetails, Overview, SelectionPanel, type GlobalFinding 
 import { afterPaint, canvasImage, drawnBounds, type ImageFormat } from "./canvasImage.js";
 import { separateArrows } from "./edgeLanes.js";
 import { FloatingEdge } from "./FloatingEdge.js";
+import { History, isTextEntry, MOD, restoreOnto, snapshotOf, undoKey } from "./history.js";
 import { layout } from "./layout.js";
 import { MermaidPanel } from "./MermaidPanel.js";
 import { LaneNode } from "./OpenbisLane.js";
@@ -266,6 +267,33 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
   useCaseRef.current = useCase;
   const usesRef = useRef(patternUses);
   usesRef.current = patternUses;
+
+  // ---- undo and redo (see history.ts) ------------------------------------------------------
+
+  const history = useRef(new History()).current;
+  const [undoable, setUndoable] = useState({ undo: false, redo: false });
+  const docNow = useCallback(() => snapshotOf(boxesRef.current, arrowsRef.current, usesRef.current,
+                                              mode.options ? null : useCaseRef.current), [mode.options]);
+  /**
+   * Make the canvas as it is now a step. Not while a box is being dragged (the whole drag is one
+   * step), and not while typing in a field: that becomes one step when the field is left. Until
+   * then the typing can still be undone with the toolbar button.
+   */
+  const recordEdit = useCallback((typingDone = false) => {
+    if (opened.current === null || loading.current !== null || boxesRef.current.some((b) => b.dragging)) return;
+    const now = docNow();
+    let typing = false;
+    if (!typingDone && isTextEntry(document.activeElement)) typing = now.key !== history.key;
+    else history.record(now);
+    const next = { undo: typing || history.canUndo, redo: !typing && history.canRedo };
+    setUndoable((u) => (u.undo === next.undo && u.redo === next.redo ? u : next));
+  }, [docNow, history]);
+  useEffect(() => { recordEdit(); }, [boxes, arrows, patternUses, useCase, recordEdit]);
+  useEffect(() => {
+    const left = (e: FocusEvent) => { if (isTextEntry(e.target as Element | null)) recordEdit(true); };
+    document.addEventListener("focusout", left);
+    return () => document.removeEventListener("focusout", left);
+  }, [recordEdit]);
   const validConnection = useCallback((request: PendingConnection) =>
     loading.current === null && work.owns(request.document) &&
     request.generation === connectionGeneration.current &&
@@ -304,11 +332,13 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
       if (!valid()) return;
       if (explicit) changed.current = true;
       setBoxes((current) => valid() ? applyPositions(current, snapshot, placed) : current);
+      // "Tidy up" is a step; the layout that follows opening a diagram is part of opening it.
+      if (!explicit) history.amend((s) => snapshotOf(applyPositions(s.boxes, snapshot, placed), s.arrows, s.uses, s.useCase));
       fitDocument(valid);
     } catch (error) {
       if (valid()) setNotice(`Could not arrange the diagram: ${(error as Error).message}`);
     }
-  }, [fitDocument, setBoxes, work]);
+  }, [fitDocument, history, setBoxes, work]);
 
   useEffect(() => {
     if (!relayout.current || !nodesReady) return;
@@ -350,6 +380,9 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
         useCaseRef.current = imported.useCase;
         setUseCase(imported.useCase);
       }
+      // History belongs to one document (one view of an option): it starts again here.
+      history.reset(docNow());
+      setUndoable({ undo: false, redo: false });
       holding.current = target ?? (mode.options ? optsRef.current!.current : null);
       // Reset is saved only after replacement succeeds; a failed reset keeps the old view.
       if (persist) store(textNow());
@@ -369,7 +402,7 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
       // or a failed import leaves the previous canvas in place. Recheck that canvas.
       if (work.owns(document)) setCheckRevision((revision) => revision + 1);
     }
-  }, [closeConnections, fitDocument, mode.ontology, mode.options, setArrows, setBoxes, store, textNow, work]);
+  }, [closeConnections, docNow, fitDocument, history, mode.ontology, mode.options, setArrows, setBoxes, store, textNow, work]);
 
   /** Computations section: put another option view on the canvas, after saving the one there now. */
   const viewName = (o: DesignOption | undefined, view: ViewId) => `${o?.letter ?? "option"}-${view}.mmd`;
@@ -725,12 +758,16 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
         if (!work.owns(document)) return;
         const hit = KIND_BY_ANCESTOR.find(([cid]) => (anc ?? []).includes(cid));
         if (!hit) return;
-        setBoxes((bs) => bs.map((b) => (b.id === id && b.data.classId === patch.classId && b.data.kind === "other" ? { ...b, data: { ...b.data, kind: hit[1] } } : b)));
+        const shaped = (bs: Box[]) => bs.map((b) => (b.id === id && b.data.classId === patch.classId && b.data.kind === "other"
+          ? { ...b, data: { ...b.data, kind: hit[1] } } : b));
+        setBoxes(shaped);
+        // Part of choosing the class, not a step of its own.
+        history.amend((s) => snapshotOf(shaped(s.boxes), s.arrows, s.uses, s.useCase));
       }).catch((error: Error) => {
         if (work.owns(document)) setNotice(`Could not classify the box: ${error.message}`);
       });
     }
-  }, [setBoxes, work]);
+  }, [history, setBoxes, work]);
 
   const patchArrow = useCallback((id: string, patch: Partial<ArrowData>) => {
     setArrows((as) => as.map((a) => (a.id === id ? { ...a, data: { ...a.data!, ...patch } } : a)));
@@ -922,6 +959,46 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
     void open(next.views[s.current.view] || EMPTY_VIEW, viewName(next, s.current.view), { option: next.id, view: s.current.view });
   };
 
+  /**
+   * Put the previous (or the undone) state back. Work still running for the state that was
+   * there must not change it afterwards: a layout is cancelled, a relation menu closed, and the
+   * check runs again because what it saw has changed.
+   */
+  const step = useCallback((which: "undo" | "redo") => {
+    if (opened.current === null || loading.current !== null || boxesRef.current.some((b) => b.dragging)) return;
+    recordEdit(true); // typing not yet recorded is the last step
+    const s = which === "undo" ? history.undo() : history.redo();
+    setUndoable({ undo: history.canUndo, redo: history.canRedo });
+    if (!s) return;
+    work.cancelLayout();
+    relayout.current = false;
+    closeConnections();
+    const restored = restoreOnto(s, boxesRef.current, arrowsRef.current);
+    changed.current = true;
+    boxesRef.current = restored.boxes;
+    arrowsRef.current = restored.arrows;
+    usesRef.current = s.uses;
+    setBoxes(restored.boxes);
+    setArrows(restored.arrows);
+    setPatternUses(s.uses);
+    if (s.useCase) {
+      useCaseRef.current = s.useCase;
+      setUseCase(s.useCase);
+    }
+  }, [closeConnections, history, recordEdit, setArrows, setBoxes, work]);
+
+  // Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z and Ctrl/Cmd+Y. In a text field they undo the typing, as usual.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const which = undoKey(e);
+      if (!which || e.defaultPrevented || comparing || isTextEntry(e.target as Element | null)) return;
+      e.preventDefault();
+      step(which);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [comparing, step]);
+
   const tidy = () => {
     relayout.current = false;
     return arrange(true);
@@ -979,6 +1056,12 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
                 <span className="toolbar-check" aria-hidden="true">{workshop ? "✓" : ""}</span>Workshop view
               </button>}
             </ToolbarMenu>
+          </div>
+          <div className="bar-group">
+            <button type="button" aria-label="Undo" title={`Undo (${MOD}+Z)`} disabled={!undoable.undo}
+                    onClick={() => step("undo")}><ToolbarIcon name="undo" /><span className="toolbar-label">Undo</span></button>
+            <button type="button" aria-label="Redo" title={`Redo (${MOD}+Shift+Z)`} disabled={!undoable.redo}
+                    onClick={() => step("redo")}><ToolbarIcon name="redo" /><span className="toolbar-label">Redo</span></button>
           </div>
           <div className="bar-group">
             <button type="button" aria-label="Tidy up" disabled={openbis} title={openbis ? "Switch to model view to tidy the diagram" : "Arrange the diagram automatically"}
