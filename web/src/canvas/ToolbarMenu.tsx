@@ -7,6 +7,8 @@ const paths = {
   export: "M12 15V3m-4 4 4-4 4 4M4 16v5h16v-5",
   view: "M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Zm10-3a3 3 0 1 0 0 6 3 3 0 0 0 0-6",
   tidy: "M4 3h6v6H4zM14 15h6v6h-6zM7 9v9h7M14 6h6m-3-3v6",
+  undo: "M9 14 4 9l5-5M4 9h11a5 5 0 0 1 0 10h-4",
+  redo: "m15 14 5-5-5-5M20 9H9a5 5 0 0 0 0 10h4",
 };
 
 export function ToolbarIcon({ name }: { name: keyof typeof paths }) {

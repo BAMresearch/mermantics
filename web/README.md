@@ -146,7 +146,7 @@ until something is changed. Closing a tab that holds work asks first.
 Semantic Pattern Design works with design options instead of one diagram: each option in
 `options/` has three diagrams (its terms, a DFT geometry optimization and a static FEM
 analysis), and the section shows them one at a time or side by side (`src/canvas/options.ts`,
-`Options.tsx`). Boxes have the style class `proposed`, `changed` or `deprecated` when an option
+`OptionsPanel.tsx`). Boxes have the style class `proposed`, `changed` or `deprecated` when an option
 adds, changes or removes a term; `termsTree.ts` places them in the PMDco class tree. The
 group's notes and the use case are kept with the options in the browser tab, and "Export → Workshop results"
 writes all of it as one Markdown file.

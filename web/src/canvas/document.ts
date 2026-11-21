@@ -4,6 +4,7 @@ import type { Box } from "./model.js";
 export class DocumentWork {
   private document = 0;
   private layout = 0;
+  private restored = 0;
 
   replace(): number {
     this.layout++;
@@ -17,6 +18,22 @@ export class DocumentWork {
     const document = this.document;
     const layout = ++this.layout;
     return () => this.owns(document) && layout === this.layout;
+  }
+
+  /**
+   * Undo or redo put an earlier state back. Work started for the state before (a layout, a
+   * pattern being placed) must not change the canvas any more.
+   */
+  restore() {
+    this.layout++;
+    this.restored++;
+  }
+
+  /** For work started from the canvas as it is now: still valid unless the document was replaced or restored. */
+  beginEdit(): () => boolean {
+    const document = this.document;
+    const restored = this.restored;
+    return () => this.owns(document) && restored === this.restored;
   }
 }
 

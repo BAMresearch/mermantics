@@ -10,6 +10,8 @@
 import { Panel, useReactFlow, useStore } from "@xyflow/react";
 import { useEffect, useState } from "react";
 
+import { MOD } from "./history.js";
+
 /** What scrolling with the wheel or two fingers does on the canvas. */
 export type WheelMode = "zoom" | "move";
 
@@ -22,8 +24,6 @@ export function saveWheelMode(m: WheelMode) {
   try { localStorage.setItem(WHEEL_KEY, m); } catch { /* storage can be off */ }
 }
 
-const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
-const MOD = isMac ? "Cmd" : "Ctrl";
 
 /** True when the key goes to a text field, so the zoom keys leave it alone. */
 function typing(e: KeyboardEvent) {
@@ -130,6 +130,8 @@ function ControlsHelp({ wheel }: { wheel: WheelMode }) {
               <Row what="100%">{k(MOD)} {k("0")}</Row>
               <Row what="Whole diagram">{k("Shift")} {k("1")}</Row>
               <Row what="Delete">{k("Delete")} or {k("Backspace")}</Row>
+              <Row what="Undo">{k(MOD)} {k("Z")}</Row>
+              <Row what="Redo">{k(MOD)} {k("Shift")} {k("Z")}{MOD === "Ctrl" && <> or {k("Ctrl")} {k("Y")}</>}</Row>
             </tbody>
           </table>
           <p className="help-foot">Scroll does something else? Change "Scroll" in this bar.</p>
