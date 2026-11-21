@@ -54,8 +54,7 @@ export const MODES: Record<ModeId, Mode> = {
   process: {
     id: "process",
     title: "Model anything",
-    description: "Draw any process: its steps, what goes in and comes out, and who or what carries it out. "
-      + "Name the arrows in your own words. No ontology needed.",
+    description: "Draw any process: its steps, what goes in and comes out, and who or what carries it out.",
     ontology: false,
     datastore: false,
     patterns: false,
@@ -87,8 +86,7 @@ export const MODES: Record<ModeId, Mode> = {
   datastore: {
     id: "datastore",
     title: "BAM Data Store",
-    description: "Plan how your research data goes into the BAM Data Store (openBIS): experimental steps, "
-      + "samples, chemicals, instruments and datasets, linked as parents and children. No ontology needed.",
+    description: "Plan how your research data goes into the BAM Data Store (openBIS).",
     ontology: false,
     datastore: true,
     patterns: false,
@@ -100,9 +98,8 @@ export const MODES: Record<ModeId, Mode> = {
   },
   comp: {
     id: "comp",
-    title: "PMD Hackathon - Computations",
-    description: "Compare design options for computational terms in PMDco: what each option proposes, "
-      + "and how a DFT and an FEM calculation look in it. Checked against PMDco as you draw.",
+    title: "Semantic Pattern Design",
+    description: "Compare design options for computational terms in PMDco.",
     ontology: true,
     datastore: false,
     patterns: true,
