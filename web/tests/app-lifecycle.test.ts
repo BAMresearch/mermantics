@@ -979,7 +979,7 @@ test("history belongs to the document on the canvas", async () => {
   expect(nodes()).toEqual([]);
 });
 
-test("a class brought back by redo gets its shape, and an answer for an undone state is dropped", async () => {
+test("a shape found after the class was undone is there when the class is redone", async () => {
   mocks.check.mockResolvedValue({ result: { findings: [] } });
   await mount({ ...plain, ontology: true });
   await act(async () => mocks.flowProps.onNodesChange([{ type: "select", id: "A", selected: true }]));
@@ -991,15 +991,31 @@ test("a class brought back by redo gets its shape, and an answer for an undone s
   await click("Undo"); // before the class has been looked up
   await act(async () => late.resolve([["COB_0000035"]]));
   expect([box().classId, box().kind]).toEqual(["", "other"]);
-  mocks.supers.mockResolvedValueOnce([["COB_0000035"]]);
+  const lookups = mocks.supers.mock.calls.length;
   await click("Redo");
   expect([box().classId, box().kind]).toEqual(["TEST_1", "process"]);
-  // The shape is part of that step: undoing it again and redoing needs no new lookup.
-  const lookups = mocks.supers.mock.calls.length;
   await click("Undo");
   await click("Redo");
   expect(box().kind).toBe("process");
-  expect(mocks.supers.mock.calls.length).toBe(lookups);
+  expect(mocks.supers.mock.calls.length).toBe(lookups); // the one answer was enough
+});
+
+test("a shape found after later edits is in the earlier steps too", async () => {
+  mocks.check.mockResolvedValue({ result: { findings: [] } });
+  await mount({ ...connected, ontology: true });
+  await act(async () => mocks.flowProps.onNodesChange([{ type: "select", id: "A", selected: true }]));
+  const a = () => nodes().find((b) => b.id === "A")!.data;
+  const late = deferred<string[][]>();
+  mocks.supers.mockImplementationOnce(() => late.promise);
+  await act(async () => mocks.boxProps.onChange({ classId: "TEST_1", classLabel: "a process" }));
+  await act(async () => move("B", 80)); // another step while the class is being looked up
+  await act(async () => late.resolve([["COB_0000035"]]));
+  expect(a().kind).toBe("process");
+  await click("Undo"); // back to just after the class was chosen
+  expect(nodes().find((b) => b.id === "B")!.position).not.toEqual({ x: 80, y: 0 });
+  expect([a().classId, a().kind]).toEqual(["TEST_1", "process"]);
+  await click("Undo");
+  expect([a().classId, a().kind]).toEqual(["", "other"]);
 });
 
 test("a pattern still being placed is dropped by undo, so redo stays possible", async () => {

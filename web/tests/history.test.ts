@@ -77,14 +77,29 @@ describe("history", () => {
     expect([h.canUndo, h.canRedo]).toEqual([false, false]);
   });
 
-  test("an amendment changes the present step without adding one", () => {
+  test("an amendment changes the steps it is about without adding one", () => {
     const h = new History();
     const { boxes } = doc();
     h.reset(entry(boxes));
     h.record(entry(moved(boxes, 10)));
-    h.amend((s) => snapshotOf(moved(s.boxes, 11), s.arrows, s.uses, s.useCase));
+    // Like the real ones, it changes only snapshots that have what it is about.
+    h.amend((s) => snapshotOf(s.boxes[0]!.position.x === 10 ? moved(s.boxes, 11) : s.boxes, s.arrows, s.uses, s.useCase));
     expect(h.record(entry(moved(boxes, 11)))).toBe(false);
     expect(h.undo()!.boxes[0]!.position.x).toBe(boxes[0]!.position.x);
+  });
+
+  test("an amendment reaches the steps that can be undone and redone", () => {
+    const h = new History();
+    const { boxes } = doc();
+    const named = (bs: Box[]) => bs.map((b) => (b.id === "B" ? { ...b, data: { ...b.data, name: "named" } } : b));
+    h.reset(entry(boxes));
+    h.record(entry(moved(boxes, 10)));
+    h.record(entry(moved(boxes, 20)));
+    h.undo();
+    h.amend((s) => snapshotOf(named(s.boxes), s.arrows, s.uses, s.useCase));
+    expect(h.redo()!.boxes[1]!.data.name).toBe("named");
+    expect(h.undo()!.boxes[1]!.data.name).toBe("named");
+    expect(h.undo()!.boxes[1]!.data.name).toBe("named");
   });
 });
 

@@ -22,7 +22,7 @@ export class DocumentWork {
 
   /**
    * Undo or redo put an earlier state back. Work started for the state before (a layout, a
-   * pattern being placed, a box's shape being looked up) must not change the canvas any more.
+   * pattern being placed) must not change the canvas any more.
    */
   restore() {
     this.layout++;

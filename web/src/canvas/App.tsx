@@ -752,13 +752,13 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
 
   /**
    * A box that is "something else" gets a shape once its class is known. This belongs to
-   * choosing the class, not a step of its own. After undo or redo the answer is dropped: the
-   * state it was for is gone, and the class is looked up again if it comes back (see step).
+   * choosing the class, not a step of its own, and the answer can come after other edits or an
+   * undo: it is given to every step where the box has that class and no shape yet.
    */
   const shapeFromClass = useCallback((id: string, classId: string) => {
-    const valid = work.beginEdit();
+    const document = work.current();
     void supers([classId]).then(([anc]) => {
-      if (!valid()) return;
+      if (!work.owns(document)) return;
       const hit = KIND_BY_ANCESTOR.find(([cid]) => (anc ?? []).includes(cid));
       if (!hit) return;
       const shaped = (bs: Box[]) => bs.map((b) => (b.id === id && b.data.classId === classId && b.data.kind === "other"
@@ -766,7 +766,7 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
       setBoxes(shaped);
       history.amend((s) => snapshotOf(shaped(s.boxes), s.arrows, s.uses, s.useCase));
     }).catch((error: Error) => {
-      if (valid()) setNotice(`Could not classify the box: ${error.message}`);
+      if (work.owns(document)) setNotice(`Could not classify the box: ${error.message}`);
     });
   }, [history, setBoxes, work]);
 
@@ -979,7 +979,6 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
     work.restore();
     relayout.current = false;
     closeConnections();
-    const classBefore = new Map(boxesRef.current.map((b) => [b.id, b.data.classId]));
     const restored = restoreOnto(s, boxesRef.current, arrowsRef.current);
     changed.current = true;
     boxesRef.current = restored.boxes;
@@ -992,11 +991,7 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
       useCaseRef.current = s.useCase;
       setUseCase(s.useCase);
     }
-    // A class that comes back may still be waiting for its shape, as when it was first chosen.
-    for (const b of restored.boxes) {
-      if (b.data.kind === "other" && b.data.classId && b.data.classId !== classBefore.get(b.id)) shapeFromClass(b.id, b.data.classId);
-    }
-  }, [closeConnections, history, recordEdit, setArrows, setBoxes, shapeFromClass, work]);
+  }, [closeConnections, history, recordEdit, setArrows, setBoxes, work]);
 
   // Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z and Ctrl+Y. In a text field they undo the typing, as usual.
   useEffect(() => {

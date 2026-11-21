@@ -103,12 +103,17 @@ export class History {
   }
 
   /**
-   * A change made in the background that completes the last step, not a step of its own (a box's
-   * shape found from its class, the first layout of an opened diagram). It is applied to the
-   * present snapshot as well, so the canvas still matches it and nothing new is recorded.
+   * A change made in the background, not a step of its own (a box's shape found from its class,
+   * the first layout of an opened diagram). It is applied to every step, the ones that can be
+   * undone or redone too: it may have been asked for several steps ago, and it is just as true
+   * there. `update` changes only what it is about and leaves a snapshot without it as it is.
+   * The canvas gets the same change, so it still matches and nothing new is recorded.
    */
-  amend(update: (present: Snapshot) => Entry) {
-    if (this.present) this.present = update(this.present.snapshot);
+  amend(update: (s: Snapshot) => Entry) {
+    const apply = (e: Entry) => update(e.snapshot);
+    this.past = this.past.map(apply);
+    this.future = this.future.map(apply);
+    if (this.present) this.present = apply(this.present);
   }
 
   undo(): Snapshot | null {
