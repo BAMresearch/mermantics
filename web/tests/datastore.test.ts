@@ -20,7 +20,7 @@ describe("Data Store boxes in Mermaid", () => {
 
   test("the example reads without warnings, with its stored layout", () => {
     expect(first.warnings).toEqual([]);
-    expect(first.boxes).toHaveLength(21);
+    expect(first.boxes).toHaveLength(20);
     expect(first.arrows).toHaveLength(20);
     expect(first.positioned).toBe(true);
   });
@@ -29,11 +29,11 @@ describe("Data Store boxes in Mermaid", () => {
     const chem = first.boxes.find((b) => b.id === "Chemical1")!;
     expect(chem.data.kind).toBe("chemical");
     expect(chem.data.lines).toEqual([]);
-    expect(chem.data.openbis).toEqual({ type: "CHEMICAL", area: "FB-Inventory", space: "FB Materials", project: "CONSUMABLES",
+    expect(chem.data.openbis).toEqual({ type: "CHEMICAL", area: "FB-Inventory", space: "FB Materials", project: "CHEMICALS_SYNTHESIS",
                                         collection: "Chemicals" });
-    const data = first.boxes.find((b) => b.id === "DataAnalysis2")!;
+    const data = first.boxes.find((b) => b.id === "DataPreview")!;
     expect(data.data.kind).toBe("dataset");
-    expect(data.data.openbis?.type).toBe("ANALYZED_DATA");
+    expect(data.data.openbis?.type).toBe("ELN_PREVIEW");
   });
 
   test("arrows are openBIS parent-child links and datasets attached to objects", () => {
@@ -168,9 +168,9 @@ describe("openBIS view", () => {
     expect(placed).toHaveLength(boxes.length);
   });
 
-  test("the guide's order: BAM-Inventory, Lab Notebook, FB-Inventory", () => {
+  test("the guide's order: FB-Inventory, Lab Notebook, BAM-Inventory", () => {
     const areas = lanes.filter((l) => l.data.level === "area").sort((a, b) => a.position.x - b.position.x).map((l) => l.data.label);
-    expect(areas).toEqual(["BAM-Inventory", "Lab Notebook", "FB-Inventory"]);
+    expect(areas).toEqual(["FB-Inventory", "Lab Notebook", "BAM-Inventory"]);
   });
 
   test("an object sits under its Collection", () => {
@@ -237,4 +237,50 @@ describe("Data Store Spaces", () => {
     expect(spaceAfterMove("FB Materials", "")).toBe("");
     expect(Object.keys(INVENTORY_SPACES)).toEqual(["BAM-Inventory", "FB-Inventory"]);
   });
+});
+
+
+test("the example has exactly the tutorial's parent-child links and dataset attachments", () => {
+  const { boxes, arrows } = fromMermaid(example);
+  const name = (id: string) => boxes.find((b) => b.id === id)!.data.name;
+  expect(arrows.flatMap((a) => { const pc = parentChild(a); return pc ? [[name(pc.parent), name(pc.child)]] : []; }).sort())
+    .toEqual([
+      ["Synthesis", "Material Synthesis"], ["Chemical 1", "Material Synthesis"], ["Chemical 2", "Material Synthesis"],
+      ["Material Synthesis", "Synthesized Material"], ["Synthesized Material", "Material Sample_001"],
+      ["Synthesized Material", "Material Sample_002"], ["Material Sample_001", "Macrostructure Characterization"],
+      ["Macrostructure", "Macrostructure Characterization"], ["Material Sample_002", "Chemical Treatment"],
+      ["Treatment Solution", "Chemical Treatment"], ["Chemical Treatment", "Treated Sample_001"],
+      ["Chemical Treatment", "Treated Sample_002"], ["Treated Sample_001", "Macrostructure Characterization TS"],
+      ["Macrostructure", "Macrostructure Characterization TS"], ["Treated Sample_002", "Microstructure Characterization"],
+      ["Microstructure", "Microstructure Characterization"], ["Microstructure Characterization", "Microstructure data analysis"],
+    ].sort());
+  expect(arrows.filter((a) => a.data!.name === IS_ATTACHED_TO).map((a) =>
+    [name(a.source), boxes.find((b) => b.id === a.source)!.data.openbis!.type, name(a.target)]).sort()).toEqual([
+      ["Parameter 1 raw", "RAW_DATA", "Macrostructure Characterization"],
+      ["Synthetic image1", "ELN_PREVIEW", "Macrostructure Characterization"],
+      ["README Synthetic image1", "ATTACHMENT", "Macrostructure Characterization"],
+    ].sort());
+});
+
+test("new boxes fill only tutorial-fixed places", () => {
+  const defaults = Object.fromEntries(DATASTORE_SHAPES.map((s) => [s.kind, s.openbis]));
+  expect(defaults.instrument).toEqual({ type: "INSTRUMENT", area: "BAM-Inventory", space: "Bam Equipment", project: "FB Equipment Open", collection: "Instruments" });
+  expect(defaults.chemical).toEqual({ type: "CHEMICAL", area: "FB-Inventory", space: "FB Materials", project: "", collection: "Chemicals" });
+  expect(defaults.sample).toEqual({ type: "SAMPLE", area: "FB-Inventory", space: "FB Materials", project: "", collection: "Samples" });
+  expect(defaults.step).toEqual({ type: "EXPERIMENTAL_STEP", area: "Lab Notebook", space: LAB_NOTEBOOK_SPACE, project: "", collection: "" });
+});
+
+test("tutorial objects live in the exact projects and collections", () => {
+  const { boxes } = fromMermaid(example);
+  const collections: Record<string, string> = {
+    "Material Synthesis": "Synthesis", "Chemical Treatment": "Treatment non-destructive",
+    "Macrostructure Characterization": "Parameter 1", "Macrostructure Characterization TS": "Parameter 1",
+    "Microstructure Characterization": "Parameter 2", "Microstructure data analysis": "Parameter 2 Analysis",
+  };
+  for (const b of boxes) {
+    const o = b.data.openbis!;
+    if (b.data.kind === "step") expect(o).toEqual({ type: "EXPERIMENTAL_STEP", area: "Lab Notebook", space: LAB_NOTEBOOK_SPACE, project: "MATERIAL_SYNTHESIS", collection: collections[b.data.name] });
+    if (b.data.kind === "instrument") expect(o).toEqual({ type: "INSTRUMENT", area: "BAM-Inventory", space: "Bam Equipment", project: "FB Equipment Open", collection: "Instruments" });
+    if (b.data.kind === "sample" || b.data.kind === "chemical") expect(o).toEqual({ type: b.data.kind.toUpperCase(), area: "FB-Inventory", space: "FB Materials", project: b.data.kind === "sample" ? "SAMPLES_SYNTHESIS" : "CHEMICALS_SYNTHESIS", collection: b.data.kind === "sample" ? "Samples" : "Chemicals" });
+  }
 });

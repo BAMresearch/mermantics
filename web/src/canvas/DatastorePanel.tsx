@@ -8,10 +8,12 @@ import { useEffect, useMemo, useState } from "react";
 import { BAM_DATASET_TYPES, BAM_OBJECT_TYPES, BAM_TYPES_SOURCE, type BamType } from "./bamTypes.js";
 import type { Box, BoxData } from "./model.js";
 import { AREAS, DATASTORE_KINDS, IS_ATTACHED_TO, IS_CHILD_OF, IS_PARENT_OF, kindForType, openbisFor, spaceAfterMove, spacesFor,
+         fixedBamProject, withFixedBamProject, projectCodeWarning,
          type OpenbisInfo,
          type ShapeKind } from "./palette.js";
 
 const MAX_HITS = 25;
+const RECOMMENDED_DATASETS = ["RAW_DATA", "ATTACHMENT", "ELN_PREVIEW"];
 
 function findType(code: string, dataset: boolean): BamType | undefined {
   return (dataset ? BAM_DATASET_TYPES : BAM_OBJECT_TYPES).find((t) => t.code === code);
@@ -44,7 +46,8 @@ function TypePicker({ value, dataset, onPick }: { value: string; dataset: boolea
   }, [query, value, dataset]);
   const proposed = query.trim().toUpperCase().replace(/[^A-Z0-9_.]+/g, "_").replace(/^_+|_+$/g, "");
   const pick = (code: string) => { onPick(code); setQuery(""); setChanging(false); };
-  const shown = query.trim() ? hits : family;
+  const recommended = RECOMMENDED_DATASETS.map((code) => findType(code, true)!);
+  const shown = query.trim() ? hits : dataset ? recommended : family;
 
   return (
     <>
@@ -57,7 +60,7 @@ function TypePicker({ value, dataset, onPick }: { value: string; dataset: boolea
         </div>
       ) : (
         <p className="muted">{dataset ? "Pick the kind of files, or leave it open for now."
-          : "Not decided yet. That is fine: the guide says to leave the type open if an object does not clearly belong to a group."}</p>
+          : "Not decided yet: mark it as needs clarification and bring it to the Data Store team."}</p>
       )}
       {(changing || !value) && (
         <div className="term-search">
@@ -66,11 +69,12 @@ function TypePicker({ value, dataset, onPick }: { value: string; dataset: boolea
                  onChange={(e) => setQuery(e.target.value)} />
           {shown.length > 0 && (
             <ul className="term-hits ds-hits">
-              {!query.trim() && <li className="term-more">More specific kinds of {value.split(".")[0]}:</li>}
+              {!query.trim() && !dataset && <li className="term-more">More specific kinds of {value.split(".")[0]}:</li>}
               {shown.slice(0, MAX_HITS).map((t) => (
                 <li key={t.code}>
                   <button type="button" onClick={() => pick(t.code)}>
                     <span className="term-label">{t.code}</span>
+                    {dataset && RECOMMENDED_DATASETS.includes(t.code) && <span className="term-def">recommended by the Data Store</span>}
                     {t.description && <span className="term-def">{t.description}</span>}
                   </button>
                 </li>
@@ -106,9 +110,23 @@ export function DatastoreBoxSection({ data, boxes, onChange }: {
   boxes: Box[];
   onChange: (patch: Partial<BoxData>) => void;
 }) {
-  const o = data.openbis ?? openbisFor(data.kind);
+  const o = withFixedBamProject(data.openbis ?? openbisFor(data.kind));
+  const fixedProject = fixedBamProject(o.area, o.space);
+  const warning = projectCodeWarning(o);
   const dataset = data.kind === "dataset";
-  const set = (patch: Partial<OpenbisInfo>) => onChange({ openbis: { ...o, ...patch } });
+  // Keep the stored model in sync too when an older diagram has a different project.
+  useEffect(() => {
+    if (!dataset && fixedProject && data.openbis && data.openbis.project !== fixedProject) {
+      onChange({ openbis: { ...data.openbis, project: fixedProject } });
+    }
+  }, [dataset, fixedProject, data.openbis, onChange]);
+  const set = (patch: Partial<OpenbisInfo>, kind?: ShapeKind) => {
+    const next = { ...o, ...patch };
+    if (next.area !== o.area) next.space = spaceAfterMove(next.space, next.area);
+    const wasFixed = fixedBamProject(o.area, o.space);
+    if (wasFixed && next.project === wasFixed && !fixedBamProject(next.area, next.space)) next.project = "";
+    onChange({ ...(kind ? { kind } : {}), openbis: withFixedBamProject(next) });
+  };
 
   const pickType = (code: string) => {
     if (dataset) return set({ type: code });
@@ -117,14 +135,16 @@ export function DatastoreBoxSection({ data, boxes, onChange }: {
     const before = openbisFor(data.kind);
     const after = openbisFor(kind);
     const place = (k: keyof OpenbisInfo) => (o[k] === before[k] ? after[k] : o[k]);
-    onChange({ kind, openbis: { type: code, area: place("area"), space: place("space"), project: place("project"),
-                                collection: place("collection") } });
+    set({ type: code, area: place("area"), space: place("space"), project: place("project"),
+          collection: place("collection") }, kind);
   };
 
   const field = (key: keyof OpenbisInfo, label: string, placeholder: string) => (
     <label className="field">
       {label}
-      <input value={o[key]} placeholder={placeholder} list={`ds-${key}`} onChange={(e) => set({ [key]: e.target.value })} />
+      <input readOnly={key === "project" && !!fixedProject} value={o[key]} placeholder={placeholder} list={`ds-${key}`} onChange={(e) => set({ [key]: e.target.value })} />
+      {key === "project" && fixedProject && <span className="muted-inline">This is your division’s fixed project in this BAM Inventory space.</span>}
+      {key === "project" && warning && <span className="muted-inline">{warning}</span>}
       <datalist id={`ds-${key}`}>{used(boxes, key).map((v) => <option key={v} value={v} />)}</datalist>
     </label>
   );
@@ -145,7 +165,7 @@ export function DatastoreBoxSection({ data, boxes, onChange }: {
           <h3>Where it lives</h3>
           <label className="field">
             Lab Notebook or Inventory
-            <select value={o.area} onChange={(e) => set({ area: e.target.value, space: spaceAfterMove(o.space, e.target.value) })}>
+            <select value={o.area} onChange={(e) => set({ area: e.target.value })}>
               <option value="">not decided yet</option>
               {AREAS.map((a) => <option key={a} value={a}>{a}</option>)}
               {o.area && !AREAS.includes(o.area) && <option value={o.area}>{o.area}</option>}
@@ -160,9 +180,9 @@ export function DatastoreBoxSection({ data, boxes, onChange }: {
               {o.space && !spacesFor(o.area).includes(o.space) && <option value={o.space}>{o.space} (not a Data Store Space)</option>}
             </select>
           </label>
-          {field("project", "Project", "e.g. CONSUMABLES")}
-          {field("collection", "Collection", "e.g. Chemicals")}
-          <p className="muted-inline">Things you do go in the Lab Notebook; things you have or use go in an Inventory
+          {field("project", "Project", o.area === "Lab Notebook" ? "e.g. MATERIAL_SYNTHESIS" : "e.g. CHEMICALS_SYNTHESIS")}
+          {field("collection", "Collection", o.area === "Lab Notebook" ? "e.g. Synthesis" : "e.g. Chemicals")}
+          <p className="muted-inline">Things you do go in the Lab Notebook; things you generate, have or use go in an Inventory
             (BAM-Inventory: shared across divisions; FB-Inventory: within your division, where FB stands for your division's
             code). The Spaces are given by the Data Store; agree on the Project and Collection names with your group.</p>
         </section>
@@ -172,9 +192,10 @@ export function DatastoreBoxSection({ data, boxes, onChange }: {
 }
 
 /** The sentence for an arrow of the Data Store section, and ways to turn it around. */
-export function DatastoreArrowSection({ srcName, dstName, name, onFlip, onSwap }: {
+export function DatastoreArrowSection({ srcName, dstName, dstKind, name, onFlip, onSwap }: {
   srcName: string;
   dstName: string;
+  dstKind?: ShapeKind;
   name: string; // is parent of, is child of, is attached to
   onFlip: () => void; // the same link, read from the other end
   onSwap: () => void; // the other one becomes the parent
@@ -182,6 +203,7 @@ export function DatastoreArrowSection({ srcName, dstName, name, onFlip, onSwap }
   if (name === IS_ATTACHED_TO) {
     return (
       <section className="panel-section">
+        {dstKind && dstKind !== "step" && <p className="muted-inline">The Data Store recommends attaching datasets to the experimental step that made them.</p>}
         <p className="sentence">The dataset <b>{srcName}</b> is attached to <b>{dstName}</b>.</p>
         <p className="muted-inline">A dataset holds the files of one object, usually the experimental step that made them.</p>
       </section>
@@ -201,11 +223,12 @@ export function DatastoreArrowSection({ srcName, dstName, name, onFlip, onSwap }
 }
 
 /** Asked when two objects are linked: which one is the parent? */
-export function DatastoreLinkMenu({ x, y, srcName, dstName, onChoose, onCancel }: {
+export function DatastoreLinkMenu({ x, y, srcName, dstName, choices, onChoose, onCancel }: {
   x: number;
   y: number;
   srcName: string;
   dstName: string;
+  choices: string[];
   onChoose: (name: string) => void;
   onCancel: () => void;
 }) {
@@ -218,10 +241,10 @@ export function DatastoreLinkMenu({ x, y, srcName, dstName, onChoose, onCancel }
     <div className="menu ds-link-menu" style={{ left: x, top: y }} onMouseDown={(e) => e.stopPropagation()}>
       <div className="menu-head">How are they linked?</div>
       <div className="menu-section">
-        {[IS_PARENT_OF, IS_CHILD_OF].map((name, i) => (
+        {choices.map((name, i) => (
           <button type="button" key={name} className="menu-item" autoFocus={i === 0} onClick={() => onChoose(name)}>
             <span><b>{srcName}</b> {name} <b>{dstName}</b></span>
-            <span className="menu-id">{i === 0 ? `${srcName} is the parent` : `${dstName} is the parent`}</span>
+            <span className="menu-id">{name === IS_PARENT_OF ? `${srcName} is the parent` : `${dstName} is the parent`}</span>
           </button>
         ))}
       </div>

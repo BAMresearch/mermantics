@@ -196,7 +196,7 @@ export function BoxDetails({ box, shapes, ontology, datastore = false, boxes = [
   );
 }
 
-export function ArrowDetails({ arrow, srcName, dstName, ontology, datastore = false, onChange, onReconnect, onSwap, onFlip, onDelete }: {
+export function ArrowDetails({ arrow, srcName, dstName, dstKind, ontology, datastore = false, onChange, onReconnect, onSwap, onFlip, onDelete }: {
   arrow: Arrow;
   ontology: boolean; // false in process modelling: arrows are plain words
   datastore?: boolean; // BAM Data Store: parent-child arrows and datasets, no relation to choose
@@ -204,6 +204,7 @@ export function ArrowDetails({ arrow, srcName, dstName, ontology, datastore = fa
   onFlip?: () => void;
   srcName: string;
   dstName: string;
+  dstKind?: BoxData["kind"];
   onChange: (patch: Partial<ArrowData>) => void;
   onReconnect: () => void;
   onDelete: () => void;
@@ -214,7 +215,7 @@ export function ArrowDetails({ arrow, srcName, dstName, ontology, datastore = fa
     <div className="panel">
       <div className="panel-kind"><span className="dot" />Arrow</div>
       {datastore
-        ? <DatastoreArrowSection srcName={srcName} dstName={dstName} name={d.name} onFlip={() => onFlip?.()} onSwap={() => onSwap?.()} />
+        ? <DatastoreArrowSection dstKind={dstKind} srcName={srcName} dstName={dstName} name={d.name} onFlip={() => onFlip?.()} onSwap={() => onSwap?.()} />
         : <p className="sentence"><b>{srcName}</b> {d.words} <b>{dstName}</b></p>}
       {d.kind === "relation" && !ontology && !datastore && (
         <section className="panel-section">

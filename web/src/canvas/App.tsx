@@ -37,7 +37,7 @@ import { onLeaving, saveDiagram, savedDiagram } from "./saved.js";
 import { checkStatus, Compare, OptionBar, OptionPanel, TermsTree } from "./OptionsPanel.js";
 import { EMPTY_VIEW, newOptionId, nextLetter, originalView, readState, resultsMarkdown, VIEWS, type DesignOption,
          type OptionsState, type ViewId } from "./options.js";
-import { DATASTORE_LINKS, IS_ATTACHED_TO, IS_CHILD_OF, IS_PARENT_OF, KIND_BY_ANCESTOR, openbisFor, shapeOf, statusOf,
+import { datastoreLinkOrder, DATASTORE_LINKS, IS_ATTACHED_TO, IS_CHILD_OF, IS_PARENT_OF, KIND_BY_ANCESTOR, openbisFor, shapeOf, statusOf,
          type Shape, type ShapeKind } from "./palette.js";
 import { BUILT_IN, checkUses, instantiate, loadMine, parsePattern, patternFromSelection, readUses, remapInsertion, saveMine, slug,
          type Pattern, type PatternUse } from "./patterns.js";
@@ -202,7 +202,7 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
   // Data Store: the model as drawn, or laid out like openBIS (Space > Project > Collection).
   const [view, setView] = useState<"model" | "openbis">("model");
   const openbis = mode.datastore && view === "openbis";
-  const [linking, setLinking] = useState<(PendingConnection & { x: number; y: number }) | null>(null);
+  const [linking, setLinking] = useState<(PendingConnection & { x: number; y: number; choices: string[] }) | null>(null);
   // Closing a menu also revokes callbacks retained by its children.
   const connectionGeneration = useRef(0);
   const closeConnections = useCallback(() => {
@@ -709,7 +709,7 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
     const rect = wrapper.current!.getBoundingClientRect();
     const x = Math.max(8, Math.min(pointer.current.x - rect.left, rect.width - 340));
     const y = Math.max(8, Math.min(pointer.current.y - rect.top, rect.height - 200));
-    setLinking({ ...request, x, y });
+    setLinking({ ...request, x, y, choices: datastoreLinkOrder(kindOf(source), kindOf(target)) });
   }, [addLink, closeConnections, validConnection, work]);
 
   const connect = useCallback((source: string, target: string) => {
@@ -1212,7 +1212,7 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
             <div className="view-hint">openBIS view: placed by each box's Space, Project and Collection. Click a box to change them.</div>
           )}
           {linking && (
-            <DatastoreLinkMenu x={linking.x} y={linking.y} srcName={nameOf(linking.source)} dstName={nameOf(linking.target)}
+            <DatastoreLinkMenu choices={linking.choices} x={linking.x} y={linking.y} srcName={nameOf(linking.source)} dstName={nameOf(linking.target)}
                                onCancel={() => cancelConnection(linking)}
                                onChoose={(name) => { if (!validConnection(linking)) return; addLink(linking, name); closeConnections(); }} />
           )}
@@ -1282,7 +1282,7 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
                           .map((p) => ({ pattern: u.title, part: p.name })))}
                         onDelete={() => flow.deleteElements({ nodes: [{ id: selectedBox.id }] })} />
           ) : selectedArrow ? (
-            <ArrowDetails arrow={selectedArrow} ontology={mode.ontology} datastore={mode.datastore}
+            <ArrowDetails dstKind={boxes.find((b) => b.id === selectedArrow.target)?.data.kind} arrow={selectedArrow} ontology={mode.ontology} datastore={mode.datastore}
                           srcName={nameOf(selectedArrow.source)} dstName={nameOf(selectedArrow.target)}
                           onSwap={() => setArrows((as) => as.map((a) => (a.id === selectedArrow.id
                             ? { ...a, source: a.target, target: a.source } : a)))}

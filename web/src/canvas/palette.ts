@@ -153,23 +153,23 @@ export function spaceAfterMove(space: string, area: string): string {
 /**
  * The shapes of the Data Store section, following the guide: things you do (experimental
  * steps), things you generate (samples), things you have or use (chemicals, instruments) and
- * datasets. Where each one goes first is taken from the guide's example; the group then agrees on
- * its own names.
+ * datasets. Defaults fill only tutorial-fixed places; the group chooses its own project
+ * and collection names where these are not fixed.
  */
 export const DATASTORE_SHAPES: (Shape & { openbis: OpenbisInfo })[] = [
   { kind: "step", title: "Experimental step", hint: "Something you do: synthesis, treatment, measurement, analysis",
     classId: "", classLabel: "",
     openbis: { type: "EXPERIMENTAL_STEP", area: "Lab Notebook", space: "Home space (FB username)", project: "",
-               collection: "Experimental Steps" } },
+               collection: "" } },
   { kind: "sample", title: "Sample", hint: "Something you generate: a sample, a synthesized material",
     classId: "", classLabel: "",
-    openbis: { type: "SAMPLE", area: "FB-Inventory", space: "FB Materials", project: "MATERIALS", collection: "Samples" } },
+    openbis: { type: "SAMPLE", area: "FB-Inventory", space: "FB Materials", project: "", collection: "Samples" } },
   { kind: "chemical", title: "Chemical", hint: "Something you have or use: a chemical, a solution",
     classId: "", classLabel: "",
-    openbis: { type: "CHEMICAL", area: "FB-Inventory", space: "FB Materials", project: "CONSUMABLES", collection: "Chemicals" } },
+    openbis: { type: "CHEMICAL", area: "FB-Inventory", space: "FB Materials", project: "", collection: "Chemicals" } },
   { kind: "instrument", title: "Instrument", hint: "Something you have or use: an instrument, a machine",
     classId: "", classLabel: "",
-    openbis: { type: "INSTRUMENT", area: "FB-Inventory", space: "FB Equipment", project: "INSTRUMENTS", collection: "Instruments" } },
+    openbis: { type: "INSTRUMENT", area: "BAM-Inventory", space: "Bam Equipment", project: "FB Equipment Open", collection: "Instruments" } },
   { kind: "dataset", title: "Dataset", hint: "Files from a step: raw data, images, code, results",
     classId: "", classLabel: "",
     openbis: { type: "", area: "", space: "", project: "", collection: "" } },
@@ -264,4 +264,30 @@ export const COMMON_RELATIONS: Relation[] = [
 
 export function wordsFor(id: string, fallback: string): string {
   return COMMON_RELATIONS.find((r) => r.id === id)?.words ?? fallback;
+}
+
+/** Each division has a fixed project in these shared Inventory spaces. */
+export function fixedBamProject(area: string, space: string): string | undefined {
+  if (area !== "BAM-Inventory") return undefined;
+  const projects: Record<string, string> = {
+    "Bam Equipment": "FB Equipment Open", "Bam Materials": "FB Materials Open",
+    "Bam Methods": "FB Methods Open", "Bam Publications": "FB Publications Open",
+  };
+  return projects[space];
+}
+
+export function withFixedBamProject(info: OpenbisInfo): OpenbisInfo {
+  return { ...info, project: fixedBamProject(info.area, info.space) ?? info.project };
+}
+
+/** Empty means undecided. Collection names are not project codes. */
+export function projectCodeWarning(info: OpenbisInfo): string {
+  if (!info.project || fixedBamProject(info.area, info.space) || /^[A-Z0-9_.-]{3,30}$/.test(info.project)) return "";
+  return "openBIS project codes use capital letters, digits, _, - and . (3 to 30 characters); separate words with underscores, e.g. MATERIAL_SYNTHESIS. Codes cannot be changed after saving in openBIS.";
+}
+
+/** Resources are parents of steps; otherwise preserve the drawn workflow direction. */
+export function datastoreLinkOrder(source?: ShapeKind, target?: ShapeKind): string[] {
+  return source === "step" && (target === "instrument" || target === "chemical")
+    ? [IS_CHILD_OF, IS_PARENT_OF] : [IS_PARENT_OF, IS_CHILD_OF];
 }
