@@ -14,7 +14,7 @@ import type { Arrow, Box } from "./model.js";
 import { DATASTORE_KINDS, IS_ATTACHED_TO } from "./palette.js";
 
 // The columns from left to right, as in the guide's figure.
-const GUIDE_ORDER = ["BAM-Inventory", "Lab Notebook", "FB-Inventory"];
+const GUIDE_ORDER = ["FB-Inventory", "Lab Notebook", "BAM-Inventory"];
 
 export type LaneLevel = "area" | "space" | "project" | "collection" | "row";
 
