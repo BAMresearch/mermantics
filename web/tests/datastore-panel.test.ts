@@ -117,3 +117,30 @@ test("an older BAM project is corrected in the stored model as well as the field
   expect(change).toHaveBeenCalledWith({ openbis: { ...openbisFor("instrument"), project: "FB Equipment Open" } });
   expect(host.querySelector<HTMLInputElement>('input[list="ds-project"]')!.value).toBe("FB Equipment Open");
 });
+
+
+test("changing an instrument in Bam Materials to a chemical clears incompatible placement", () => {
+  const move = panel("instrument");
+  const space = host.querySelectorAll("select")[1]!;
+  act(() => { space.value = "Bam Materials"; space.dispatchEvent(new Event("change", { bubbles: true })); });
+  expect(move.mock.lastCall![0].openbis.project).toBe("FB Materials Open");
+  const change = panel("instrument", move.mock.lastCall![0].openbis);
+  const chooseType = [...host.querySelectorAll("button")].find((b) => b.textContent === "Choose another type...")!;
+  act(() => chooseType.click());
+  const search = host.querySelector<HTMLInputElement>(".term-search input")!;
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(search, "CHEMICAL");
+    search.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  const chemical = [...host.querySelectorAll<HTMLButtonElement>(".term-hits button")]
+    .find((b) => b.querySelector(".term-label")?.textContent === "CHEMICAL")!;
+  expect(chemical).toBeDefined();
+  act(() => chemical.click());
+  const next = change.mock.lastCall![0];
+  expect(next).toEqual({ kind: "chemical", openbis: {
+    type: "CHEMICAL", area: "FB-Inventory", space: "", project: "", collection: "Chemicals",
+  } });
+  panel(next.kind, next.openbis);
+  expect(host.textContent).not.toContain("not a Data Store Space");
+  expect(host.textContent).not.toContain("openBIS project codes");
+});

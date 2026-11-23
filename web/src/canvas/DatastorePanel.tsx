@@ -120,11 +120,12 @@ export function DatastoreBoxSection({ data, boxes, onChange }: {
       onChange({ openbis: { ...data.openbis, project: fixedProject } });
     }
   }, [dataset, fixedProject, data.openbis, onChange]);
-  const set = (patch: Partial<OpenbisInfo>) => {
+  const set = (patch: Partial<OpenbisInfo>, kind?: ShapeKind) => {
     const next = { ...o, ...patch };
+    if (next.area !== o.area) next.space = spaceAfterMove(next.space, next.area);
     const wasFixed = fixedBamProject(o.area, o.space);
     if (wasFixed && next.project === wasFixed && !fixedBamProject(next.area, next.space)) next.project = "";
-    onChange({ openbis: withFixedBamProject(next) });
+    onChange({ ...(kind ? { kind } : {}), openbis: withFixedBamProject(next) });
   };
 
   const pickType = (code: string) => {
@@ -134,8 +135,8 @@ export function DatastoreBoxSection({ data, boxes, onChange }: {
     const before = openbisFor(data.kind);
     const after = openbisFor(kind);
     const place = (k: keyof OpenbisInfo) => (o[k] === before[k] ? after[k] : o[k]);
-    onChange({ kind, openbis: withFixedBamProject({ type: code, area: place("area"), space: place("space"), project: place("project"),
-                                collection: place("collection") }) });
+    set({ type: code, area: place("area"), space: place("space"), project: place("project"),
+          collection: place("collection") }, kind);
   };
 
   const field = (key: keyof OpenbisInfo, label: string, placeholder: string) => (
@@ -164,7 +165,7 @@ export function DatastoreBoxSection({ data, boxes, onChange }: {
           <h3>Where it lives</h3>
           <label className="field">
             Lab Notebook or Inventory
-            <select value={o.area} onChange={(e) => set({ area: e.target.value, space: spaceAfterMove(o.space, e.target.value) })}>
+            <select value={o.area} onChange={(e) => set({ area: e.target.value })}>
               <option value="">not decided yet</option>
               {AREAS.map((a) => <option key={a} value={a}>{a}</option>)}
               {o.area && !AREAS.includes(o.area) && <option value={o.area}>{o.area}</option>}
