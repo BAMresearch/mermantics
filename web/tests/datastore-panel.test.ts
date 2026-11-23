@@ -31,6 +31,28 @@ test.each(["Equipment", "Materials", "Methods", "Publications"])("BAM %s project
   expect(host.textContent).not.toContain("openBIS project codes");
 });
 
+test.each([
+  [0, "FB-Inventory"], [1, "Bam Global"], [0, "Lab Notebook"],
+] as const)("leaving a fixed BAM place via select %s → %s clears its project", (index, destination) => {
+  const change = panel("instrument");
+  const select = host.querySelectorAll("select")[index]!;
+  act(() => { select.value = destination; select.dispatchEvent(new Event("change", { bubbles: true })); });
+  const next = change.mock.lastCall![0].openbis;
+  expect(next.project).toBe("");
+  panel("instrument", next);
+  const project = host.querySelector<HTMLInputElement>('input[list="ds-project"]')!;
+  expect(project.value).toBe("");
+  expect(project.readOnly).toBe(false);
+  expect(host.textContent).not.toContain("openBIS project codes");
+});
+
+test("moving between free places preserves a group-chosen project", () => {
+  const change = panel("chemical", { project: "CHEMICALS_SYNTHESIS" });
+  const select = host.querySelectorAll("select")[0]!;
+  act(() => { select.value = "Lab Notebook"; select.dispatchEvent(new Event("change", { bubbles: true })); });
+  expect(change.mock.lastCall![0].openbis.project).toBe("CHEMICALS_SYNTHESIS");
+});
+
 test("Bam Global and FB Inventory projects remain editable", () => {
   for (const area of ["BAM-Inventory", "FB-Inventory"]) {
     panel("object", { area, space: area === "BAM-Inventory" ? "Bam Global" : "FB Materials" });

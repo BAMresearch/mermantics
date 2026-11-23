@@ -120,7 +120,12 @@ export function DatastoreBoxSection({ data, boxes, onChange }: {
       onChange({ openbis: { ...data.openbis, project: fixedProject } });
     }
   }, [dataset, fixedProject, data.openbis, onChange]);
-  const set = (patch: Partial<OpenbisInfo>) => onChange({ openbis: withFixedBamProject({ ...o, ...patch }) });
+  const set = (patch: Partial<OpenbisInfo>) => {
+    const next = { ...o, ...patch };
+    const wasFixed = fixedBamProject(o.area, o.space);
+    if (wasFixed && next.project === wasFixed && !fixedBamProject(next.area, next.space)) next.project = "";
+    onChange({ openbis: withFixedBamProject(next) });
+  };
 
   const pickType = (code: string) => {
     if (dataset) return set({ type: code });
