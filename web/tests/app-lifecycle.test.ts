@@ -1209,3 +1209,25 @@ test("a new malformed custom-pattern import is rejected before saving", async ()
   expect(container.textContent).toContain("Could not import pattern");
   expect(container.textContent).toContain("Unreadable diagram content");
 });
+
+test("a pattern file read finishing after unmount cannot overwrite restored patterns", async () => {
+  const mine = new Map([[MINE_KEY, JSON.stringify([BUILT_IN[0]!.text])]]);
+  const write = vi.fn((key: string, value: string) => { mine.set(key, value); });
+  vi.stubGlobal("localStorage", { getItem: (key: string) => mine.get(key) ?? null, setItem: write });
+  await mount({ ...plain, patterns: true });
+  const pending = deferred<string>();
+  const input = container.querySelectorAll<HTMLInputElement>('input[accept=".mmd,.md,.txt"]')[1]!;
+  Object.defineProperty(input, "files", { value: [{ name: "late.mmd", text: () => pending.promise }] });
+  await act(async () => input.dispatchEvent(new Event("change", { bubbles: true })));
+  await act(async () => app.unmount());
+
+  const restored = JSON.stringify([BUILT_IN[1]!.text]);
+  recovery.restoreRecovery(recovery.recoveryFile([{ area: "local", key: MINE_KEY, text: restored }]));
+  write.mockClear();
+  await act(async () => pending.resolve(BUILT_IN[2]!.text));
+
+  expect(write).not.toHaveBeenCalled();
+  expect(mine.get(MINE_KEY)).toBe(restored);
+  expect(loadMine().map((pattern) => pattern.text)).toEqual([BUILT_IN[1]!.text]);
+  expect(pendingSaves()).toHaveLength(0);
+});

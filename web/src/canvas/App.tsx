@@ -247,6 +247,9 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
     });
   }, [mode.relationsKey]);
   const patternInput = useRef<HTMLInputElement>(null);
+  // Pending reads belong to this editor lifetime; leaving it must revoke storage writes too.
+  const patternReadGeneration = useRef(0);
+  useEffect(() => () => { patternReadGeneration.current++; }, []);
   const wrapper = useRef<HTMLDivElement>(null);
   const pointer = useRef({ x: 0, y: 0 });
   const fileInput = useRef<HTMLInputElement>(null);
@@ -1145,8 +1148,14 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
             const file = e.target.files?.[0];
             e.target.value = "";
             if (!file) return;
-            try { keepPattern(await file.text(), file.name); }
-            catch (error) { setNotice(`Could not import ${file.name}: ${(error as Error).message}`); }
+            const generation = patternReadGeneration.current;
+            try {
+              const text = await file.text();
+              if (generation !== patternReadGeneration.current) return;
+              keepPattern(text, file.name);
+            } catch (error) {
+              if (generation === patternReadGeneration.current) setNotice(`Could not import ${file.name}: ${(error as Error).message}`);
+            }
           }} />
           <p className="palette-hint">Select several boxes to save them as your own pattern.</p>
           </>)}
