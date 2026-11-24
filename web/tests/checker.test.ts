@@ -42,7 +42,8 @@ test("starts lazily and shares ontology loading before dependent requests", asyn
   expect(worker.postMessage).toHaveBeenCalledTimes(1);
   worker.reply({ type: "loaded", id: worker.request().id, ontology: info });
   await vi.advanceTimersByTimeAsync(0);
-  for (const [r] of worker.postMessage.mock.calls.slice(1)) {
+  for (let i = 0; i < 2; i++) {
+    const r = worker.request();
     if (r.type === "terms") worker.reply({ type: "terms", id: r.id, terms: [null] });
     if (r.type === "supers") worker.reply({ type: "supers", id: r.id, supers: [[]] });
   }
@@ -101,14 +102,17 @@ test("constructor exceptions leave no pending timers and permit retry", async ()
   await loaded();
 });
 
-test("postMessage exceptions reject concurrent requests and permit retry", async () => {
+test("postMessage exceptions reject waiting requests and permit retry", async () => {
   const worker = await loaded();
   const a = client.lookup(["A"]);
-  const results = Promise.allSettled([a]);
+  const b = client.supers(["B"]);
+  const c = client.lookup(["C"]);
+  const results = Promise.allSettled([b, c]);
   await vi.advanceTimersByTimeAsync(0);
   worker.postMessage.mockImplementationOnce(() => { throw new Error("send failed"); });
-  await expect(client.supers(["B"])).rejects.toThrow("send failed");
-  expect((await results)[0].status).toBe("rejected");
+  worker.reply({ type: "terms", id: worker.request().id, terms: [null] });
+  await a;
+  expect((await results).map((r) => r.status)).toEqual(["rejected", "rejected"]);
   expect(vi.getTimerCount()).toBe(0);
   await loaded();
   expect(FakeWorker.instances).toHaveLength(2);
@@ -130,9 +134,8 @@ test("protocol errors reject only their request and clear its timer", async () =
   const b = client.supers(["B"]);
   const rejected = expect(a).rejects.toThrow("bad request");
   await vi.advanceTimersByTimeAsync(0);
-  const requests = worker.postMessage.mock.calls.slice(1).map(([r]) => r);
-  worker.reply({ type: "error", id: requests[0]!.id, request: "terms", message: "bad request" });
-  worker.reply({ type: "supers", id: requests[1]!.id, supers: [[]] });
+  worker.reply({ type: "error", id: worker.request().id, request: "terms", message: "bad request" });
+  worker.reply({ type: "supers", id: worker.request().id, supers: [[]] });
   await rejected;
   await expect(b).resolves.toEqual([[]]);
   await vi.advanceTimersByTimeAsync(120_000);
@@ -210,4 +213,117 @@ test("a load response queued just before a crash cannot announce a recovered wor
   expect(client.getOntologyState()).toMatchObject({ status: "failed", revision: 0 });
   await loaded();
   expect(client.getOntologyState()).toMatchObject({ status: "ready", revision: 1 });
+});
+
+test("waiting in the client queue does not consume an operation's timeout", async () => {
+  const worker = await loaded();
+  const a = client.lookup(["A"]);
+  const b = client.supers(["B"]);
+  await vi.advanceTimersByTimeAsync(110_000);
+  expect(worker.request().type).toBe("terms");
+  expect(worker.postMessage).toHaveBeenCalledTimes(2); // load and the active lookup
+  worker.reply({ type: "terms", id: worker.request().id, terms: [null] });
+  await a;
+  expect(worker.request().type).toBe("supers");
+  await vi.advanceTimersByTimeAsync(110_000);
+  expect(worker.terminate).not.toHaveBeenCalled();
+  worker.reply({ type: "supers", id: worker.request().id, supers: [[]] });
+  await expect(b).resolves.toEqual([[]]);
+  expect(vi.getTimerCount()).toBe(0);
+});
+
+test("background checks keep only the newest waiting diagram and preserve explicit checks", async () => {
+  const worker = await loaded();
+  const a = client.check("active", { latest: true });
+  await vi.advanceTimersByTimeAsync(0);
+  const b = client.check("obsolete", { latest: true });
+  const c = client.check("comparison");
+  const d = client.check("newest", { latest: true });
+  const results = Promise.allSettled([a, b, c, d]);
+  await vi.advanceTimersByTimeAsync(0);
+  const sent: string[] = [];
+  for (let i = 0; i < 3; i++) {
+    const r = worker.request();
+    if (r.type !== "check") throw new Error("expected check");
+    sent.push(r.text);
+    worker.reply({ type: "checked", id: r.id, checked: {} as import("../src/worker/protocol.js").Checked });
+  }
+  expect(sent).toEqual(["active", "comparison", "newest"]);
+  expect((await results).map((r) => r.status)).toEqual(["fulfilled", "rejected", "fulfilled", "fulfilled"]);
+  expect(vi.getTimerCount()).toBe(0);
+});
+
+for (const initial of ["loaded", "loading"]) {
+  test(`dependent calls follow an existing recovery after the previous worker was ${initial}`, async () => {
+    if (initial === "loaded") await loaded();
+    const lookup = client.lookup(["A"]);
+    const old = latest();
+    old.onerror!(new ErrorEvent("error", { message: "crash" }));
+    const recovery = client.loadOntology();
+    const fresh = latest();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fresh.request().type).toBe("load");
+    fresh.reply({ type: "loaded", id: fresh.request().id, ontology: info });
+    await recovery;
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fresh.request().type).toBe("terms");
+    fresh.reply({ type: "terms", id: fresh.request().id, terms: [null] });
+    await expect(lookup).resolves.toEqual([null]);
+  });
+}
+
+test("an older background check resuming after recovery cannot supersede the newest diagram", async () => {
+  const old = client.check("old", { latest: true });
+  latest().onerror!(new ErrorEvent("error", { message: "crash" }));
+  const recovery = client.loadOntology();
+  const newest = client.check("newest", { latest: true });
+  const results = Promise.allSettled([old, newest]);
+  const worker = latest();
+  worker.reply({ type: "loaded", id: worker.request().id, ontology: info });
+  await recovery;
+  await vi.advanceTimersByTimeAsync(0);
+  expect(worker.request()).toMatchObject({ type: "check", text: "newest" });
+  worker.reply({ type: "checked", id: worker.request().id, checked: {} as import("../src/worker/protocol.js").Checked });
+  expect((await results).map((r) => r.status)).toEqual(["rejected", "fulfilled"]);
+  expect(worker.postMessage).toHaveBeenCalledTimes(2);
+});
+
+test("a longer limit lets a slow ontology load and check finish past two minutes", async () => {
+  client.setRequestTimeout(300_000);
+  const loading = client.loadOntology();
+  const worker = latest();
+  await vi.advanceTimersByTimeAsync(120_001);
+  expect(worker.terminate).not.toHaveBeenCalled();
+  worker.reply({ type: "loaded", id: worker.request().id, ontology: info });
+  await loading;
+  const checking = client.check("slow diagram");
+  await vi.advanceTimersByTimeAsync(120_001);
+  expect(worker.terminate).not.toHaveBeenCalled();
+  worker.reply({ type: "checked", id: worker.request().id, checked: {} as import("../src/worker/protocol.js").Checked });
+  await checking;
+  expect(vi.getTimerCount()).toBe(0);
+});
+
+test("changing the limit affects future dispatches, and timeouts remain finite", async () => {
+  const loading = client.loadOntology();
+  const rejected = expect(loading).rejects.toThrow("after 2 minutes");
+  client.setRequestTimeout(300_000);
+  await vi.advanceTimersByTimeAsync(120_000);
+  await rejected;
+  expect(client.getOntologyState()).toMatchObject({ timedOut: true, timeoutMs: 300_000 });
+  const retry = client.loadOntology();
+  const failedRetry = expect(retry).rejects.toThrow("after 5 minutes");
+  expect(client.getOntologyState().timedOut).toBe(false);
+  await vi.advanceTimersByTimeAsync(299_999);
+  expect(latest().terminate).not.toHaveBeenCalled();
+  await vi.advanceTimersByTimeAsync(1);
+  await failedRetry;
+  expect(latest().terminate).toHaveBeenCalledOnce();
+  expect(vi.getTimerCount()).toBe(0);
+});
+
+test.each([0, -1, NaN, Infinity, 121_000, 3_600_001])("invalid time limit %s cannot disable failure detection", (ms) => {
+  expect(() => client.setRequestTimeout(ms)).toThrow("Unsupported checking time limit");
+  expect(client.getOntologyState().timeoutMs).toBe(120_000);
+  expect(FakeWorker.instances).toHaveLength(0);
 });

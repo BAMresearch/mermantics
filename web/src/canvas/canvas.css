@@ -576,3 +576,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .save-notice small { display: block; margin-top: 5px; }
 .start > .save-notice { width: 100%; box-sizing: border-box; text-align: left; }
 .recovery-restore { margin-top: 20px; }
+
+/* Keep previous markers visible during rechecking, without presenting them as current. */
+.validation-stale .box.has-error, .validation-stale .box.has-warning { border-style: dashed; }
+.validation-stale .box .badge { opacity: 0.65; filter: saturate(0.45); }
+.validation-stale .react-flow__edge.validation-problem { opacity: 0.55; }

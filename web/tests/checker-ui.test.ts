@@ -180,3 +180,16 @@ test("unlinked custom relations remain selectable while loading and after failur
     .find((b) => b.textContent?.startsWith("custom unlinked"))!.click());
   expect(choose).toHaveBeenCalledWith(expect.objectContaining({ words: "custom unlinked", curie: "", own: true }));
 });
+
+test("details label retained markers as previous findings while rechecking", async () => {
+  const box = fromMermaid('flowchart TB\nA["Box"]').boxes[0]!;
+  box.data.problems = [{ level: "error", message: "Earlier finding", details: "" }];
+  const props = { box, shapes: [], ontology: true, onChange: vi.fn(), onDelete: vi.fn() };
+  await act(async () => root.render(createElement(BoxDetails, { ...props, validationStale: true })));
+  expect(host.textContent).toContain("Previous findings");
+  expect(host.textContent).toContain("not been confirmed for the current diagram");
+  expect(host.textContent).toContain("Earlier finding");
+  await act(async () => root.render(createElement(BoxDetails, { ...props, validationStale: false })));
+  expect(host.textContent).toContain("Problems");
+  expect(host.textContent).not.toContain("Previous findings");
+});

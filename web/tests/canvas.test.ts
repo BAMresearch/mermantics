@@ -239,3 +239,17 @@ describe.skipIf(!PMDCO_ENABLED)("own relations on PMDco", () => {
     expect(bad.filter((f) => f.check === "ids").map((f) => f.message)).toEqual(["arrow has no ontology ID, not checked (heats)"]);
   });
 });
+
+test("Mermaid round trips retain pending shapes without overriding explicit choices", () => {
+  const imported = fromMermaid('flowchart TB\nA["Auto<br/>TST_0000001"]\nB["Explicit<br/>TST_0000001"]\n%% mermantics-kinds {"B":"other"}');
+  expect(imported.boxes[0]!.data.autoClassify).toBe("TST_0000001");
+  const text = toMermaid(imported.boxes, imported.arrows);
+  expect(text).toContain('%% mermantics-kinds {"B":"other"}');
+  expect(fromMermaid(text).unclassified).toEqual(["A"]);
+  // A classification marker must never apply to a different class or a chosen non-other shape.
+  imported.boxes[0]!.data.classId = "TST_0000002";
+  expect(toMermaid(imported.boxes, imported.arrows)).toContain('"A":"other"');
+  imported.boxes[0]!.data.classId = "TST_0000001";
+  imported.boxes[0]!.data.kind = "process";
+  expect(toMermaid(imported.boxes, imported.arrows)).toContain('"A":"process"');
+});

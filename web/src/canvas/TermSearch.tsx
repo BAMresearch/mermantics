@@ -48,7 +48,7 @@ export function TermSearch({ onPick, placeholder, kinds = CLASS_KINDS }: {
 
   return (
     <div className="term-search">
-      <input value={query} placeholder={placeholder} onChange={(e) => { setHits([]); setQuery(e.target.value); }} />
+      <input value={query} placeholder={placeholder} onChange={(e) => setQuery(e.target.value)} />
       {loading && <p role="status">Searching...</p>}
       {error && <p role="alert">Search failed: {error} <button type="button" onClick={() => setRetry((r) => r + 1)}>Retry search</button></p>}
       {hits.length > 0 && (

@@ -1,4 +1,3 @@
-import { useOntology } from "./useOntology.js";
 /**
  * The parts of the PMD Hackathon - Computations section: the bar to pick an option and a view,
  * the panel with an option's notes, the compare view, and the tree of terms.
@@ -8,6 +7,7 @@ import { ConnectionMode, MarkerType, ReactFlow, ReactFlowProvider, useNodesIniti
          type NodeTypes } from "@xyflow/react";
 import { useEffect, useMemo, useState } from "react";
 
+import { useOntology } from "./useOntology.js";
 import { BoxNode } from "./BoxNode.js";
 import { check, lookup, trees } from "./checker.js";
 import { FloatingEdge } from "./FloatingEdge.js";

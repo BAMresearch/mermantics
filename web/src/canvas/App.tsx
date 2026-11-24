@@ -17,7 +17,7 @@ import { applyPositions, DocumentWork } from "./document.js";
 
 import logo from "../../../assets/mermantics-logo.svg";
 import { BoxNode, worst } from "./BoxNode.js";
-import { check, loadOntology, supers } from "./checker.js";
+import { check, CHECK_TIMEOUTS, loadOntology, setRequestTimeout, supers } from "./checker.js";
 import { useOntology } from "./useOntology.js";
 import { DatastoreLinkMenu, WhereThingsGo } from "./DatastorePanel.js";
 import { DetailsResize } from "./DetailsResize.js";
@@ -66,7 +66,9 @@ async function classify(boxes: Box[]): Promise<Box[]> {
     const hit = KIND_BY_ANCESTOR.find(([id]) => ancestors.has(id));
     if (hit) kinds.set(b.id, hit[1]);
   });
-  return boxes.map((b) => (kinds.has(b.id) ? { ...b, data: { ...b.data, kind: kinds.get(b.id)! } } : b));
+  const classified = new Set(open.map((b) => b.id));
+  return boxes.map((b) => classified.has(b.id)
+    ? { ...b, data: { ...b.data, kind: kinds.get(b.id) ?? b.data.kind, autoClassify: undefined } } : b);
 }
 
 /** The structure that the checks see; moving a box does not change it. */
@@ -195,19 +197,25 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
   const ontology = useOntology();
   const ontologyState = ontology.status;
   const ontoStatus = ontologyState === "ready" ? ontology.title : ontologyState === "failed"
-    ? `Could not load the ontology: ${ontology.error}` : "Loading PMDco 3.1.2...";
+    ? `Checker unavailable: ${ontology.error}` : "Loading PMDco 3.1.2...";
+  const nextTimeout = CHECK_TIMEOUTS.find((ms) => ms > ontology.timeoutMs);
   const [ready, setReady] = useState(false);
-  const awaitingClassification = useRef(new Map<string, string>());
   const [ontologyRevision, setOntologyRevision] = useState(0);
   const [checkRevision, setCheckRevision] = useState(0);
   const retryCheck = () => {
     setOntologyRevision((r) => r + 1);
     setCheckRevision((r) => r + 1);
   };
+  const retryWithMoreTime = () => {
+    if (nextTimeout) setRequestTimeout(nextTimeout);
+    retryCheck();
+  };
   // status: what the badge says; result: the quick check's result alone ("no problems"), "" until there is one.
   const [checkState, setCheckState] = useState<{ phase: "pending" | "failed" | "checked"; status: string; result: string; findings: GlobalFinding[]; passed: string[];
                                                   perUse: Record<string, number> }>(
     { phase: "pending", status: mode.ontology ? "Loading PMDco 3.1.2..." : "", result: "", findings: [], passed: [], perUse: {} });
+  const validationStale = mode.ontology && checkState.phase !== "checked";
+  const previousMarkers = validationStale && (boxes.some((b) => b.data.problems.length) || arrows.some((a) => a.data?.problems.length));
   const [pending, setPending] = useState<PendingArrow | null>(null);
   // Data Store: two objects were connected; which one is the parent?
   // Data Store: the model as drawn, or laid out like openBIS (Space > Project > Collection).
@@ -395,9 +403,6 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
       relayout.current = !imported.positioned && placed.length > 0;
       const uses = readUses(imported.patternUses);
       // Commit refs and the baseline together; measurement updates must not disable saving.
-      const unclassified = new Set(imported.unclassified);
-      awaitingClassification.current = new Map(placed.filter((b) => unclassified.has(b.id))
-        .map((b) => [b.id, b.data.classId]));
       opened.current = contentKey(placed, imported.arrows, uses, mode.options ? null : imported.useCase);
       changed.current = persist || !(untouched || target);
       boxesRef.current = placed;
@@ -485,22 +490,26 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
     void loadOntology().catch(() => {});
   }, [mode.ontology, ontologyRevision]);
 
+  const classificationKey = JSON.stringify(boxes.filter((b) => b.data.autoClassify)
+    .map((b) => [b.id, b.data.autoClassify, b.data.classId, b.data.kind]));
+
   // Enrich imported shapes after opening. Apply only to matching classes in the
   // same document, preserving edits and amending history rather than adding a step.
   useEffect(() => {
     if (!ready || !mode.ontology || ontologyState !== "ready") return;
     let active = true;
     const document = work.current();
-    const candidates = awaitingClassification.current;
-    const snapshot = boxesRef.current.filter((b) => candidates.get(b.id) === b.data.classId && b.data.kind === "other");
+    const eligible = (b: Box) => !!b.data.autoClassify && b.data.autoClassify === b.data.classId && b.data.kind === "other";
+    const snapshot = boxesRef.current.filter(eligible);
     if (!snapshot.length) return;
     void classify(snapshot).then((classified) => {
       if (!active || !work.owns(document)) return;
-      const shapes = new Map(classified.filter((b) => candidates.get(b.id) === b.data.classId && b.data.kind !== "other").map((b) => [b.id, b.data]));
+      const candidates = new Map(boxesRef.current.filter(eligible).map((b) => [b.id, b.data.classId]));
+      const shapes = new Map(classified.filter((b) => candidates.get(b.id) === b.data.classId).map((b) => [b.id, b.data]));
       const apply = (bs: Box[]) => bs.map((b) => {
         const shape = shapes.get(b.id);
-        return shape && b.data.kind === "other" && b.data.classId === shape.classId
-          ? { ...b, data: { ...b.data, kind: shape.kind } } : b;
+        return shape && eligible(b) && b.data.classId === shape.classId
+          ? { ...b, data: { ...b.data, kind: shape.kind, autoClassify: undefined } } : b;
       });
       // Automatic classification alone must not turn an untouched example into saved work.
       if (!changed.current && opened.current === contentKey(boxesRef.current, arrowsRef.current, usesRef.current,
@@ -510,12 +519,11 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
       }
       setBoxes(apply);
       history.amend((s) => snapshotOf(apply(s.boxes), s.arrows, s.uses, s.useCase));
-      for (const b of snapshot) candidates.delete(b.id);
     }).catch((error: Error) => {
       if (active && work.owns(document)) setNotice(`Could not classify imported boxes: ${error.message}`);
     });
     return () => { active = false; };
-  }, [ready, mode.ontology, mode.options, ontologyState, ontology.revision, checkRevision, history, setBoxes, work]);
+  }, [ready, mode.ontology, mode.options, ontologyState, ontology.revision, checkRevision, classificationKey, history, setBoxes, work]);
 
   // ---- checking -------------------------------------------------------------------------
 
@@ -531,8 +539,6 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
     }
     const mine = ++run.current;
     const document = work.current();
-    setBoxes((bs) => bs.map((b) => ({ ...b, data: { ...b.data, problems: [] } })));
-    setArrows((as) => as.map((a) => ({ ...a, data: { ...a.data!, problems: [] } })));
     setCheckState({ phase: ontologyState === "failed" ? "failed" : "pending",
       status: ontologyState === "ready" ? "Checking..." : ontoStatus,
       result: "", findings: [], passed: [], perUse: {} });
@@ -544,7 +550,7 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
       const text = toMermaid(snapBoxes, snapArrows, mode.options ? emptyUseCase() : useCaseRef.current, snapUses);
       store(text);
       try {
-        const checked = await check(text);
+        const checked = await check(text, { latest: true });
         if (mine !== run.current || !work.owns(document)) return;
         const byBox = new Map<string, Problem[]>();
         const byArrow = new Map<string, Problem[]>();
@@ -834,7 +840,9 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
   }, [history, setBoxes, work]);
 
   const patchBox = useCallback((id: string, patch: Partial<BoxData>) => {
-    if ("kind" in patch || "classId" in patch) awaitingClassification.current.delete(id);
+    if ("kind" in patch || "classId" in patch) {
+      patch = { ...patch, autoClassify: undefined };
+    }
     setBoxes((bs) => bs.map((b) => (b.id === id ? { ...b, data: { ...b.data, ...patch } } : b)));
     if (patch.classId && loading.current === null) shapeFromClass(id, patch.classId);
   }, [setBoxes, shapeFromClass]);
@@ -879,6 +887,7 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
       ...a,
       selected,
       type: "floating",
+      className: level ? "validation-problem" : undefined,
       label: d.words,
       labelBgPadding: [6, 3] as [number, number],
       labelBgBorderRadius: 6,
@@ -1075,7 +1084,7 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
   };
 
   return (
-    <div className={`app${workshop ? " workshop" : ""}`} onPointerMove={(e) => { pointer.current = { x: e.clientX, y: e.clientY }; }}>
+    <div className={`app${workshop ? " workshop" : ""}${validationStale ? " validation-stale" : ""}`} onPointerMove={(e) => { pointer.current = { x: e.clientX, y: e.clientY }; }}>
       <header className="bar">
         <button type="button" className="logo-button" title="Back to the start page" onClick={onHome}>
           <img className="logo" src={logo} alt="mermantics" />
@@ -1250,8 +1259,9 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
             : checkState.findings.some((f) => f.level === "warning") ? "warn" : "good"}`}
                   title={QUICK_CHECK_HINT}
                   // Show the overview (or details sheet) and retry a failed check.
-                  onClick={() => { if (checkState.phase === "failed") retryCheck(); setBoxes((bs) => bs.map((b) => ({ ...b, selected: false }))); setArrows((as) => as.map((a) => ({ ...a, selected: false }))); if (narrow) { setTab("model"); setDrawer("details"); } }}>
-            {checkState.status}{checkState.phase === "failed" ? " — Retry" : ""}
+                  onClick={() => { if (checkState.phase === "failed") { if (ontology.timedOut && nextTimeout) retryWithMoreTime(); else retryCheck(); } setBoxes((bs) => bs.map((b) => ({ ...b, selected: false }))); setArrows((as) => as.map((a) => ({ ...a, selected: false }))); if (narrow) { setTab("model"); setDrawer("details"); } }}>
+            {checkState.status}{previousMarkers ? " — Previous markers shown" : ""}
+            {checkState.phase === "failed" ? ontology.timedOut && nextTimeout ? ` — Retry with ${nextTimeout / 60_000} minutes` : " — Retry" : ""}
           </button>}
           {notice && <div className="notice" onClick={() => setNotice("")}>{notice}</div>}
           {pending && !mode.ontology && (
@@ -1330,7 +1340,7 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
                             onSave={(meta) => keepPattern(patternText(meta), meta.title)}
                             onDownload={(meta) => save(patternText(meta), `${slug(meta.title)}.mmd`)} />
           ) : selectedBox ? (
-            <BoxDetails box={selectedBox} shapes={mode.shapes} ontology={mode.ontology} datastore={mode.datastore} boxes={boxes}
+            <BoxDetails validationStale={validationStale} box={selectedBox} shapes={mode.shapes} ontology={mode.ontology} datastore={mode.datastore} boxes={boxes}
                         termStatus={!!mode.options}
                         onChange={(p) => patchBox(selectedBox.id, p)}
                         questions={useCase.questions.map((q, i) => ({ id: q.id, label: `Q${i + 1}`, text: q.text,
@@ -1340,7 +1350,7 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
                           .map((p) => ({ pattern: u.title, part: p.name })))}
                         onDelete={() => flow.deleteElements({ nodes: [{ id: selectedBox.id }] })} />
           ) : selectedArrow ? (
-            <ArrowDetails dstKind={boxes.find((b) => b.id === selectedArrow.target)?.data.kind} arrow={selectedArrow} ontology={mode.ontology} datastore={mode.datastore}
+            <ArrowDetails validationStale={validationStale} dstKind={boxes.find((b) => b.id === selectedArrow.target)?.data.kind} arrow={selectedArrow} ontology={mode.ontology} datastore={mode.datastore}
                           srcName={nameOf(selectedArrow.source)} dstName={nameOf(selectedArrow.target)}
                           onSwap={() => setArrows((as) => as.map((a) => (a.id === selectedArrow.id
                             ? { ...a, source: a.target, target: a.source } : a)))}
@@ -1360,7 +1370,19 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
                                                       problems: checkState.phase === "checked" ? checkState.perUse[u.id] ?? 0 : null }))}
                       onForget={(id) => setPatternUses((us) => us.filter((u) => u.id !== id))}
                       ownRelations={ownRelations} onForgetRelation={forgetRelation}>
-              {mode.ontology && checkState.phase === "failed" && <button type="button" onClick={retryCheck}>Retry check</button>}
+              {mode.ontology && <>
+                {previousMarkers && <p role="status">Markers show previous findings. They have not been confirmed for the current diagram.</p>}
+                <label className="field">Checking time limit
+                  <select aria-label="Checking time limit" value={ontology.timeoutMs} onChange={(e) => setRequestTimeout(Number(e.target.value))}>
+                    {CHECK_TIMEOUTS.map((ms) => <option key={ms} value={ms}>{ms / 60_000} minutes</option>)}
+                  </select>
+                  <span className="muted-inline">Applies to the next ontology load or check in this tab.</span>
+                </label>
+                {checkState.phase === "failed" && <div className="row">
+                  <button type="button" onClick={retryCheck}>Retry check</button>
+                  {ontology.timedOut && nextTimeout && <button type="button" onClick={retryWithMoreTime}>Retry with {nextTimeout / 60_000} minutes</button>}
+                </div>}
+              </>}
               {mode.datastore && <WhereThingsGo boxes={boxes} onSelect={(id) => select({ box: id })} />}
               {mode.options && opts && currentOption && (
                 <TermsTree option={currentOption}

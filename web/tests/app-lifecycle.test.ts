@@ -3,7 +3,7 @@
 import { createElement, act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { publishOntology, resetOntology } from "./helpers/ontology-state.js";
+import { getOntologyState, publishOntology, resetOntology } from "./helpers/ontology-state.js";
 import type { Box } from "../src/canvas/model.js";
 
 const mocks = vi.hoisted(() => ({ loadOntology: vi.fn(), overviewProps: {} as any, narrow: false, flowRenders: 0, layout: vi.fn(), check: vi.fn(), supers: vi.fn(), fit: vi.fn(), initialized: false, cloneOnSet: false, picture: vi.fn(), nodes: [] as Box[], flowProps: {} as any, optionProps: {} as any, panelProps: {} as any, relationProps: {} as any, linkProps: {} as any, arrowProps: {} as any, boxProps: {} as any }));
@@ -42,7 +42,7 @@ vi.mock("../src/canvas/media.js", () => ({ NARROW: "narrow", TOUCH: "touch", use
 vi.mock("../src/canvas/checker.js", async () => {
   const state = await import("./helpers/ontology-state.js");
   return { ...state, check: mocks.check, supers: mocks.supers, loadOntology: () => {
-    state.publishOntology({ status: "loading", error: "" });
+    state.publishOntology({ status: "loading", error: "", timedOut: false });
     return mocks.loadOntology().then((info: { title: string }) => {
       state.publishOntology({ status: "ready", title: info.title, revision: state.getOntologyState().revision + 1 });
       return info;
@@ -57,7 +57,7 @@ vi.mock("../src/canvas/BoxNode.js", () => ({ BoxNode: () => null, worst: () => n
 vi.mock("../src/canvas/FloatingEdge.js", () => ({ FloatingEdge: () => null }));
 vi.mock("../src/canvas/OpenbisLane.js", () => ({ LaneNode: () => null }));
 vi.mock("../src/canvas/Details.js", () => ({
-  Overview: (props: any) => { mocks.overviewProps = props; return null; }, ArrowDetails: (props: any) => { mocks.arrowProps = props; return null; },
+  Overview: (props: any) => { mocks.overviewProps = props; return createElement("div", {}, props.children); }, ArrowDetails: (props: any) => { mocks.arrowProps = props; return null; },
   BoxDetails: (props: any) => { mocks.boxProps = props; return null; }, SelectionPanel: () => null,
 }));
 vi.mock("../src/canvas/OptionsPanel.js", () => ({
@@ -1270,7 +1270,7 @@ test("saved ontology diagrams open and persist edits while loading fails, then r
   expect(container.querySelector(".status")!.textContent).toBe("Quick check: no problems");
 });
 
-test("pending and failed checks clear box and arrow findings and remain visibly unavailable", async () => {
+test("pending and failed checks retain previous markers as stale until a successful recheck", async () => {
   mocks.check.mockResolvedValueOnce({ result: { findings: [
     { level: "error", message: "Old box error", nodeId: "A" },
     { level: "error", message: "Old arrow error", edgeIndex: 0 },
@@ -1279,16 +1279,24 @@ test("pending and failed checks clear box and arrow findings and remain visibly 
   await act(async () => vi.advanceTimersByTime(301));
   expect(nodes()[0]!.data.problems).toHaveLength(1);
   expect(mocks.flowProps.edges[0].data.problems).toHaveLength(1);
+  const oldBoxProblems = nodes()[0]!.data.problems;
+  const oldArrowProblems = mocks.flowProps.edges[0].data.problems;
   const pending = deferred<never>();
   mocks.check.mockReturnValueOnce(pending.promise);
   await act(async () => nodes()[0]!.data.onRename!("Changed"));
-  expect(nodes()[0]!.data.problems).toEqual([]);
-  expect(mocks.flowProps.edges[0].data.problems).toEqual([]);
+  expect(nodes()[0]!.data.problems).toBe(oldBoxProblems);
+  expect(mocks.flowProps.edges[0].data.problems).toBe(oldArrowProblems);
   expect(container.querySelector(".status")!.classList.contains("unavailable")).toBe(true);
+  expect(container.querySelector(".app")!.classList.contains("validation-stale")).toBe(true);
+  expect(container.querySelector(".status")!.textContent).toContain("Previous markers shown");
+  // More keystrokes keep the same marker data; no clearing and recreating node data.
+  await act(async () => nodes()[0]!.data.onRename!("Changed again"));
+  expect(nodes()[0]!.data.problems).toBe(oldBoxProblems);
+  expect(mocks.flowProps.edges[0].data.problems).toBe(oldArrowProblems);
   await act(async () => vi.advanceTimersByTime(301));
   await act(async () => pending.reject(new Error("worker failed")));
-  expect(nodes()[0]!.data.problems).toEqual([]);
-  expect(mocks.flowProps.edges[0].data.problems).toEqual([]);
+  expect(nodes()[0]!.data.problems).toBe(oldBoxProblems);
+  expect(mocks.flowProps.edges[0].data.problems).toBe(oldArrowProblems);
   expect(mocks.overviewProps.findings).toEqual([]);
   expect(mocks.overviewProps.passed).toEqual([]);
   expect(container.querySelector(".status")!.textContent).toContain("worker failed");
@@ -1297,6 +1305,9 @@ test("pending and failed checks clear box and arrow findings and remain visibly 
   await act(async () => container.querySelector<HTMLButtonElement>(".status")!.click());
   await act(async () => vi.advanceTimersByTime(301));
   expect(container.querySelector(".status")!.textContent).toBe("Quick check: no problems");
+  expect(container.querySelector(".app")!.classList.contains("validation-stale")).toBe(false);
+  expect(nodes()[0]!.data.problems).toEqual([]);
+  expect(mocks.flowProps.edges[0].data.problems).toEqual([]);
 });
 
 test("option documents remain editable and saveable when initial ontology loading fails", async () => {
@@ -1418,4 +1429,72 @@ test("a new ontology generation revalidates even when failure and recovery are b
   });
   await act(async () => vi.advanceTimersByTime(301));
   expect(mocks.check).toHaveBeenCalledTimes(2);
+});
+
+for (const interrupted of ["offline", "still loading"]) {
+  test(`autosaving while ontology is ${interrupted} preserves automatic classification after remount`, async () => {
+    storage.set(plain.storageKey, 'flowchart TB\nA["Saved<br/>TST_0000001"]');
+    const loading = deferred<{ title: string }>();
+    if (interrupted === "offline") mocks.loadOntology.mockRejectedValueOnce(new Error("offline"));
+    else mocks.loadOntology.mockReturnValueOnce(loading.promise);
+    await mount({ ...plain, ontology: true });
+    await act(async () => vi.advanceTimersByTime(801));
+    const saved = storage.get(plain.storageKey)!;
+    expect(saved).not.toContain('"A":"other"');
+    expect(fromMermaid(saved).unclassified).toEqual(["A"]);
+    await act(async () => app.unmount());
+    mocks.supers.mockResolvedValue([["COB_0000035"]]);
+    mocks.check.mockResolvedValue({ result: { findings: [] } });
+    await mount({ ...plain, ontology: true });
+    expect(mocks.supers).toHaveBeenCalledWith(["TST_0000001"]);
+    expect(nodes()[0]!.data.kind).toBe("process");
+    await act(async () => vi.advanceTimersByTime(801));
+    expect(storage.get(plain.storageKey)).toContain('"A":"process"');
+  });
+}
+
+for (const explicit of [false, true]) {
+  test(`export during ontology loading preserves ${explicit ? "an explicit other shape" : "pending classification"}`, async () => {
+    storage.set(plain.storageKey, 'flowchart TB\nA["Saved<br/>TST_0000001"]');
+    mocks.loadOntology.mockReturnValueOnce(deferred<{ title: string }>().promise);
+    await mount({ ...plain, ontology: true });
+    if (explicit) {
+      await act(async () => mocks.flowProps.onNodesChange([{ type: "select", id: "A", selected: true }]));
+      await act(async () => mocks.boxProps.onChange({ kind: "other" }));
+    }
+    let exported: Blob | undefined;
+    vi.spyOn(URL, "createObjectURL").mockImplementation((blob) => { exported = blob as Blob; return "blob:export"; });
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    await act(async () => [...container.querySelectorAll("button")].find((b) => b.textContent?.startsWith("Mermaid diagram"))!.click());
+    const text = await exported!.text();
+    expect(fromMermaid(text).unclassified).toEqual(explicit ? [] : ["A"]);
+    expect(text.includes('"A":"other"')).toBe(explicit);
+  });
+}
+
+test("worker failures after loading are reported as checker unavailability", async () => {
+  mocks.check.mockResolvedValue({ result: { findings: [] } });
+  await mount({ ...plain, ontology: true });
+  await act(async () => publishOntology({ status: "failed", error: "Checker worker timed out during check; try again" }));
+  const status = container.querySelector(".status")!.textContent;
+  expect(status).toContain("Checker unavailable:");
+  expect(status).toContain("timed out during check");
+  expect(status).not.toContain("Could not load the ontology");
+});
+
+test("timeout recovery offers a longer limit and keeps the current diagram", async () => {
+  mocks.check.mockResolvedValue({ result: { findings: [] } });
+  await mount({ ...plain, ontology: true });
+  await act(async () => publishOntology({ status: "failed", timedOut: true, error: "Timed out" }));
+  expect(container.querySelector(".status")!.textContent).toContain("Retry with 5 minutes");
+  await act(async () => [...container.querySelectorAll("button")].find((b) => b.textContent === "Retry with 5 minutes")!.click());
+  expect(getOntologyState().timeoutMs).toBe(300_000);
+  expect(mocks.loadOntology).toHaveBeenCalledTimes(2);
+  expect(nodes()[0]!.data.name).toBe("Original");
+  await act(async () => vi.advanceTimersByTime(301));
+  expect(container.querySelector(".status")!.textContent).toBe("Quick check: no problems");
+  const select = container.querySelector<HTMLSelectElement>('[aria-label="Checking time limit"]')!;
+  expect(select.value).toBe("300000");
+  await act(async () => { select.value = "600000"; select.dispatchEvent(new Event("change", { bubbles: true })); });
+  expect(getOntologyState().timeoutMs).toBe(600_000);
 });

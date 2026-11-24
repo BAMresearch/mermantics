@@ -14,11 +14,12 @@ export interface GlobalFinding extends Problem {
   target?: { box?: string; arrow?: string };
 }
 
-function Problems({ problems }: { problems: Problem[] }) {
+function Problems({ problems, stale }: { problems: Problem[]; stale: boolean }) {
   if (!problems.length) return null;
   return (
     <section className="panel-section">
-      <h3>Problems</h3>
+      <h3>{stale ? "Previous findings" : "Problems"}</h3>
+      {stale && <p className="muted">These findings have not been confirmed for the current diagram.</p>}
       <ul className="problems">
         {problems.map((p, i) => (
           <li key={i} className={p.level}>
@@ -60,7 +61,8 @@ export interface QuestionLink {
 }
 
 export function BoxDetails({ box, shapes, ontology, datastore = false, boxes = [], onChange, onDelete, questions = [],
-                            onToggleQuestion, parts = [], termStatus = false }: {
+                            onToggleQuestion, parts = [], termStatus = false, validationStale = false }: {
+  validationStale?: boolean;
   termStatus?: boolean; // design options: is this box an existing, proposed, changed or deprecated term?
   box: Box;
   shapes: Shape[]; // the shapes a box can be shown as in this section
@@ -197,7 +199,7 @@ export function BoxDetails({ box, shapes, ontology, datastore = false, boxes = [
         </section>
       )}
 
-      <Problems problems={d.problems} />
+      <Problems problems={d.problems} stale={validationStale} />
 
       <div className="panel-actions">
         <span className="muted">Box id: {box.id}</span>
@@ -207,7 +209,8 @@ export function BoxDetails({ box, shapes, ontology, datastore = false, boxes = [
   );
 }
 
-export function ArrowDetails({ arrow, srcName, dstName, dstKind, ontology, datastore = false, onChange, onReconnect, onSwap, onFlip, onDelete }: {
+export function ArrowDetails({ arrow, srcName, dstName, dstKind, ontology, datastore = false, onChange, onReconnect, onSwap, onFlip, onDelete, validationStale = false }: {
+  validationStale?: boolean;
   arrow: Arrow;
   ontology: boolean; // false in process modelling: arrows are plain words
   datastore?: boolean; // BAM Data Store: parent-child arrows and datasets, no relation to choose
@@ -279,7 +282,7 @@ export function ArrowDetails({ arrow, srcName, dstName, dstKind, ontology, datas
           <button type="button" className="link" onClick={onReconnect}>Choose another relation...</button>
         </section>
       )}
-      <Problems problems={d.problems} />
+      <Problems problems={d.problems} stale={validationStale} />
       <div className="panel-actions">
         <span />
         <button type="button" className="danger" onClick={onDelete}>Delete arrow</button>
@@ -306,7 +309,7 @@ export function Overview({ status, ontology, datastore = false, checkedAgainst =
   return (
     <div className="panel">
       <div className="panel-kind"><span className="dot" />Your model</div>
-      {ontology && checkedAgainst && (checkedAgainst.startsWith("Could not")
+      {ontology && checkedAgainst && ((checkedAgainst.startsWith("Could not") || checkedAgainst.startsWith("Checker unavailable"))
         ? <p className="muted-inline">{checkedAgainst}</p>
         : <p className="muted-inline">{QUICK_CHECK_HINT}</p>)}
       <p className="muted">{status}</p>

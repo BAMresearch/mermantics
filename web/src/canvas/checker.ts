@@ -4,11 +4,14 @@ import type { RelationFit } from "../core/relations.js";
 import type { SearchResult, Term } from "../core/terms.js";
 import type { Checked, OntologyInfo, Request, Response, TreeNode } from "../worker/protocol.js";
 
-type Pending = { resolve: (r: Response) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> };
+type Pending = { resolve: (r: Response) => void; reject: (e: Error) => void;
+  timer: ReturnType<typeof setTimeout> | null; request: Request; latest: boolean };
 type Body<T extends Request["type"]> = Omit<Extract<Request, { type: T }>, "id">;
 
 const pending = new Map<number, Pending>();
 let nextId = 1;
+let activeId: number | null = null;
+let latestCheck = 0;
 let worker: Worker | null = null;
 let ontology: Promise<OntologyInfo> | null = null;
 export type OntologyState = {
@@ -16,8 +19,10 @@ export type OntologyState = {
   title: string;
   error: string;
   revision: number; // advances only after a successful load
+  timeoutMs: number;
+  timedOut: boolean;
 };
-let ontologyState: OntologyState = { status: "idle", title: "", error: "", revision: 0 };
+let ontologyState: OntologyState = { status: "idle", title: "", error: "", revision: 0, timeoutMs: 120_000, timedOut: false };
 const listeners = new Set<() => void>();
 export const getOntologyState = () => ontologyState;
 export function subscribeOntology(listener: () => void): () => void {
@@ -28,9 +33,15 @@ function publishOntology(patch: Partial<OntologyState>): void {
   ontologyState = { ...ontologyState, ...patch };
   for (const listener of listeners) listener();
 }
-// Includes time queued behind ontology loading or another check. Allow slow devices
-// two minutes, but never leave the UI waiting indefinitely for a silent worker.
-const REQUEST_TIMEOUT_MS = 120_000;
+// The timeout covers dispatched work only, never time waiting in the client queue.
+// A single operation still has a finite limit to detect an unresponsive worker.
+export const CHECK_TIMEOUTS: readonly number[] = [120_000, 300_000, 600_000, 1_800_000, 3_600_000];
+/** Applies to future dispatches in this tab; an active operation keeps its existing deadline. */
+export function setRequestTimeout(timeoutMs: number): void {
+  if (!CHECK_TIMEOUTS.includes(timeoutMs)) throw new Error("Unsupported checking time limit");
+  publishOntology({ timeoutMs });
+}
+class WorkerTimeoutError extends Error {}
 
 const RESPONSE_TYPES = new Set<Response["type"]>(["loaded", "checked", "found", "terms", "relations", "supers", "tree", "error"]);
 /** Validate the envelope at the runtime boundary; payloads remain protocol-owned. */
@@ -48,11 +59,12 @@ function failWorker(current: Worker, error: Error): void {
   current.onmessage = current.onerror = current.onmessageerror = null;
   current.terminate();
   for (const p of pending.values()) {
-    clearTimeout(p.timer);
+    if (p.timer !== null) clearTimeout(p.timer);
     p.reject(error);
   }
   pending.clear();
-  publishOntology({ status: "failed", error: error.message });
+  activeId = null;
+  publishOntology({ status: "failed", error: error.message, timedOut: error instanceof WorkerTimeoutError });
 }
 
 /** The worker starts when it is first needed, so process modelling (no ontology) never starts it. */
@@ -73,28 +85,53 @@ function getWorker(): Worker {
       return;
     }
     const p = pending.get(msg.id);
-    if (!p) return;
+    if (!p || msg.id !== activeId) return;
     pending.delete(msg.id);
-    clearTimeout(p.timer);
+    activeId = null;
+    if (p.timer !== null) clearTimeout(p.timer);
     if (msg.type === "error") p.reject(new Error(msg.message));
     else p.resolve(msg);
+    dispatchNext(current);
   };
   return current;
 }
 
-function ask<T extends Request["type"]>(body: Body<T>): Promise<Response> {
+/** Serial dispatch prevents queued requests from consuming each other's timeout. */
+function dispatchNext(current: Worker): void {
+  if (worker !== current || activeId !== null) return;
+  const next = pending.entries().next();
+  if (next.done) return;
+  const [id, p] = next.value;
+  activeId = id;
+  const timeoutMs = ontologyState.timeoutMs;
+  p.timer = setTimeout(() => failWorker(current,
+    new WorkerTimeoutError(`Checker worker timed out during ${p.request.type} after ${timeoutMs / 60_000} minutes; retry with more time`)), timeoutMs);
+  try {
+    current.postMessage(p.request);
+  } catch (error) {
+    failWorker(current, error instanceof Error ? error : new Error(String(error)));
+  }
+}
+
+function ask<T extends Request["type"]>(body: Body<T>, latestRevision?: number): Promise<Response> {
   const id = nextId++;
   return new Promise((resolve, reject) => {
     // Construct before registering: constructor errors must not leave pending entries.
     const current = getWorker();
-    const timer = setTimeout(() => failWorker(current,
-      new Error(`Checker worker timed out during ${body.type}; try again`)), REQUEST_TIMEOUT_MS);
-    pending.set(id, { resolve, reject, timer });
-    try {
-      current.postMessage({ ...body, id } as unknown as Request);
-    } catch (error) {
-      failWorker(current, error instanceof Error ? error : new Error(String(error)));
+    if (latestRevision !== undefined) {
+      if (latestRevision !== latestCheck) {
+        reject(new Error("Superseded by a newer diagram check"));
+        return;
+      }
+      for (const [queuedId, p] of pending) {
+        if (p.latest && p.timer === null) {
+          pending.delete(queuedId);
+          p.reject(new Error("Superseded by a newer diagram check"));
+        }
+      }
     }
+    pending.set(id, { resolve, reject, timer: null, request: { ...body, id } as unknown as Request, latest: latestRevision !== undefined });
+    dispatchNext(current);
   });
 }
 
@@ -106,7 +143,7 @@ export const PMDCO = {
 
 export function loadOntology(): Promise<OntologyInfo> {
   if (ontology) return ontology;
-  publishOntology({ status: "loading", error: "" });
+  publishOntology({ status: "loading", error: "", timedOut: false });
   const loading = ask<"load">({ type: "load", name: PMDCO.name, title: PMDCO.title, url: PMDCO.url })
     .then((r) => {
       if (r.type !== "loaded") throw new Error("unexpected answer");
@@ -116,7 +153,7 @@ export function loadOntology(): Promise<OntologyInfo> {
     }).catch((error: unknown) => {
       if (ontology === loading) {
         ontology = null;
-        publishOntology({ status: "failed", error: error instanceof Error ? error.message : String(error) });
+        publishOntology({ status: "failed", error: error instanceof Error ? error.message : String(error), timedOut: error instanceof WorkerTimeoutError });
       }
       throw error;
     });
@@ -125,16 +162,24 @@ export function loadOntology(): Promise<OntologyInfo> {
 }
 
 /** A replacement worker must finish loading before any ontology-dependent operation. */
-async function askLoaded<T extends Exclude<Request["type"], "load">>(body: Body<T>): Promise<Response> {
-  const loading = loadOntology();
-  await loading;
-  // Another caller can fail the worker while this continuation is queued.
-  if (ontology !== loading) throw new Error("Checker worker stopped; try again");
-  return ask<T>(body);
+async function askLoaded<T extends Exclude<Request["type"], "load">>(body: Body<T>, latestRevision?: number): Promise<Response> {
+  let loading = loadOntology();
+  for (;;) {
+    try {
+      await loading;
+    } catch (error) {
+      // Follow a replacement already started by another consumer; don't start retry loops.
+      if (!ontology || ontology === loading) throw error;
+    }
+    if (ontology === loading) return ask<T>(body, latestRevision);
+    if (!ontology) throw new Error("Checker worker stopped; try again");
+    loading = ontology;
+  }
 }
 
-export async function check(text: string): Promise<Checked> {
-  const r = await askLoaded<"check">({ type: "check", text, diagramName: "canvas.mmd" });
+export async function check(text: string, { latest = false }: { latest?: boolean } = {}): Promise<Checked> {
+  const revision = latest ? ++latestCheck : undefined;
+  const r = await askLoaded<"check">({ type: "check", text, diagramName: "canvas.mmd" }, revision);
   if (r.type !== "checked") throw new Error("unexpected answer");
   return r.checked;
 }
