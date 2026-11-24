@@ -1,6 +1,7 @@
+import { stripFrontmatter } from "../core/mermaid.js";
 import { fromMermaid, isUseCase } from "./model.js";
 import { isShapeKind } from "./palette.js";
-import { isPatternMeta, isPatternUses } from "./patterns.js";
+import { isPatternMeta, isPatternUses } from "./patternValidation.js";
 import { isRecord } from "./validation.js";
 
 /**
@@ -9,7 +10,8 @@ import { isRecord } from "./validation.js";
  */
 export function validateRecoveryDiagram(text: string): void {
   if (!text.trim()) return;
-  const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const rawLines = text.split(/\r?\n/);
+  const lines = rawLines.slice(stripFrontmatter(rawLines)).map((line) => line.trim()).filter(Boolean);
   const statements = lines.filter((line) => !line.startsWith("%%"));
   const header = /^(?:flowchart|graph)\s+(?:TB|TD|BT|LR|RL)$/;
   if (!header.test(statements[0] ?? "")
@@ -36,7 +38,9 @@ export function validateRecoveryDiagram(text: string): void {
     if (!match || seen.has(match[1]!)) throw new Error("Invalid or duplicate diagram metadata");
     const [, key, json] = match;
     seen.add(key!);
-    const value: unknown = JSON.parse(json!);
+    let value: unknown;
+    try { value = JSON.parse(json!); }
+    catch { throw new Error(`Invalid JSON in ${key} metadata`); }
     let valid = false;
     switch (key) {
       case "mermantics-layout":
@@ -63,5 +67,5 @@ export function validateRecoveryDiagram(text: string): void {
   if (boxMetadata.some((metadata) => Object.keys(metadata).some((id) => !ids.has(id)))) {
     throw new Error("Diagram metadata names an unknown box");
   }
-  if (diagram.warnings.length) throw new Error("Recovery diagram contains unreadable content");
+  if (diagram.warnings.length) throw new Error(`Unreadable diagram content: ${diagram.warnings[0]}`);
 }

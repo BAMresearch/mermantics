@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { SaveNotice } from "./SaveNotice.js";
-import { readRecovery, recoveryLabel, restoreRecovery } from "./recovery.js";
+import { readRecovery, recoveryLabel, recoverySources, restoreRecovery } from "./recovery.js";
 import logo from "../../../assets/mermantics-logo.svg";
 import { MODES, type ModeId } from "./mode.js";
 
@@ -9,7 +9,7 @@ export function Start({ onChoose }: { onChoose: (id: ModeId) => void }) {
   const input = useRef<HTMLInputElement>(null);
   const readGeneration = useRef(0);
   useEffect(() => () => { readGeneration.current++; }, []);
-  const [backup, setBackup] = useState<{ text: string; name: string; labels: string[] } | null>(null);
+  const [backup, setBackup] = useState<{ text: string; name: string; labels: string[]; sources: string[] } | null>(null);
   const [message, setMessage] = useState("");
   return (
     <div className="start">
@@ -53,12 +53,14 @@ export function Start({ onChoose }: { onChoose: (id: ModeId) => void }) {
           try {
             const text = await file.text();
             if (generation !== readGeneration.current) return;
-            setBackup({ text, name: file.name, labels: readRecovery(text).map(recoveryLabel) });
+            const entries = readRecovery(text);
+            setBackup({ text, name: file.name, labels: entries.map(recoveryLabel), sources: recoverySources(entries) });
           } catch (error) {
             if (generation === readGeneration.current) setMessage((error as Error).message);
           }
         }} />
         {backup && <div>
+          {backup.sources.length > 0 && <p>The following patterns will be kept as source files needing repair: {backup.sources.join(", ")}. Download their originals from the pattern list after restoring.</p>}
           <p>Selected file: <strong>{backup.name}</strong></p>
           <p>Restore {backup.labels.join(", ")}? This replaces the current work in those sections or the custom-pattern collection.</p>
           <button type="button" onClick={() => {

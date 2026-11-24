@@ -7,7 +7,7 @@ import { hasWork, saveDiagram, savedDiagram } from "../src/canvas/saved.js";
 import { BUILT_IN, loadMine, MINE_KEY, saveMine } from "../src/canvas/patterns.js";
 import { MODES } from "../src/canvas/mode.js";
 import { freshState } from "../src/canvas/options.js";
-import { readRecovery, recoveryFile, restoreRecovery } from "../src/canvas/recovery.js";
+import { downloadRecovery, readRecovery, recoveryFile, recoverySources, restoreRecovery } from "../src/canvas/recovery.js";
 import { SaveNotice } from "../src/canvas/SaveNotice.js";
 import { Start } from "../src/canvas/Start.js";
 
@@ -116,7 +116,7 @@ test("restoring with storage disabled retains the backup and the failure state",
 
 test.each([
   { format: "other", version: 1, entries: [] },
-  { format: "mermantics-recovery", version: 2, entries: [] },
+  { format: "mermantics-recovery", version: 3, entries: [] },
   { format: "mermantics-recovery", version: 1, entries: [{ area: "local", key: "unrelated", text: "bad" }] },
   { format: "mermantics-recovery", version: 1, entries: [{ area: "session", key: MODES.comp.storageKey, text: '{"options": []}' }] },
   { format: "mermantics-recovery", version: 1, entries: [{ area: "local", key: MINE_KEY, text: '["not a pattern"]' }] },
@@ -287,4 +287,41 @@ test("a newer invalid file leaves no older backup available to restore", async (
   expect(button("Restore this copy")).toBeUndefined();
   expect(container.textContent).toContain("not a supported");
   expect(session.size).toBe(0);
+});
+
+
+test("downloads preserve legacy pattern source and duplicate IDs without blocking other entries", async () => {
+  vi.useFakeTimers();
+  try {
+    failLocal = true; failSession = true;
+    const legacy = pattern.text + "\nUnsupported old content!!!";
+    writeStored("local", MINE_KEY, JSON.stringify([legacy, pattern.text]));
+    saveDiagram(key, diagram);
+    let blob: Blob | undefined;
+    vi.spyOn(URL, "createObjectURL").mockImplementation((value) => { blob = value as Blob; return "blob:recovery"; });
+    vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    downloadRecovery(pendingSaves());
+    const text = await blob!.text();
+    const entries = readRecovery(text);
+    expect(JSON.parse(text).version).toBe(2);
+    expect(recoverySources(entries)).toHaveLength(1);
+    failLocal = false; failSession = false; retrySaves(); local.clear(); session.clear();
+    restoreRecovery(text);
+    expect(savedDiagram(key)).toBe(diagram);
+    expect(loadMine().map((p) => p.text)).toEqual([legacy, pattern.text]);
+    expect(new Set(loadMine().map((p) => p.id)).size).toBe(2);
+    vi.advanceTimersByTime(60_000);
+  } finally { vi.useRealTimers(); }
+});
+
+test("recovery errors identify the section, option/view, or pattern and retain the reason", () => {
+  const invalid = 'flowchart TB\n%% mermantics-layout null';
+  expect(() => readRecovery(recoveryFile([{ area: "session", key, text: invalid }]))).toThrow(/Model anything: Invalid mermantics-layout/);
+  expect(() => readRecovery(recoveryFile([{ area: "local", key: MINE_KEY,
+    text: JSON.stringify([pattern.text + "\n%% mermantics-usecase null"]) }]))).toThrow(/Custom patterns:.*Invalid mermantics-usecase/);
+  const options = freshState();
+  options.options[0]!.title = "My option";
+  options.options[0]!.views.terms = invalid;
+  expect(() => readRecovery(recoveryFile([{ area: "session", key: MODES.comp.storageKey, text: JSON.stringify(options) }]))).toThrow(/My option \/ Terms: Invalid mermantics-layout/);
 });

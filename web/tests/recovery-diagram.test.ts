@@ -39,3 +39,9 @@ test("every declared verdict and empty computation view is supported", () => {
     expect(() => readRecovery(recoveryFile([{ area: "session", key: MODES.comp.storageKey, text: JSON.stringify(state) }]))).not.toThrow();
   }
 });
+
+test("Mermaid frontmatter uses the parser's supported boundary", () => {
+  const text = '\n---\ntitle: My pattern\nconfig:\n  theme: neutral\n---\n' + BUILT_IN[0]!.text;
+  expect(() => validateRecoveryDiagram(text)).not.toThrow();
+  expect(() => validateRecoveryDiagram('---\ntitle: Unclosed\n' + BUILT_IN[0]!.text)).toThrow();
+});

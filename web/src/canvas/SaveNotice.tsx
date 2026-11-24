@@ -22,7 +22,7 @@ export function SaveNotice({ flush }: { flush?: () => unknown }) {
       const entries = before.map((p) => ({ ...p, text: readStored(p.area, p.key) ?? p.text }));
       for (const p of latest) if (!entries.some((q) => q.area === p.area && q.key === p.key)) entries.push(p);
       try { downloadRecovery(entries); setError(""); }
-      catch { setError("The recovery file could not be downloaded. Please try again."); }
+      catch (error) { setError(`The recovery file could not be downloaded. ${(error as Error).message}`); }
     }}>Download recovery copy</button>{" "}
     <button type="button" onClick={() => { flush?.(); retrySaves(); }}>Retry save</button>
     <small>Restore this file using “Restore a recovery copy” on the start page.</small>

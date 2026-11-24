@@ -55,7 +55,7 @@ the selected filename and which sections/collection will be replaced, and choose
 Ordinary Mermaid exports remain available from the editor's Export menu.
 
 `src/canvas/persistence.ts` owns failed writes and subscriptions. `recovery.ts`
-uses a versioned envelope (`mermantics-recovery`, version 1), validates the complete
+uses a versioned envelope (`mermantics-recovery`), validates the complete
 file and permits only known diagram/pattern storage keys before restoring.
 `recoveryDiagram.ts` rejects parser warnings, malformed layout/workshop metadata,
 and duplicate metadata. It accepts empty diagrams and does not check ontology
@@ -65,6 +65,16 @@ stored and pending work untouched. If
 storage still fails during restore, the imported work remains in memory and the
 warning stays visible. The recovery file covers the destinations listed in it;
 it is not a backup of unrelated browser settings.
+
+New custom-pattern imports use the same validation as recovery, including the
+parser's YAML frontmatter handling. Older incompatible patterns retain their exact
+source as **Needs repair** items with **Download original** and Remove actions;
+they cannot be inserted into a diagram. Recovery copies containing these inert
+source items use format version 2; ordinary copies remain version 1, and both
+versions are supported. The restore preview identifies source-only items before
+confirmation. Sources use the existing custom-pattern collection, with no separate
+storage backend. Every recovery download is validated before it is offered.
+Errors identify the affected section, option/view, or custom pattern and the reason.
 
 ### Optional details-panel browser check
 
