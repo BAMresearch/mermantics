@@ -163,3 +163,16 @@ test("a stalled ontology load rejects dependent calls and permits retry", async 
   await loaded();
   expect(FakeWorker.instances).toHaveLength(2);
 });
+
+
+test.each([null, {}, { id: "1", type: "loaded" }, { id: 0, type: "loaded" },
+  { id: 1, type: "unexpected" }, { id: 1, type: "error", message: null }])(
+  "invalid response envelope %j fails immediately and permits recovery", async (message) => {
+    const loading = client.loadOntology();
+    const rejected = expect(loading).rejects.toThrow("Invalid checker worker response");
+    latest().reply(message as unknown as Response);
+    await rejected;
+    expect(vi.getTimerCount()).toBe(0);
+    await loaded();
+    expect(FakeWorker.instances).toHaveLength(2);
+  });

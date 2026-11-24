@@ -14,11 +14,16 @@ export function TermSearch({ onPick, placeholder, kinds = CLASS_KINDS }: {
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState<Term[]>([]);
   const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [retry, setRetry] = useState(0);
 
   useEffect(() => {
+    setHits([]);
+    setTotal(0);
+    setError("");
+    setLoading(!!query.trim());
     if (!query.trim()) {
-      setHits([]);
-      setTotal(0);
       return;
     }
     let live = true;
@@ -27,18 +32,25 @@ export function TermSearch({ onPick, placeholder, kinds = CLASS_KINDS }: {
         if (!live) return;
         setHits(r.terms.filter((t) => t.id));
         setTotal(r.total);
-      }).catch(() => {});
+        setLoading(false);
+      }).catch((e: Error) => {
+        if (!live) return;
+        setError(e.message);
+        setLoading(false);
+      });
     }, 150);
     return () => {
       live = false;
       clearTimeout(timer);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, kinds.join(" ")]);
+  }, [query, kinds.join(" "), retry]);
 
   return (
     <div className="term-search">
-      <input value={query} placeholder={placeholder} onChange={(e) => setQuery(e.target.value)} />
+      <input value={query} placeholder={placeholder} onChange={(e) => { setHits([]); setQuery(e.target.value); }} />
+      {loading && <p role="status">Searching...</p>}
+      {error && <p role="alert">Search failed: {error} <button type="button" onClick={() => setRetry((r) => r + 1)}>Retry search</button></p>}
       {hits.length > 0 && (
         <ul className="term-hits">
           {hits.map((t) => (

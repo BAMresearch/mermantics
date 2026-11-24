@@ -5,7 +5,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { Box } from "../src/canvas/model.js";
 
-const mocks = vi.hoisted(() => ({ narrow: false, flowRenders: 0, layout: vi.fn(), check: vi.fn(), supers: vi.fn(), fit: vi.fn(), initialized: false, cloneOnSet: false, picture: vi.fn(), nodes: [] as Box[], flowProps: {} as any, optionProps: {} as any, panelProps: {} as any, relationProps: {} as any, linkProps: {} as any, arrowProps: {} as any, boxProps: {} as any }));
+const mocks = vi.hoisted(() => ({ loadOntology: vi.fn(), overviewProps: {} as any, narrow: false, flowRenders: 0, layout: vi.fn(), check: vi.fn(), supers: vi.fn(), fit: vi.fn(), initialized: false, cloneOnSet: false, picture: vi.fn(), nodes: [] as Box[], flowProps: {} as any, optionProps: {} as any, panelProps: {} as any, relationProps: {} as any, linkProps: {} as any, arrowProps: {} as any, boxProps: {} as any }));
 vi.mock("../src/canvas/layout.js", () => ({ layout: mocks.layout }));
 vi.mock("@xyflow/react", async () => {
   const { useState, useCallback } = await import("react");
@@ -38,13 +38,13 @@ vi.mock("../src/canvas/canvasImage.js", () => ({
   afterPaint: async () => {}, drawnBounds: () => ({ x: 0, y: 0, width: 100, height: 50 }), canvasImage: mocks.picture,
 }));
 vi.mock("../src/canvas/media.js", () => ({ NARROW: "narrow", TOUCH: "touch", useMedia: (query: string) => query === "narrow" && mocks.narrow }));
-vi.mock("../src/canvas/checker.js", () => ({ check: mocks.check, supers: mocks.supers, loadOntology: vi.fn(async () => ({ title: "Test ontology" })) }));
+vi.mock("../src/canvas/checker.js", () => ({ check: mocks.check, supers: mocks.supers, loadOntology: mocks.loadOntology }));
 vi.mock("../src/canvas/ZoomBar.js", () => ({ ZoomBar: () => null, loadWheelMode: () => "move", saveWheelMode: () => {} }));
 vi.mock("../src/canvas/BoxNode.js", () => ({ BoxNode: () => null, worst: () => null }));
 vi.mock("../src/canvas/FloatingEdge.js", () => ({ FloatingEdge: () => null }));
 vi.mock("../src/canvas/OpenbisLane.js", () => ({ LaneNode: () => null }));
 vi.mock("../src/canvas/Details.js", () => ({
-  Overview: () => null, ArrowDetails: (props: any) => { mocks.arrowProps = props; return null; },
+  Overview: (props: any) => { mocks.overviewProps = props; return null; }, ArrowDetails: (props: any) => { mocks.arrowProps = props; return null; },
   BoxDetails: (props: any) => { mocks.boxProps = props; return null; }, SelectionPanel: () => null,
 }));
 vi.mock("../src/canvas/OptionsPanel.js", () => ({
@@ -108,6 +108,7 @@ beforeEach(() => {
   });
   mocks.layout.mockReset().mockImplementation(async (bs: Box[]) => bs);
   mocks.check.mockReset();
+  mocks.loadOntology.mockReset().mockResolvedValue({ title: "Test ontology" });
   mocks.supers.mockReset().mockImplementation(async (ids: string[]) => ids.map(() => []));
   mocks.fit.mockClear();
   mocks.initialized = false;
@@ -487,7 +488,7 @@ test.each(["failed import", "identical reopen"])("%s restarts an invalidated ont
   expect(nodes()[0]!.data.problems).toEqual([]);
 });
 
-test("copy keeps late edits attached to the visible original while classification is pending", async () => {
+test("copy opens before classification finishes and keeps edits attached to the visible copy", async () => {
   const mode = { ...plain, options: true, ontology: true };
   const state = readState(null);
   const original = state.current;
@@ -503,13 +504,14 @@ test("copy keeps late edits attached to the visible original while classificatio
   expect(mocks.supers).toHaveBeenCalledTimes(2);
   const copy = mocks.optionProps.current;
   expect(copy.option).not.toBe(original.option);
-  await act(async () => nodes()[0]!.data.onRename!("Late original edit"));
-  // Complete before the debounce: open must flush to the original save destination.
+  await act(async () => nodes()[0]!.data.onRename!("Edit while classifying"));
+  // The copy is already open and saveable, even while classification is pending.
+  await act(async () => vi.advanceTimersByTime(801));
   await act(async () => pending.resolve([[]]));
   const saved = readState(storage.get(mode.storageKey)!);
-  expect(saved.options.find((o) => o.id === original.option)!.views[original.view]).toContain("Late original edit");
-  expect(saved.options.find((o) => o.id === copy.option)!.views[copy.view as "dft"]).not.toContain("Late original edit");
-  expect(nodes()[0]!.data.name).toBe("Original");
+  expect(saved.options.find((o) => o.id === original.option)!.views[original.view]).not.toContain("Edit while classifying");
+  expect(saved.options.find((o) => o.id === copy.option)!.views[copy.view as "dft"]).toContain("Edit while classifying");
+  expect(nodes()[0]!.data.name).toBe("Edit while classifying");
 });
 
 test.each(["failure", "success"])("reset %s retains saving until the replacement commits", async (outcome) => {
@@ -1230,4 +1232,118 @@ test("a pattern file read finishing after unmount cannot overwrite restored patt
   expect(mine.get(MINE_KEY)).toBe(restored);
   expect(loadMine().map((pattern) => pattern.text)).toEqual([BUILT_IN[1]!.text]);
   expect(pendingSaves()).toHaveLength(0);
+});
+
+
+test("saved ontology diagrams open and persist edits while loading fails, then retry without replacing work", async () => {
+  const loading = deferred<{ title: string }>();
+  mocks.loadOntology.mockReturnValueOnce(loading.promise);
+  storage.set(plain.storageKey, 'flowchart TB\nA["Saved<br/>TST_0000001"]');
+  await mount({ ...plain, ontology: true });
+  expect(nodes()[0]!.data.name).toBe("Saved");
+  expect(mocks.supers).not.toHaveBeenCalled();
+  await act(async () => nodes()[0]!.data.onRename!("Edited while loading"));
+  await act(async () => vi.advanceTimersByTime(801));
+  expect(storage.get(plain.storageKey)).toContain("Edited while loading");
+  await act(async () => loading.reject(new Error("offline")));
+  expect(container.querySelector(".status")!.textContent).toContain("offline");
+  expect(mocks.check).not.toHaveBeenCalled();
+  await act(async () => nodes()[0]!.data.onRename!("Edited offline"));
+  await act(async () => vi.advanceTimersByTime(801));
+  expect(storage.get(plain.storageKey)).toContain("Edited offline");
+  mocks.check.mockResolvedValue({ result: { findings: [] } });
+  await act(async () => container.querySelector<HTMLButtonElement>(".status")!.click());
+  await act(async () => vi.advanceTimersByTime(301));
+  expect(mocks.loadOntology).toHaveBeenCalledTimes(2);
+  expect(nodes()[0]!.data.name).toBe("Edited offline");
+  expect(container.querySelector(".status")!.textContent).toBe("Quick check: no problems");
+});
+
+test("pending and failed checks clear box and arrow findings and remain visibly unavailable", async () => {
+  mocks.check.mockResolvedValueOnce({ result: { findings: [
+    { level: "error", message: "Old box error", nodeId: "A" },
+    { level: "error", message: "Old arrow error", edgeIndex: 0 },
+  ] } });
+  await mount({ ...connected, ontology: true, patterns: true });
+  await act(async () => vi.advanceTimersByTime(301));
+  expect(nodes()[0]!.data.problems).toHaveLength(1);
+  expect(mocks.flowProps.edges[0].data.problems).toHaveLength(1);
+  const pending = deferred<never>();
+  mocks.check.mockReturnValueOnce(pending.promise);
+  await act(async () => nodes()[0]!.data.onRename!("Changed"));
+  expect(nodes()[0]!.data.problems).toEqual([]);
+  expect(mocks.flowProps.edges[0].data.problems).toEqual([]);
+  expect(container.querySelector(".status")!.classList.contains("unavailable")).toBe(true);
+  await act(async () => vi.advanceTimersByTime(301));
+  await act(async () => pending.reject(new Error("worker failed")));
+  expect(nodes()[0]!.data.problems).toEqual([]);
+  expect(mocks.flowProps.edges[0].data.problems).toEqual([]);
+  expect(mocks.overviewProps.findings).toEqual([]);
+  expect(mocks.overviewProps.passed).toEqual([]);
+  expect(container.querySelector(".status")!.textContent).toContain("worker failed");
+  expect(container.querySelector(".status")!.classList.contains("good")).toBe(false);
+  mocks.check.mockResolvedValue({ result: { findings: [] } });
+  await act(async () => container.querySelector<HTMLButtonElement>(".status")!.click());
+  await act(async () => vi.advanceTimersByTime(301));
+  expect(container.querySelector(".status")!.textContent).toBe("Quick check: no problems");
+});
+
+test("option documents remain editable and saveable when initial ontology loading fails", async () => {
+  const mode = { ...plain, options: true, ontology: true };
+  const state = readState(null);
+  const { option, view } = state.current;
+  state.options.find((o) => o.id === option)!.views[view] = 'flowchart TB\nA["Saved option<br/>TST_0000001"]';
+  storage.set(mode.storageKey, JSON.stringify(state));
+  mocks.loadOntology.mockRejectedValueOnce(new Error("offline"));
+  await mount(mode);
+  expect(nodes()[0]!.data.name).toBe("Saved option");
+  await act(async () => nodes()[0]!.data.onRename!("Edited option offline"));
+  await act(async () => vi.advanceTimersByTime(801));
+  const saved = readState(storage.get(mode.storageKey)!);
+  expect(saved.options.find((o) => o.id === option)!.views[view]).toContain("Edited option offline");
+  expect(mocks.check).not.toHaveBeenCalled();
+});
+
+test("arrow-only edits persist without an available ontology", async () => {
+  mocks.loadOntology.mockRejectedValueOnce(new Error("offline"));
+  await mount({ ...connected, ontology: true });
+  const arrow = mocks.flowProps.edges[0];
+  await act(async () => mocks.flowProps.onEdgesChange([{ type: "select", id: arrow.id, selected: true }]));
+  await act(async () => mocks.arrowProps.onChange({ name: "offline relation", words: "offline relation" }));
+  await act(async () => vi.advanceTimersByTime(801));
+  expect(storage.get(plain.storageKey)).toContain("offline relation");
+  expect(mocks.check).not.toHaveBeenCalled();
+});
+
+test("background classification preserves edits and cannot update a replacement document", async () => {
+  const classification = deferred<string[][]>();
+  mocks.supers.mockReturnValueOnce(classification.promise);
+  mocks.check.mockResolvedValue({ result: { findings: [] } });
+  const mode = { ...plain, ontology: true, examples: [{ title: "Classed", name: "classed.mmd",
+    text: 'flowchart TB\nA["Original<br/>TST_0000001"]' }] };
+  await mount(mode);
+  await act(async () => nodes()[0]!.data.onRename!("Keep this edit"));
+  await act(async () => classification.resolve([["COB_0000035"]]));
+  expect(nodes()[0]!.data.name).toBe("Keep this edit");
+  expect(nodes()[0]!.data.kind).toBe("process");
+  await click("Undo");
+  expect(nodes()[0]!.data.name).toBe("Original");
+  expect(nodes()[0]!.data.kind).toBe("process");
+
+  const late = deferred<string[][]>();
+  mocks.supers.mockReturnValueOnce(late.promise);
+  await act(async () => [...container.querySelectorAll("button")].find((b) => b.textContent === "Classed")!.click());
+  await click("New");
+  await act(async () => late.resolve([["COB_0000035"]]));
+  expect(nodes()).toEqual([]);
+});
+
+test("classifying an untouched example does not save it as user work", async () => {
+  mocks.supers.mockResolvedValue([["COB_0000035"]]);
+  mocks.check.mockResolvedValue({ result: { findings: [] } });
+  await mount({ ...plain, ontology: true, examples: [{ title: "Classed", name: "classed.mmd",
+    text: 'flowchart TB\nA["Original<br/>TST_0000001"]' }] });
+  expect(nodes()[0]!.data.kind).toBe("process");
+  await act(async () => vi.advanceTimersByTime(1000));
+  expect(storage.has(plain.storageKey)).toBe(false);
 });

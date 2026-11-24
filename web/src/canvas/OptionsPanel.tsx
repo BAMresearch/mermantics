@@ -289,6 +289,9 @@ function loadTrees(): Promise<ClassTree[]> {
     const found = ts.filter((t): t is ClassTree => !!t);
     if (!found.length) pmdcoTrees = null; // not loaded yet, or failed: ask again next time
     return found;
+  }).catch((error: unknown) => {
+    pmdcoTrees = null;
+    throw error;
   });
   return pmdcoTrees;
 }
@@ -328,9 +331,18 @@ export function TermsTree({ option, termsText, onSelect }: {
   onSelect?: (box: string) => void; // only when the Terms diagram is on the canvas
 }) {
   const [base, setBase] = useState<ClassTree[] | null>(null);
+  const [error, setError] = useState("");
+  const [retry, setRetry] = useState(0);
   const [labels, setLabels] = useState<Record<string, string>>({});
   const parsed = useMemo(() => fromMermaid(termsText), [termsText]);
-  useEffect(() => { loadTrees().then(setBase).catch(() => setBase([])); }, []);
+  useEffect(() => {
+    let live = true;
+    setError("");
+    setBase(null);
+    loadTrees().then((ts) => { if (live) setBase(ts); })
+      .catch((e: Error) => { if (live) setError(e.message); });
+    return () => { live = false; };
+  }, [retry]);
   // Labels for the PMDco classes that new terms sit under, outside the two trees.
   useEffect(() => {
     const ids = [...new Set(parsed.boxes.map((b) => b.data.classId).filter((x) => x && !labels[x]))];
@@ -353,7 +365,8 @@ export function TermsTree({ option, termsText, onSelect }: {
         option's Terms view.
         {tree && ` ${counts.proposed ?? 0} new, ${counts.changed ?? 0} changed, ${counts.deprecated ?? 0} deprecated.`}
       </p>
-      {!tree ? <p className="muted">Loading PMDco...</p> : (
+      {error ? <p role="alert">Could not load the PMDco tree: {error} <button type="button" onClick={() => setRetry((r) => r + 1)}>Retry tree</button></p>
+        : !tree ? <p className="muted">Loading PMDco...</p> : (
         <ul className="tt-list">{tree.map((n) => <TermItem key={n.key} node={n} onSelect={onSelect} depth={0} />)}</ul>
       )}
     </section>

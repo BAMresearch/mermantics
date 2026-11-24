@@ -15,6 +15,15 @@ let ontology: Promise<OntologyInfo> | null = null;
 // two minutes, but never leave the UI waiting indefinitely for a silent worker.
 const REQUEST_TIMEOUT_MS = 120_000;
 
+const RESPONSE_TYPES = new Set<Response["type"]>(["loaded", "checked", "found", "terms", "relations", "supers", "tree", "error"]);
+/** Validate the envelope at the runtime boundary; payloads remain protocol-owned. */
+function isResponse(value: unknown): value is Response {
+  if (!value || typeof value !== "object") return false;
+  const r = value as Partial<Response>;
+  return Number.isSafeInteger(r.id) && r.id! > 0 && RESPONSE_TYPES.has(r.type!)
+    && (r.type !== "error" || typeof r.message === "string");
+}
+
 function failWorker(current: Worker, error: Error): void {
   if (worker !== current) return;
   worker = null;
@@ -38,9 +47,13 @@ function getWorker(): Worker {
     failWorker(current, new Error(event.message || "Checker worker failed"));
   };
   current.onmessageerror = () => failWorker(current, new Error("Could not read the checker worker response"));
-  current.onmessage = (event: MessageEvent<Response>) => {
+  current.onmessage = (event: MessageEvent<unknown>) => {
     if (worker !== current) return;
     const msg = event.data;
+    if (!isResponse(msg)) {
+      failWorker(current, new Error("Invalid checker worker response"));
+      return;
+    }
     const p = pending.get(msg.id);
     if (!p) return;
     pending.delete(msg.id);

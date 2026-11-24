@@ -285,7 +285,7 @@ export function Overview({ status, ontology, datastore = false, checkedAgainst =
   findings: GlobalFinding[];
   passed: string[];
   onSelect: (target: GlobalFinding["target"]) => void;
-  uses?: { id: string; title: string; version: string; boxes: number; problems: number }[];
+  uses?: { id: string; title: string; version: string; boxes: number; problems: number | null }[];
   onForget?: (useId: string) => void;
   ownRelations?: OwnRelation[];
   onForgetRelation?: (r: OwnRelation) => void;
@@ -317,7 +317,7 @@ export function Overview({ status, ontology, datastore = false, checkedAgainst =
           <ul className="uses">
             {uses.map((u) => (
               <li key={u.id}>
-                <span className={`pill ${u.problems ? "warning" : "ok"}`}>{u.problems ? `${u.problems} to fix` : "follows it"}</span>
+                <span className={`pill ${u.problems === null ? "" : u.problems ? "warning" : "ok"}`}>{u.problems === null ? "not checked" : u.problems ? `${u.problems} to fix` : "follows it"}</span>
                 <span className="use-title">{u.title}{u.version ? ` ${u.version}` : ""}</span>
                 <button type="button" className="link" title="Keep the boxes, but stop checking them against this pattern"
                         onClick={() => onForget?.(u.id)}>Stop checking</button>
