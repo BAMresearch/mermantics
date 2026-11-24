@@ -8,6 +8,8 @@
  * later check that the diagram still follows the pattern.
  */
 
+import { readStored, writeStored } from "./persistence.js";
+
 import { fromMermaid, makeId, toMermaid, type Arrow, type Box, type Problem } from "./model.js";
 
 import inputsOutputs from "../../patterns/process-inputs-outputs.mmd?raw";
@@ -111,11 +113,11 @@ export const BUILT_IN: Pattern[] = [inputsOutputs, processChain, measurement, ro
 
 // ---- my patterns, kept in this browser ----------------------------------------------------
 
-const MINE_KEY = "mermantics-my-patterns";
+export const MINE_KEY = "mermantics-my-patterns";
 
 export function loadMine(): Pattern[] {
   try {
-    const raw = JSON.parse(localStorage.getItem(MINE_KEY) ?? "[]") as unknown;
+    const raw = JSON.parse(readStored("local", MINE_KEY) ?? "[]") as unknown;
     if (!Array.isArray(raw)) return [];
     return raw.filter((t): t is string => typeof t === "string").map((t) => parsePattern(t)).filter((p): p is Pattern => !!p);
   } catch {
@@ -124,9 +126,7 @@ export function loadMine(): Pattern[] {
 }
 
 export function saveMine(patterns: Pattern[]) {
-  try {
-    localStorage.setItem(MINE_KEY, JSON.stringify(patterns.filter((p) => !p.builtIn).map((p) => p.text)));
-  } catch { /* storage can be off */ }
+  return writeStored("local", MINE_KEY, JSON.stringify(patterns.filter((p) => !p.builtIn).map((p) => p.text)));
 }
 
 // ---- making a pattern from a selection ----------------------------------------------------

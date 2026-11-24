@@ -7,18 +7,21 @@
  * Settings such as the user's own relations and patterns stay in localStorage, for every visit.
  */
 
+import { pendingSaves, readStored, writeStored } from "./persistence.js";
+
 import { MODES } from "./mode.js";
 
 export function saveDiagram(key: string, text: string) {
-  try { sessionStorage.setItem(key, text); } catch { /* storage can be off */ }
+  return writeStored("session", key, text);
 }
 
 export function savedDiagram(key: string): string | null {
-  try { return sessionStorage.getItem(key); } catch { return null; }
+  return readStored("session", key);
 }
 
 /** Is there work in this tab, in any section, that closing the tab would lose? */
 export function hasWork(): boolean {
+  if (pendingSaves().length) return true;
   try { return Object.values(MODES).some((m) => sessionStorage.getItem(m.storageKey) !== null); } catch { return false; }
 }
 

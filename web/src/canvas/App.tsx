@@ -33,6 +33,7 @@ import { NARROW, TOUCH, useMedia } from "./media.js";
 import { emptyUseCase, fromMermaid, makeId, toMermaid, type Arrow, type ArrowData, type Box, type BoxData, type Problem,
          type UseCase } from "./model.js";
 import type { Mode } from "./mode.js";
+import { SaveNotice } from "./SaveNotice.js";
 import { onLeaving, saveDiagram, savedDiagram } from "./saved.js";
 import { checkStatus, Compare, OptionBar, OptionPanel, TermsTree } from "./OptionsPanel.js";
 import { EMPTY_VIEW, newOptionId, nextLetter, originalView, readState, resultsMarkdown, VIEWS, type DesignOption,
@@ -224,6 +225,12 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
   const [focused, setFocused] = useState<string | null>(null); // competency question shown on the canvas
   const [patternUses, setPatternUses] = useState<PatternUse[]>([]);
   const [myPatterns, setMyPatterns] = useState<Pattern[]>(loadMine);
+  const myPatternsRef = useRef(myPatterns);
+  const updatePatterns = useCallback((next: Pattern[]) => {
+    myPatternsRef.current = next;
+    setMyPatterns(next);
+    saveMine(next);
+  }, []);
   const [ownRelations, setOwnRelations] = useState<OwnRelation[]>(() => loadOwnRelations(mode.relationsKey));
   const rememberRelation = useCallback((r: OwnRelation) => {
     setOwnRelations((list) => {
@@ -651,12 +658,8 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
   }, [addBox, allPatterns, flow, insertPattern]);
 
   const keepPattern = useCallback((pattern: Pattern) => {
-    setMyPatterns((ps) => {
-      const next = [...ps.filter((p) => p.id !== pattern.id), pattern];
-      saveMine(next);
-      return next;
-    });
-  }, []);
+    updatePatterns([...myPatternsRef.current.filter((p) => p.id !== pattern.id), pattern]);
+  }, [updatePatterns]);
 
   // ---- arrows ---------------------------------------------------------------------------
 
@@ -1092,6 +1095,8 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
         <div className="bar-spacer" />
       </header>
 
+      <SaveNotice flush={saveNow} />
+
       {mode.options && opts && (
         <OptionBar options={opts.options} current={opts.current} onGo={goTo}
                    onCompare={() => { closeConnections(); flushedOptions(); setComparing(true); }} />
@@ -1125,11 +1130,7 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
               {!p.builtIn && (
                 <span className="pattern-actions">
                   <button type="button" className="link" onClick={() => save(p.text, `${p.id}.mmd`)}>Download</button>
-                  <button type="button" className="link danger-link" onClick={() => setMyPatterns((ps) => {
-                    const next = ps.filter((x) => x.id !== p.id);
-                    saveMine(next);
-                    return next;
-                  })}>Remove</button>
+                  <button type="button" className="link danger-link" onClick={() => updatePatterns(myPatternsRef.current.filter((x) => x.id !== p.id))}>Remove</button>
                 </span>
               )}
             </div>
