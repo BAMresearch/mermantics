@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { SaveNotice } from "./SaveNotice.js";
 import { readRecovery, recoveryLabel, restoreRecovery } from "./recovery.js";
 import logo from "../../../assets/mermantics-logo.svg";
@@ -7,7 +7,9 @@ import { MODES, type ModeId } from "./mode.js";
 /** The start page: pick a section. */
 export function Start({ onChoose }: { onChoose: (id: ModeId) => void }) {
   const input = useRef<HTMLInputElement>(null);
-  const [backup, setBackup] = useState<{ text: string; labels: string[] } | null>(null);
+  const readGeneration = useRef(0);
+  useEffect(() => () => { readGeneration.current++; }, []);
+  const [backup, setBackup] = useState<{ text: string; name: string; labels: string[] } | null>(null);
   const [message, setMessage] = useState("");
   return (
     <div className="start">
@@ -42,6 +44,7 @@ export function Start({ onChoose }: { onChoose: (id: ModeId) => void }) {
       <section className="recovery-restore" aria-label="Restore saved work">
         <button type="button" onClick={() => input.current?.click()}>Restore a recovery copy</button>
         <input ref={input} type="file" accept=".json" hidden onChange={async (event) => {
+          const generation = ++readGeneration.current;
           const file = event.target.files?.[0];
           event.target.value = "";
           setBackup(null);
@@ -49,10 +52,14 @@ export function Start({ onChoose }: { onChoose: (id: ModeId) => void }) {
           if (!file) return;
           try {
             const text = await file.text();
-            setBackup({ text, labels: readRecovery(text).map(recoveryLabel) });
-          } catch (error) { setMessage((error as Error).message); }
+            if (generation !== readGeneration.current) return;
+            setBackup({ text, name: file.name, labels: readRecovery(text).map(recoveryLabel) });
+          } catch (error) {
+            if (generation === readGeneration.current) setMessage((error as Error).message);
+          }
         }} />
         {backup && <div>
+          <p>Selected file: <strong>{backup.name}</strong></p>
           <p>Restore {backup.labels.join(", ")}? This replaces the current work in those sections or the custom-pattern collection.</p>
           <button type="button" onClick={() => {
             try {
@@ -61,7 +68,7 @@ export function Start({ onChoose }: { onChoose: (id: ModeId) => void }) {
               setMessage("Recovery copy restored. Open a section to continue. Any browser save failures are shown above.");
             } catch (error) { setMessage((error as Error).message); }
           }}>Restore this copy</button>{" "}
-          <button type="button" onClick={() => setBackup(null)}>Cancel</button>
+          <button type="button" onClick={() => { readGeneration.current++; setBackup(null); }}>Cancel</button>
         </div>}
         {message && <p role="status">{message}</p>}
       </section>

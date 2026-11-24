@@ -50,12 +50,18 @@ The recovery download captures pending autosave edits and includes all currently
 failed destinations: complete diagrams, all computation options/views and workshop
 notes, and the full custom-pattern collection. It does not run ontology checks.
 On the start page, use **Restore a recovery copy**, select the JSON file, review
-which sections/collection will be replaced, and choose **Restore this copy**.
+the selected filename and which sections/collection will be replaced, and choose
+**Restore this copy**. Selecting another file invalidates any earlier file read.
 Ordinary Mermaid exports remain available from the editor's Export menu.
 
 `src/canvas/persistence.ts` owns failed writes and subscriptions. `recovery.ts`
 uses a versioned envelope (`mermantics-recovery`, version 1), validates the complete
-file and permits only known diagram/pattern storage keys before restoring. If
+file and permits only known diagram/pattern storage keys before restoring.
+`recoveryDiagram.ts` rejects parser warnings, malformed layout/workshop metadata,
+and duplicate metadata. It accepts empty diagrams and does not check ontology
+meaning. Custom-pattern IDs must be unique. Runtime checks for workshop/options
+and pattern data live beside their model definitions. Invalid files leave both
+stored and pending work untouched. If
 storage still fails during restore, the imported work remains in memory and the
 warning stays visible. The recovery file covers the destinations listed in it;
 it is not a backup of unrelated browser settings.

@@ -9,6 +9,8 @@
  * their class (App.classify).
  */
 
+import { hasStrings, isRecord, isRecordList, isStringArray } from "./validation.js";
+
 import type { Edge as FlowEdge, Node as FlowNode } from "@xyflow/react";
 
 import { edit, labels, mermaid } from "../core/index.js";
@@ -54,7 +56,8 @@ export type Box = FlowNode<BoxData, "box">;
 
 // ---- use case (workshop) -------------------------------------------------------------------
 
-export type Priority = "must" | "should" | "could" | "";
+export const PRIORITIES = ["must", "should", "could", ""] as const;
+export type Priority = typeof PRIORITIES[number];
 
 /** "As a <role>, I want <want>, so that <benefit>." */
 export interface Story {
@@ -87,6 +90,15 @@ export interface UseCase {
   openPoints: OpenPoint[];
 }
 
+/** Strict persisted shape; unlike readUseCase, this never repairs or drops fields. */
+export function isUseCase(value: unknown): value is UseCase {
+  return isRecord(value) && hasStrings(value, ["title", "description"])
+    && isRecordList(value.stories, (s) => hasStrings(s, ["id", "role", "want", "benefit"])
+      && PRIORITIES.some((p) => p === s.priority))
+    && isRecordList(value.questions, (q) => hasStrings(q, ["id", "text"]) && isStringArray(q.boxes))
+    && isRecordList(value.openPoints, (p) => hasStrings(p, ["id", "text"]) && typeof p.done === "boolean");
+}
+
 export function emptyUseCase(): UseCase {
   return { title: "", description: "", stories: [], questions: [], openPoints: [] };
 }
@@ -100,13 +112,12 @@ function readUseCase(raw: unknown): UseCase {
   const o = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
   const str = (v: unknown) => (typeof v === "string" ? v : "");
   const list = (v: unknown) => (Array.isArray(v) ? v.filter((x) => x && typeof x === "object") as Record<string, unknown>[] : []);
-  const priorities = ["must", "should", "could"];
   return {
     title: str(o.title),
     description: str(o.description),
     stories: list(o.stories).map((x, i) => ({
       id: str(x.id) || `s${i + 1}`, role: str(x.role), want: str(x.want), benefit: str(x.benefit),
-      priority: (priorities.includes(str(x.priority)) ? str(x.priority) : "") as Priority,
+      priority: (PRIORITIES.some((p) => p === x.priority) ? str(x.priority) : "") as Priority,
     })),
     questions: list(o.questions).map((x, i) => ({
       id: str(x.id) || `q${i + 1}`, text: str(x.text),

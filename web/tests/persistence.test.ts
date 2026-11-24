@@ -145,7 +145,7 @@ test("start page validates and previews a backup before replacing work", async (
   session.set(key, "previous");
   await mount(Start, { onChoose: () => {} });
   const input = container.querySelector<HTMLInputElement>('input[type="file"]')!;
-  Object.defineProperty(input, "files", { value: [{ text: async () => recoveryFile([{ area: "session", key, text: diagram }]) }] });
+  Object.defineProperty(input, "files", { value: [{ name: "recovery.json", text: async () => recoveryFile([{ area: "session", key, text: diagram }]) }] });
   await act(async () => input.dispatchEvent(new Event("change", { bubbles: true })));
   expect(container.textContent).toContain("Restore Model anything?");
   expect(session.get(key)).toBe("previous");
@@ -183,4 +183,108 @@ test("failed recovery downloads report the problem without losing retained work"
   expect(container.textContent).toContain("could not be downloaded");
   expect(savedDiagram(key)).toBe(diagram);
   expect(container.textContent).toContain("could not be saved");
+});
+
+test.each([
+  "This is not a valid diagram!!!",
+  'flowchart TB\nA["broken"',
+  'flowchart TB\nA["First"]\nA["Overwritten"]',
+  "flowchart TB\nA --> B", // recovery must not silently invent missing boxes
+  "flowchart CORRUPTED",
+  'flowchart TB\nsubgraph group\nA["Unclosed group"]',
+  "flowchart TB\nend",
+  "flowchart TB\nsubgraph\nend",
+  "flowchart TB\ndirection CORRUPTED",
+  'flowchart TB\n%% mermantics-layout {"Missing":[0,0]}',
+  "%% only comments, no diagram",
+  'flowchart TB\n%% mermantics-layout null',
+  'flowchart TB\n%% mermantics-layout {"A":["bad",{}]}',
+  'flowchart TB\n%% mermantics-layout {"A":[1e400,0]}',
+  'flowchart TB\n%% mermantics-layout {"A":[0]}',
+  'flowchart TB\n%% mermantics-layout {broken',
+  'flowchart TB\n%% mermantics-usecase null',
+  'flowchart TB\n%% mermantics-usecase {"title":"lost notes"}',
+  'flowchart TB\n%% mermantics-kinds {"A":42}',
+  'flowchart TB\n%% mermantics-kind-names []',
+  'flowchart TB\n%% mermantics-pattern-uses [null]',
+  'flowchart TB\n%% mermantics-layout {}\n%% mermantics-layout {}',
+])("corrupt diagram or computation view cannot overwrite any stored work (%s)", (text) => {
+  session.set(key, diagram);
+  session.set(MODES.datastore.storageKey, diagram);
+  const options = freshState();
+  options.options[0]!.views.terms = text;
+  for (const entry of [
+    { area: "session" as const, key, text },
+    { area: "session" as const, key: MODES.comp.storageKey, text: JSON.stringify(options) },
+  ]) {
+    const backup = recoveryFile([
+      { area: "session", key: MODES.datastore.storageKey, text: 'flowchart TB\nB["Replacement"]' }, entry,
+    ]);
+    expect(() => restoreRecovery(backup)).toThrow("not a supported");
+    expect(session.get(key)).toBe(diagram);
+    expect(session.get(MODES.datastore.storageKey)).toBe(diagram);
+    expect(session.has(MODES.comp.storageKey)).toBe(false);
+    expect(pendingSaves()).toHaveLength(0);
+  }
+});
+
+test.each([
+  [pattern.text, pattern.text],
+  [pattern.text + '\nThis is not a valid diagram!!!'],
+  [pattern.text + '\n%% mermantics-usecase null'],
+  [pattern.text.replace(/"questions":\[[^\]]*\]/, '"questions":42')],
+].map((texts) => ({ texts })))("malformed or duplicate custom patterns cannot replace a valid collection", ({ texts }) => {
+  saveMine([pattern]);
+  const before = local.get(MINE_KEY);
+  expect(() => restoreRecovery(recoveryFile([{ area: "local", key: MINE_KEY, text: JSON.stringify(texts) }]))).toThrow();
+  expect(local.get(MINE_KEY)).toBe(before);
+});
+
+test("validating a corrupt backup also preserves pending in-memory work", () => {
+  failSession = true;
+  saveDiagram(key, diagram);
+  expect(() => restoreRecovery(recoveryFile([{ area: "session", key, text: "corrupt content!" }]))).toThrow();
+  expect(savedDiagram(key)).toBe(diagram);
+  expect(pendingSaves()).toEqual([{ area: "session", key, text: diagram }]);
+});
+
+const deferredRead = () => {
+  let resolve!: (text: string) => void;
+  let reject!: (error: Error) => void;
+  const promise = new Promise<string>((yes, no) => { resolve = yes; reject = no; });
+  return { resolve, reject, promise };
+};
+const selectRecovery = async (name: string, read: Promise<string>) => act(async () => {
+  const input = container.querySelector<HTMLInputElement>('input[type="file"]')!;
+  Object.defineProperty(input, "files", { configurable: true, value: [{ name, text: () => read }] });
+  input.dispatchEvent(new Event("change", { bubbles: true }));
+});
+
+test.each(["success", "failure"])("late file A %s cannot replace file B's recovery preview", async (outcome) => {
+  await mount(Start, { onChoose: () => {} });
+  const first = deferredRead(); const second = deferredRead();
+  await selectRecovery("A.json", first.promise);
+  await selectRecovery("B.json", second.promise);
+  const backup = recoveryFile([{ area: "session", key, text: diagram }]);
+  await act(async () => second.resolve(backup));
+  expect(container.textContent).toContain("Selected file: B.json");
+  await act(async () => outcome === "success"
+    ? first.resolve(recoveryFile([{ area: "session", key, text: 'flowchart TB\nWrong["Wrong"]' }]))
+    : first.reject(new Error("Stale read error")));
+  expect(container.textContent).toContain("Selected file: B.json");
+  expect(container.textContent).not.toContain("A.json");
+  expect(container.textContent).not.toContain("Stale read error");
+  await act(async () => button("Restore this copy").click());
+  expect(session.get(key)).toBe(diagram);
+});
+
+test("a newer invalid file leaves no older backup available to restore", async () => {
+  await mount(Start, { onChoose: () => {} });
+  const first = deferredRead();
+  await selectRecovery("A.json", first.promise);
+  await selectRecovery("broken.json", Promise.resolve("not JSON"));
+  await act(async () => first.resolve(recoveryFile([{ area: "session", key, text: diagram }])));
+  expect(button("Restore this copy")).toBeUndefined();
+  expect(container.textContent).toContain("not a supported");
+  expect(session.size).toBe(0);
 });
