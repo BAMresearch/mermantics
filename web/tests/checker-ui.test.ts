@@ -207,3 +207,11 @@ test("Overview treats a ready ontology as ready regardless of its title", async 
   expect(host.textContent).not.toContain("Checker unavailable is an unusual ontology title");
   expect(host.querySelector(".muted-inline")!.textContent).not.toBe("");
 });
+
+test.each(["failed", "loading"] as const)("Overview displays identical %s messages only once", async (ontologyState) => {
+  const message = ontologyState === "failed" ? "Checker unavailable: offline" : "Loading PMDco 3.1.2...";
+  await act(async () => root.render(createElement(Overview, { status: message, ontology: true,
+    ontologyState, checkedAgainst: message, findings: [], passed: [], onSelect: vi.fn() })));
+  expect(host.textContent!.split(message)).toHaveLength(2);
+  expect(host.querySelector(".muted-inline")).toBeNull();
+});

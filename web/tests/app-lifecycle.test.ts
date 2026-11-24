@@ -820,7 +820,7 @@ test.each(["success", "failure"])("a replaced document discards pending pattern 
   expect(container.textContent).not.toContain("Stale pattern");
 });
 
-test.each(["classification", "layout"])("failed pattern %s preserves content without partial metadata", async (stage) => {
+test.each(["classification", "layout"])("pattern %s failure leaves complete content and metadata", async (stage) => {
   mocks.check.mockResolvedValue({ result: { findings: [] } });
   await mount({ ...plain, patterns: true, ontology: true });
   await insertFirstPattern();
@@ -830,14 +830,21 @@ test.each(["classification", "layout"])("failed pattern %s preserves content wit
   (stage === "classification" ? mocks.supers : mocks.layout).mockImplementationOnce(() => pending.promise);
   await insertFirstPattern();
   await act(async () => pending.reject(new Error("Pattern failed")));
-  expect(container.textContent).toContain("Could not insert the pattern: Pattern failed");
+  expect(container.textContent).toContain(stage === "layout"
+    ? "Could not insert the pattern: Pattern failed" : "Could not classify imported boxes: Pattern failed");
   await act(async () => vi.advanceTimersByTime(801));
-  expect(storage.get(plain.storageKey)).toBe(before);
-  expect(nodes()).toHaveLength(6);
-  expect(mocks.flowProps.edges).toHaveLength(4);
+  const copies = stage === "layout" ? 1 : 2;
+  if (stage === "layout") expect(storage.get(plain.storageKey)).toBe(before);
+  const reopened = fromMermaid(storage.get(plain.storageKey)!);
+  const uses = readUses(reopened.patternUses);
+  expect(uses).toHaveLength(copies);
+  const ids = new Set(reopened.boxes.map((b) => b.id));
+  for (const use of uses) for (const part of use.parts) expect(ids.has(part.box)).toBe(true);
+  expect(nodes()).toHaveLength(1 + copies * 5);
+  expect(mocks.flowProps.edges).toHaveLength(copies * 4);
   // A subsequent insertion still works after the failure.
   await insertFirstPattern();
-  expect(nodes()).toHaveLength(11);
+  expect(nodes()).toHaveLength(1 + (copies + 1) * 5);
 });
 
 test("a failed picture export reports why, brings the selection back and allows the next one", async () => {
@@ -1538,3 +1545,32 @@ test("patterns in a plain modelling section do not request ontology classificati
   expect(mocks.supers).not.toHaveBeenCalled();
   expect(mocks.loadOntology).not.toHaveBeenCalled();
 });
+
+for (const outcome of ["success", "failure"]) {
+  test(`a ready ontology cannot delay pattern placement, even when classification ends in ${outcome}`, async () => {
+    mocks.check.mockResolvedValue({ result: { findings: [] } });
+    await mount({ ...plain, ontology: true, patterns: true });
+    expect(getOntologyState().status).toBe("ready");
+    const classification = deferred<string[][]>();
+    mocks.supers.mockReturnValueOnce(classification.promise);
+    await insertFirstPattern();
+    const inserted = nodes().filter((b) => b.data.autoClassify);
+    expect(inserted.length).toBeGreaterThan(0);
+    expect(mocks.supers).toHaveBeenCalledTimes(1);
+    // Classification is still pending: placement and persistence must already work.
+    await act(async () => vi.advanceTimersByTime(801));
+    const saved = fromMermaid(storage.get(plain.storageKey)!);
+    for (const box of inserted) expect(saved.unclassified).toContain(box.id);
+    if (outcome === "success") {
+      await act(async () => classification.resolve(inserted.map(() => ["COB_0000035"])));
+      for (const box of inserted) expect(nodes().find((b) => b.id === box.id)!.data.kind).toBe("process");
+    } else {
+      await act(async () => classification.reject(new Error("worker crashed")));
+      for (const box of inserted) expect(nodes().find((b) => b.id === box.id)!.data.autoClassify).toBe(box.data.classId);
+      expect(container.textContent).toContain("Could not classify imported boxes: worker crashed");
+    }
+    expect(container.textContent).not.toContain("Could not insert the pattern");
+    await click("Undo");
+    expect(nodes().map((b) => b.id)).toEqual(["A"]);
+  });
+}

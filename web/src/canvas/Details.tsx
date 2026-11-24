@@ -310,7 +310,8 @@ export function Overview({ status, ontology, ontologyState = "idle", datastore =
   return (
     <div className="panel">
       <div className="panel-kind"><span className="dot" />Your model</div>
-      {ontology && checkedAgainst && <p className="muted-inline">{ontologyState === "ready" ? QUICK_CHECK_HINT : checkedAgainst}</p>}
+      {ontology && checkedAgainst && (ontologyState === "ready" || checkedAgainst !== status)
+        && <p className="muted-inline">{ontologyState === "ready" ? QUICK_CHECK_HINT : checkedAgainst}</p>}
       <p className="muted">{status}</p>
       {children}
       {findings.length > 0 && (

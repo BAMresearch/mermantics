@@ -670,9 +670,9 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
     try {
       // Prepare with pattern-local IDs; free IDs and the position depend on the diagram at commit.
       const inserted = instantiate(pattern, { x: 0, y: 0 });
-      // Insert immediately when the ontology is unavailable. Imported autoClassify
-      // markers survive placement and saving; the background effect resolves them later.
-      let placed = mode.ontology && ontologyState === "ready" ? await classify(inserted.boxes) : inserted.boxes;
+      // Placement never waits for the worker. Imported autoClassify markers survive
+      // placement and saving; the background effect resolves the shapes afterward.
+      let placed = inserted.boxes;
       if (!valid()) return;
       if (!inserted.positioned) placed = await layout(placed, inserted.arrows);
       if (!valid()) return;
@@ -696,7 +696,7 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
     } catch (error) {
       if (valid()) setNotice(`Could not insert the pattern: ${(error as Error).message}`);
     }
-  }, [append, flow, fitDocument, recordEdit, mode.ontology, ontologyState, work]);
+  }, [append, flow, fitDocument, recordEdit, work]);
 
   const onDrop = useCallback((e: DragEvent) => {
     e.preventDefault();
