@@ -59,6 +59,10 @@ export function RelationMenu({ x, y, srcName, dstName, srcClasses, dstClasses, t
 }) {
   const [quick, setQuick] = useState<RelationFit[] | null>(null);
   const [all, setAll] = useState<RelationFit[] | null>(null);
+  const [quickError, setQuickError] = useState("");
+  const [allError, setAllError] = useState("");
+  const [quickRetry, setQuickRetry] = useState(0);
+  const [allRetry, setAllRetry] = useState(0);
   const [mode, setMode] = useState<"menu" | "all" | "own">("menu");
   const [filter, setFilter] = useState("");
   const [field, setField] = useState("type");
@@ -71,13 +75,23 @@ export function RelationMenu({ x, y, srcName, dstName, srcClasses, dstClasses, t
 
   useEffect(() => {
     if (toVocab) return;
-    relations(srcClasses, dstClasses, quickIds).then(setQuick).catch(() => setQuick([]));
-  }, [srcClasses, dstClasses, toVocab, quickIds]);
+    let live = true;
+    setQuick(null);
+    setQuickError("");
+    relations(srcClasses, dstClasses, quickIds).then((rs) => { if (live) setQuick(rs); })
+      .catch((e: Error) => { if (live) setQuickError(e.message); });
+    return () => { live = false; };
+  }, [srcClasses, dstClasses, toVocab, quickIds, quickRetry]);
 
   useEffect(() => {
-    if (mode === "menu" || all) return;
-    relations(srcClasses, dstClasses, null).then(setAll).catch(() => setAll([]));
-  }, [mode, all, srcClasses, dstClasses]);
+    if (mode === "menu" || toVocab) return;
+    let live = true;
+    setAll(null);
+    setAllError("");
+    relations(srcClasses, dstClasses, null).then((rs) => { if (live) setAll(rs); })
+      .catch((e: Error) => { if (live) setAllError(e.message); });
+    return () => { live = false; };
+  }, [mode, srcClasses, dstClasses, toVocab, allRetry]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onCancel(); };
@@ -94,7 +108,7 @@ export function RelationMenu({ x, y, srcName, dstName, srcClasses, dstClasses, t
   const pickOwn = (r: OwnRelation) => onChoose({ kind: "relation", name: r.curie ? r.name : r.words, curie: r.curie, words: r.words, own: true });
 
   // Own relations that can be used here: not linked (always), or whose parent fits.
-  const ownHere = quick === null ? [] : own.filter((r) => !r.curie || fitting(quick, r.curie));
+  const ownHere = own.filter((r) => !r.curie || (quick !== null && fitting(quick, r.curie)));
   const common = (quick ?? []).filter((r) => COMMON_RELATIONS.some((c) => c.id === r.id));
 
   const makeOwn = () => {
@@ -139,7 +153,8 @@ export function RelationMenu({ x, y, srcName, dstName, srcClasses, dstClasses, t
               <>
                 <input placeholder="Search relations that fit these two boxes" value={filter} onChange={(e) => setFilter(e.target.value)} />
                 <div className="menu-scroll">
-                  {all === null && <div className="muted">Loading...</div>}
+                  {allError && <div role="alert">Could not find relations: {allError} <button type="button" onClick={() => setAllRetry((r) => r + 1)}>Retry relations</button></div>}
+                  {all === null && !allError && <div className="muted">Loading...</div>}
                   {filtered.map((r) => (
                     <button type="button" key={r.id} className="menu-item small" onClick={() => { setParent(r); setFilter(""); }}>
                       <span>{wordsFor(r.id, r.label) !== r.label ? `${r.label} (${wordsFor(r.id, r.label)})` : r.label}</span>
@@ -167,7 +182,8 @@ export function RelationMenu({ x, y, srcName, dstName, srcClasses, dstClasses, t
       ) : (
         <>
           <div className="menu-section">
-            {quick === null && <div className="muted">Finding relations that fit...</div>}
+            {quickError && <div role="alert">Could not find common relations: {quickError} <button type="button" onClick={() => setQuickRetry((r) => r + 1)}>Retry common relations</button></div>}
+            {quick === null && !quickError && <div className="muted">Finding relations that fit...</div>}
             {ownHere.length > 0 && <div className="menu-label">My relations</div>}
             {ownHere.map((r) => (
               <button type="button" key={`${r.words}|${r.curie}`} className="menu-item" onClick={() => pickOwn(r)}>
@@ -198,7 +214,8 @@ export function RelationMenu({ x, y, srcName, dstName, srcClasses, dstClasses, t
               <>
                 <input autoFocus placeholder="Search relations that fit" value={filter} onChange={(e) => setFilter(e.target.value)} />
                 <div className="menu-scroll">
-                  {all === null && <div className="muted">Loading...</div>}
+                  {allError && <div role="alert">Could not find relations: {allError} <button type="button" onClick={() => setAllRetry((r) => r + 1)}>Retry relations</button></div>}
+                  {all === null && !allError && <div className="muted">Loading...</div>}
                   {filtered.map((r) => (
                     <button type="button" key={r.id} className="menu-item small" onClick={() => pick(r)}>
                       <span>{r.label}</span>

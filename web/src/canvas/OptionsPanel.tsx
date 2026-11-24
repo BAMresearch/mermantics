@@ -7,6 +7,7 @@ import { ConnectionMode, MarkerType, ReactFlow, ReactFlowProvider, useNodesIniti
          type NodeTypes } from "@xyflow/react";
 import { useEffect, useMemo, useState } from "react";
 
+import { useOntology } from "./useOntology.js";
 import { BoxNode } from "./BoxNode.js";
 import { check, lookup, trees } from "./checker.js";
 import { FloatingEdge } from "./FloatingEdge.js";
@@ -289,6 +290,9 @@ function loadTrees(): Promise<ClassTree[]> {
     const found = ts.filter((t): t is ClassTree => !!t);
     if (!found.length) pmdcoTrees = null; // not loaded yet, or failed: ask again next time
     return found;
+  }).catch((error: unknown) => {
+    pmdcoTrees = null;
+    throw error;
   });
   return pmdcoTrees;
 }
@@ -328,20 +332,33 @@ export function TermsTree({ option, termsText, onSelect }: {
   onSelect?: (box: string) => void; // only when the Terms diagram is on the canvas
 }) {
   const [base, setBase] = useState<ClassTree[] | null>(null);
+  const [error, setError] = useState("");
+  const [retry, setRetry] = useState(0);
   const [labels, setLabels] = useState<Record<string, string>>({});
+  const [labelError, setLabelError] = useState("");
+  const [labelRetry, setLabelRetry] = useState(0);
+  const { revision } = useOntology();
   const parsed = useMemo(() => fromMermaid(termsText), [termsText]);
-  useEffect(() => { loadTrees().then(setBase).catch(() => setBase([])); }, []);
+  useEffect(() => {
+    let live = true;
+    setError("");
+    setBase(null);
+    loadTrees().then((ts) => { if (live) setBase(ts); })
+      .catch((e: Error) => { if (live) setError(e.message); });
+    return () => { live = false; };
+  }, [retry, revision]);
   // Labels for the PMDco classes that new terms sit under, outside the two trees.
   useEffect(() => {
     const ids = [...new Set(parsed.boxes.map((b) => b.data.classId).filter((x) => x && !labels[x]))];
+    setLabelError("");
     if (!ids.length) return;
     let live = true;
     lookup(ids).then((ts) => {
       if (!live) return;
       setLabels((l) => ({ ...l, ...Object.fromEntries(ids.map((id, i) => [id, ts[i]?.label ?? id])) }));
-    }).catch(() => {});
+    }).catch((e: Error) => { if (live) setLabelError(e.message); });
     return () => { live = false; };
-  }, [parsed, labels]);
+  }, [parsed, labels, labelRetry, revision]);
   const tree = useMemo(() => (base ? mergeTree(base, parsed.boxes, parsed.arrows, (id) => labels[id] ?? id) : null),
                        [base, parsed, labels]);
   const counts = tree ? countStatuses(tree) : {};
@@ -353,7 +370,9 @@ export function TermsTree({ option, termsText, onSelect }: {
         option's Terms view.
         {tree && ` ${counts.proposed ?? 0} new, ${counts.changed ?? 0} changed, ${counts.deprecated ?? 0} deprecated.`}
       </p>
-      {!tree ? <p className="muted">Loading PMDco...</p> : (
+      {labelError && <p role="alert">Could not load class labels: {labelError} <button type="button" onClick={() => setLabelRetry((r) => r + 1)}>Retry labels</button></p>}
+      {error ? <p role="alert">Could not load the PMDco tree: {error} <button type="button" onClick={() => setRetry((r) => r + 1)}>Retry tree</button></p>
+        : !tree ? <p className="muted">Loading PMDco...</p> : (
         <ul className="tt-list">{tree.map((n) => <TermItem key={n.key} node={n} onSelect={onSelect} depth={0} />)}</ul>
       )}
     </section>

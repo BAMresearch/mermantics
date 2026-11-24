@@ -17,7 +17,8 @@ import { applyPositions, DocumentWork } from "./document.js";
 
 import logo from "../../../assets/mermantics-logo.svg";
 import { BoxNode, worst } from "./BoxNode.js";
-import { check, loadOntology, supers } from "./checker.js";
+import { check, CHECK_TIMEOUTS, loadOntology, setRequestTimeout, supers } from "./checker.js";
+import { useOntology } from "./useOntology.js";
 import { DatastoreLinkMenu, WhereThingsGo } from "./DatastorePanel.js";
 import { DetailsResize } from "./DetailsResize.js";
 import { ArrowDetails, BoxDetails, Overview, SelectionPanel, type GlobalFinding } from "./Details.js";
@@ -55,17 +56,19 @@ const edgeTypes: EdgeTypes = { floating: FloatingEdge };
 
 
 /** Shapes for imported boxes, from their classes' superclasses. */
-async function classify(boxes: Box[]): Promise<Box[]> {
+async function classify(boxes: Box[], signal?: AbortSignal): Promise<Box[]> {
   const open = boxes.filter((b) => b.data.kind === "other" && b.data.classId);
   if (!open.length) return boxes;
-  const all = await supers(open.map((b) => b.data.classId));
+  const all = await supers(open.map((b) => b.data.classId), signal);
   const kinds = new Map<string, ShapeKind>();
   open.forEach((b, i) => {
     const ancestors = new Set(all[i]);
     const hit = KIND_BY_ANCESTOR.find(([id]) => ancestors.has(id));
     if (hit) kinds.set(b.id, hit[1]);
   });
-  return boxes.map((b) => (kinds.has(b.id) ? { ...b, data: { ...b.data, kind: kinds.get(b.id)! } } : b));
+  const classified = new Set(open.map((b) => b.id));
+  return boxes.map((b) => classified.has(b.id)
+    ? { ...b, data: { ...b.data, kind: kinds.get(b.id) ?? b.data.kind, autoClassify: undefined } } : b);
 }
 
 /** The structure that the checks see; moving a box does not change it. */
@@ -191,13 +194,28 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
     onBoxesChange(changes);
   }, [onBoxesChange]);
   const [docName, setDocName] = useState("model.mmd");
-  const [ontoStatus, setOntoStatus] = useState(mode.ontology ? "Loading PMDco 3.1.2..." : "");
+  const ontology = useOntology();
+  const ontologyState = ontology.status;
+  const ontoStatus = ontologyState === "ready" ? ontology.title : ontologyState === "failed"
+    ? `Checker unavailable: ${ontology.error}` : "Loading PMDco 3.1.2...";
+  const nextTimeout = CHECK_TIMEOUTS.find((ms) => ms > ontology.timeoutMs);
   const [ready, setReady] = useState(false);
+  const [ontologyRevision, setOntologyRevision] = useState(0);
   const [checkRevision, setCheckRevision] = useState(0);
+  const retryCheck = () => {
+    setOntologyRevision((r) => r + 1);
+    setCheckRevision((r) => r + 1);
+  };
+  const retryWithMoreTime = () => {
+    if (nextTimeout) setRequestTimeout(nextTimeout);
+    retryCheck();
+  };
   // status: what the badge says; result: the quick check's result alone ("no problems"), "" until there is one.
-  const [checkState, setCheckState] = useState<{ status: string; result: string; findings: GlobalFinding[]; passed: string[];
+  const [checkState, setCheckState] = useState<{ phase: "pending" | "failed" | "checked"; status: string; result: string; findings: GlobalFinding[]; passed: string[];
                                                   perUse: Record<string, number> }>(
-    { status: mode.ontology ? "Loading PMDco 3.1.2..." : "", result: "", findings: [], passed: [], perUse: {} });
+    { phase: "pending", status: mode.ontology ? "Loading PMDco 3.1.2..." : "", result: "", findings: [], passed: [], perUse: {} });
+  const validationStale = mode.ontology && checkState.phase !== "checked";
+  const previousMarkers = validationStale && (boxes.some((b) => b.data.problems.length) || arrows.some((a) => a.data?.problems.length));
   const [pending, setPending] = useState<PendingArrow | null>(null);
   // Data Store: two objects were connected; which one is the parent?
   // Data Store: the model as drawn, or laid out like openBIS (Space > Project > Collection).
@@ -365,7 +383,7 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
     void arrange();
   }, [nodesReady, boxes, arrange]);
 
-  /** Invalidate old work before reading, classifying or laying out a replacement. */
+  /** Invalidate old work before reading or laying out a replacement. */
   const open = useCallback(async (text: string | Promise<string>, name: string,
                                   target?: { option: string; view: ViewId }, untouched = false, persist = false) => {
     store(textNow());
@@ -376,8 +394,7 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
     try {
       const imported = fromMermaid(await text);
       if (!work.owns(document)) return;
-      let placed = mode.ontology ? await classify(imported.boxes) : imported.boxes;
-      if (!work.owns(document)) return;
+      let placed = imported.boxes; // Opening and saving must not wait for the ontology.
       if (!imported.positioned) placed = await layout(placed, imported.arrows);
       if (!work.owns(document)) return;
       loading.current = null;
@@ -463,21 +480,51 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
       if (saved !== null) void open(saved, "model.mmd");
       else void open(example.text, example.name, undefined, true);
     };
-    if (!mode.ontology) {
-      start();
-      return () => { active = false; work.replace(); };
-    }
-    loadOntology().then((info) => {
-      if (!active) return;
-      setOntoStatus(`${info.title}`);
-      start();
-    }).catch((e: Error) => {
-      if (!active) return;
-      setOntoStatus(`Could not load the ontology: ${e.message}`);
-      setCheckState((c) => ({ ...c, status: `Could not load the ontology: ${e.message}` }));
-    });
+    start();
     return () => { active = false; work.replace(); };
   }, [open, mode, work]);
+
+  useEffect(() => {
+    if (!mode.ontology) return;
+    // The shared snapshot reports failures and recovery, including other consumers' retries.
+    void loadOntology().catch(() => {});
+  }, [mode.ontology, ontologyRevision]);
+
+  const classificationKey = JSON.stringify(boxes.filter((b) => b.data.autoClassify)
+    .map((b) => [b.id, b.data.autoClassify, b.data.classId, b.data.kind]));
+
+  // Resolve pending shapes for imported boxes, patterns and manually assigned classes. Apply only to matching classes in the
+  // same document, preserving edits and amending history rather than adding a step.
+  useEffect(() => {
+    if (!ready || !mode.ontology || ontologyState !== "ready" || loading.current !== null) return;
+    let active = true;
+    const document = work.current();
+    const eligible = (b: Box) => !!b.data.autoClassify && b.data.autoClassify === b.data.classId && b.data.kind === "other";
+    const snapshot = boxesRef.current.filter(eligible);
+    if (!snapshot.length) return;
+    const controller = new AbortController();
+    void classify(snapshot, controller.signal).then((classified) => {
+      if (!active || !work.owns(document)) return;
+      const candidates = new Map(boxesRef.current.filter(eligible).map((b) => [b.id, b.data.classId]));
+      const shapes = new Map(classified.filter((b) => candidates.get(b.id) === b.data.classId).map((b) => [b.id, b.data]));
+      const apply = (bs: Box[]) => bs.map((b) => {
+        const shape = shapes.get(b.id);
+        return shape && eligible(b) && b.data.classId === shape.classId
+          ? { ...b, data: { ...b.data, kind: shape.kind, autoClassify: undefined } } : b;
+      });
+      // Automatic classification alone must not turn an untouched example into saved work.
+      if (!changed.current && opened.current === contentKey(boxesRef.current, arrowsRef.current, usesRef.current,
+                                                            mode.options ? null : useCaseRef.current)) {
+        opened.current = contentKey(apply(boxesRef.current), arrowsRef.current, usesRef.current,
+                                    mode.options ? null : useCaseRef.current);
+      }
+      setBoxes(apply);
+      history.amend((s) => snapshotOf(apply(s.boxes), s.arrows, s.uses, s.useCase));
+    }).catch((error: Error) => {
+      if (active && work.owns(document)) setNotice(`Could not classify boxes: ${error.message}`);
+    });
+    return () => { active = false; controller.abort(); };
+  }, [ready, mode.ontology, mode.options, ontologyState, ontology.revision, checkRevision, classificationKey, history, setBoxes, work]);
 
   // ---- checking -------------------------------------------------------------------------
 
@@ -493,7 +540,10 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
     }
     const mine = ++run.current;
     const document = work.current();
-    setCheckState((s) => ({ ...s, status: "Checking..." }));
+    setCheckState({ phase: ontologyState === "failed" ? "failed" : "pending",
+      status: ontologyState === "ready" ? "Checking..." : ontoStatus,
+      result: "", findings: [], passed: [], perUse: {} });
+    if (ontologyState !== "ready") return;
     const timer = setTimeout(async () => {
       const snapBoxes = boxesRef.current;
       const snapArrows = arrowsRef.current;
@@ -501,7 +551,7 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
       const text = toMermaid(snapBoxes, snapArrows, mode.options ? emptyUseCase() : useCaseRef.current, snapUses);
       store(text);
       try {
-        const checked = await check(text);
+        const checked = await check(text, { latest: true });
         if (mine !== run.current || !work.owns(document)) return;
         const byBox = new Map<string, Problem[]>();
         const byArrow = new Map<string, Problem[]>();
@@ -538,20 +588,20 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
         setArrows((as) => as.map((a) => ({ ...a, data: { ...a.data!, problems: byArrow.get(a.id) ?? [] } })));
         const result = resultLine(findings, !snapBoxes.length);
         const status = snapBoxes.length ? `${QUICK_CHECK}: ${result}` : "Empty";
-        setCheckState({ status, result, findings, passed, perUse });
+        setCheckState({ phase: "checked", status, result, findings, passed, perUse });
       } catch (e) {
-        if (mine === run.current && work.owns(document)) setCheckState({ status: `The check failed: ${(e as Error).message}`, result: "", findings: [], passed: [], perUse: {} });
+        if (mine === run.current && work.owns(document)) setCheckState({ phase: "failed", status: `The check failed: ${(e as Error).message}`, result: "", findings: [], passed: [], perUse: {} });
       }
     }, 300);
     return () => clearTimeout(timer);
-  }, [key, checkRevision, ready, mode.ontology, mode.options, store, textNow, setArrows, setBoxes, work]);
+  }, [key, checkRevision, ready, ontologyState, ontology.revision, ontoStatus, mode.ontology, mode.options, store, textNow, setArrows, setBoxes, work]);
 
-  // Positions and use case notes are saved too, a little later, as they change.
+  // Persist every document edit independently of ontology availability and checks.
   useEffect(() => {
     if (!ready) return;
     const timer = setTimeout(() => store(textNow()), 800);
     return () => clearTimeout(timer);
-  }, [boxes, useCase, patternUses, ready, store, textNow]);
+  }, [boxes, arrows, useCase, patternUses, ready, store, textNow]);
 
   // Save what is still waiting for its timer, and say whether there is work here, even if the
   // browser did not let it be saved. Called when the tab is closed or left, and when the canvas
@@ -621,7 +671,9 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
     try {
       // Prepare with pattern-local IDs; free IDs and the position depend on the diagram at commit.
       const inserted = instantiate(pattern, { x: 0, y: 0 });
-      let placed = await classify(inserted.boxes);
+      // Placement never waits for the worker. Imported autoClassify markers survive
+      // placement and saving; the background effect resolves the shapes afterward.
+      let placed = inserted.boxes;
       if (!valid()) return;
       if (!inserted.positioned) placed = await layout(placed, inserted.arrows);
       if (!valid()) return;
@@ -770,30 +822,18 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
     });
   const nameOf = (id: string) => boxes.find((b) => b.id === id)?.data.name ?? id;
 
-  /**
-   * A box that is "something else" gets a shape once its class is known. This belongs to
-   * choosing the class, not a step of its own, and the answer can come after other edits or an
-   * undo: it is given to every step where the box has that class and no shape yet.
-   */
-  const shapeFromClass = useCallback((id: string, classId: string) => {
-    const document = work.current();
-    void supers([classId]).then(([anc]) => {
-      if (!work.owns(document)) return;
-      const hit = KIND_BY_ANCESTOR.find(([cid]) => (anc ?? []).includes(cid));
-      if (!hit) return;
-      const shaped = (bs: Box[]) => bs.map((b) => (b.id === id && b.data.classId === classId && b.data.kind === "other"
-        ? { ...b, data: { ...b.data, kind: hit[1] } } : b));
-      setBoxes(shaped);
-      history.amend((s) => snapshotOf(shaped(s.boxes), s.arrows, s.uses, s.useCase));
-    }).catch((error: Error) => {
-      if (work.owns(document)) setNotice(`Could not classify the box: ${error.message}`);
-    });
-  }, [history, setBoxes, work]);
-
+  /** Class assignments join the same persistent classification lifecycle as imports. */
   const patchBox = useCallback((id: string, patch: Partial<BoxData>) => {
-    setBoxes((bs) => bs.map((b) => (b.id === id ? { ...b, data: { ...b.data, ...patch } } : b)));
-    if (patch.classId && loading.current === null) shapeFromClass(id, patch.classId);
-  }, [setBoxes, shapeFromClass]);
+    setBoxes((bs) => bs.map((b) => {
+      if (b.id !== id) return b;
+      const data = { ...b.data, ...patch };
+      if ("kind" in patch) data.autoClassify = undefined; // An explicit shape wins.
+      else if ("classId" in patch) {
+        data.autoClassify = mode.ontology && data.kind === "other" && data.classId ? data.classId : undefined;
+      }
+      return { ...b, data };
+    }));
+  }, [mode.ontology, setBoxes]);
 
   const patchArrow = useCallback((id: string, patch: Partial<ArrowData>) => {
     setArrows((as) => as.map((a) => (a.id === id ? { ...a, data: { ...a.data!, ...patch } } : a)));
@@ -835,6 +875,7 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
       ...a,
       selected,
       type: "floating",
+      className: level ? "validation-problem" : undefined,
       label: d.words,
       labelBgPadding: [6, 3] as [number, number],
       labelBgBorderRadius: 6,
@@ -1031,7 +1072,7 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
   };
 
   return (
-    <div className={`app${workshop ? " workshop" : ""}`} onPointerMove={(e) => { pointer.current = { x: e.clientX, y: e.clientY }; }}>
+    <div className={`app${workshop ? " workshop" : ""}${validationStale ? " validation-stale" : ""}`} onPointerMove={(e) => { pointer.current = { x: e.clientX, y: e.clientY }; }}>
       <header className="bar">
         <button type="button" className="logo-button" title="Back to the start page" onClick={onHome}>
           <img className="logo" src={logo} alt="mermantics" />
@@ -1202,12 +1243,13 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
             <div className="empty">{(narrow ? "Tap \"+ Add\" to start" : "Drag a shape from the left to start")
               + (EXAMPLES.length ? ", or open an example." : ".")}</div>
           )}
-          {mode.ontology && <button type="button" className={`status ${checkState.findings.some((f) => f.level === "error") ? "bad"
+          {mode.ontology && <button type="button" className={`status ${checkState.phase !== "checked" ? "unavailable" : checkState.findings.some((f) => f.level === "error") ? "bad"
             : checkState.findings.some((f) => f.level === "warning") ? "warn" : "good"}`}
                   title={QUICK_CHECK_HINT}
-                  // Clicking shows the overview with all results; on a phone it opens the details sheet.
-                  onClick={() => { setBoxes((bs) => bs.map((b) => ({ ...b, selected: false }))); setArrows((as) => as.map((a) => ({ ...a, selected: false }))); if (narrow) { setTab("model"); setDrawer("details"); } }}>
-            {checkState.status}
+                  // Show the overview (or details sheet) and retry a failed check.
+                  onClick={() => { if (checkState.phase === "failed") { if (ontology.timedOut && nextTimeout) retryWithMoreTime(); else retryCheck(); } setBoxes((bs) => bs.map((b) => ({ ...b, selected: false }))); setArrows((as) => as.map((a) => ({ ...a, selected: false }))); if (narrow) { setTab("model"); setDrawer("details"); } }}>
+            {checkState.status}{previousMarkers ? " — Previous markers shown" : ""}
+            {checkState.phase === "failed" ? ontology.timedOut && nextTimeout ? ` — Retry with ${nextTimeout / 60_000} minutes` : " — Retry" : ""}
           </button>}
           {notice && <div className="notice" onClick={() => setNotice("")}>{notice}</div>}
           {pending && !mode.ontology && (
@@ -1286,7 +1328,7 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
                             onSave={(meta) => keepPattern(patternText(meta), meta.title)}
                             onDownload={(meta) => save(patternText(meta), `${slug(meta.title)}.mmd`)} />
           ) : selectedBox ? (
-            <BoxDetails box={selectedBox} shapes={mode.shapes} ontology={mode.ontology} datastore={mode.datastore} boxes={boxes}
+            <BoxDetails validationStale={validationStale} box={selectedBox} shapes={mode.shapes} ontology={mode.ontology} datastore={mode.datastore} boxes={boxes}
                         termStatus={!!mode.options}
                         onChange={(p) => patchBox(selectedBox.id, p)}
                         questions={useCase.questions.map((q, i) => ({ id: q.id, label: `Q${i + 1}`, text: q.text,
@@ -1296,7 +1338,7 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
                           .map((p) => ({ pattern: u.title, part: p.name })))}
                         onDelete={() => flow.deleteElements({ nodes: [{ id: selectedBox.id }] })} />
           ) : selectedArrow ? (
-            <ArrowDetails dstKind={boxes.find((b) => b.id === selectedArrow.target)?.data.kind} arrow={selectedArrow} ontology={mode.ontology} datastore={mode.datastore}
+            <ArrowDetails validationStale={validationStale} dstKind={boxes.find((b) => b.id === selectedArrow.target)?.data.kind} arrow={selectedArrow} ontology={mode.ontology} datastore={mode.datastore}
                           srcName={nameOf(selectedArrow.source)} dstName={nameOf(selectedArrow.target)}
                           onSwap={() => setArrows((as) => as.map((a) => (a.id === selectedArrow.id
                             ? { ...a, source: a.target, target: a.source } : a)))}
@@ -1311,11 +1353,24 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
           ) : (
             <Overview status={mode.ontology ? checkState.status
                                 : `${boxes.length} box${boxes.length === 1 ? "" : "es"}, ${arrows.length} arrow${arrows.length === 1 ? "" : "s"}`}
-                      ontology={mode.ontology} datastore={mode.datastore} checkedAgainst={mode.ontology ? ontoStatus : ""} findings={checkState.findings} passed={checkState.passed} onSelect={select}
+                      ontology={mode.ontology} ontologyState={ontologyState} datastore={mode.datastore} checkedAgainst={mode.ontology ? ontoStatus : ""} findings={checkState.findings} passed={checkState.passed} onSelect={select}
                       uses={patternUses.map((u) => ({ id: u.id, title: u.title, version: u.version, boxes: u.parts.length,
-                                                      problems: checkState.perUse[u.id] ?? 0 }))}
+                                                      problems: checkState.phase === "checked" ? checkState.perUse[u.id] ?? 0 : null }))}
                       onForget={(id) => setPatternUses((us) => us.filter((u) => u.id !== id))}
                       ownRelations={ownRelations} onForgetRelation={forgetRelation}>
+              {mode.ontology && <>
+                {previousMarkers && <p role="status">Markers show previous findings. They have not been confirmed for the current diagram.</p>}
+                <label className="field">Checking time limit
+                  <select aria-label="Checking time limit" value={ontology.timeoutMs} onChange={(e) => setRequestTimeout(Number(e.target.value))}>
+                    {CHECK_TIMEOUTS.map((ms) => <option key={ms} value={ms}>{ms / 60_000} minutes</option>)}
+                  </select>
+                  <span className="muted-inline">Applies to the next ontology load or check in this tab.</span>
+                </label>
+                {checkState.phase === "failed" && <div className="row">
+                  <button type="button" onClick={retryCheck}>Retry check</button>
+                  {ontology.timedOut && nextTimeout && <button type="button" onClick={retryWithMoreTime}>Retry with {nextTimeout / 60_000} minutes</button>}
+                </div>}
+              </>}
               {mode.datastore && <WhereThingsGo boxes={boxes} onSelect={(id) => select({ box: id })} />}
               {mode.options && opts && currentOption && (
                 <TermsTree option={currentOption}

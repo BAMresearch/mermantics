@@ -3,9 +3,10 @@
 import { createElement, act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { getOntologyState, publishOntology, resetOntology } from "./helpers/ontology-state.js";
 import type { Box } from "../src/canvas/model.js";
 
-const mocks = vi.hoisted(() => ({ narrow: false, flowRenders: 0, layout: vi.fn(), check: vi.fn(), supers: vi.fn(), fit: vi.fn(), initialized: false, cloneOnSet: false, picture: vi.fn(), nodes: [] as Box[], flowProps: {} as any, optionProps: {} as any, panelProps: {} as any, relationProps: {} as any, linkProps: {} as any, arrowProps: {} as any, boxProps: {} as any }));
+const mocks = vi.hoisted(() => ({ loadOntology: vi.fn(), overviewProps: {} as any, narrow: false, flowRenders: 0, layout: vi.fn(), check: vi.fn(), supers: vi.fn(), fit: vi.fn(), initialized: false, cloneOnSet: false, picture: vi.fn(), nodes: [] as Box[], flowProps: {} as any, optionProps: {} as any, panelProps: {} as any, relationProps: {} as any, linkProps: {} as any, arrowProps: {} as any, boxProps: {} as any }));
 vi.mock("../src/canvas/layout.js", () => ({ layout: mocks.layout }));
 vi.mock("@xyflow/react", async () => {
   const { useState, useCallback } = await import("react");
@@ -38,13 +39,25 @@ vi.mock("../src/canvas/canvasImage.js", () => ({
   afterPaint: async () => {}, drawnBounds: () => ({ x: 0, y: 0, width: 100, height: 50 }), canvasImage: mocks.picture,
 }));
 vi.mock("../src/canvas/media.js", () => ({ NARROW: "narrow", TOUCH: "touch", useMedia: (query: string) => query === "narrow" && mocks.narrow }));
-vi.mock("../src/canvas/checker.js", () => ({ check: mocks.check, supers: mocks.supers, loadOntology: vi.fn(async () => ({ title: "Test ontology" })) }));
+vi.mock("../src/canvas/checker.js", async () => {
+  const state = await import("./helpers/ontology-state.js");
+  return { ...state, check: mocks.check, supers: mocks.supers, loadOntology: () => {
+    state.publishOntology({ status: "loading", error: "", timedOut: false });
+    return mocks.loadOntology().then((info: { title: string }) => {
+      state.publishOntology({ status: "ready", title: info.title, revision: state.getOntologyState().revision + 1 });
+      return info;
+    }).catch((error: Error) => {
+      state.publishOntology({ status: "failed", error: error.message });
+      throw error;
+    });
+  } };
+});
 vi.mock("../src/canvas/ZoomBar.js", () => ({ ZoomBar: () => null, loadWheelMode: () => "move", saveWheelMode: () => {} }));
 vi.mock("../src/canvas/BoxNode.js", () => ({ BoxNode: () => null, worst: () => null }));
 vi.mock("../src/canvas/FloatingEdge.js", () => ({ FloatingEdge: () => null }));
 vi.mock("../src/canvas/OpenbisLane.js", () => ({ LaneNode: () => null }));
 vi.mock("../src/canvas/Details.js", () => ({
-  Overview: () => null, ArrowDetails: (props: any) => { mocks.arrowProps = props; return null; },
+  Overview: (props: any) => { mocks.overviewProps = props; return createElement("div", {}, props.children); }, ArrowDetails: (props: any) => { mocks.arrowProps = props; return null; },
   BoxDetails: (props: any) => { mocks.boxProps = props; return null; }, SelectionPanel: () => null,
 }));
 vi.mock("../src/canvas/OptionsPanel.js", () => ({
@@ -95,6 +108,7 @@ const mount = async (mode = plain) => act(async () => { app = createRoot(contain
 const flushFrames = () => { const pending = frames.splice(0); pending.forEach((f) => f(0)); };
 
 beforeEach(() => {
+  resetOntology();
   vi.useFakeTimers();
   mocks.narrow = false;
   layoutWidth = 1200;
@@ -108,6 +122,7 @@ beforeEach(() => {
   });
   mocks.layout.mockReset().mockImplementation(async (bs: Box[]) => bs);
   mocks.check.mockReset();
+  mocks.loadOntology.mockReset().mockResolvedValue({ title: "Test ontology" });
   mocks.supers.mockReset().mockImplementation(async (ids: string[]) => ids.map(() => []));
   mocks.fit.mockClear();
   mocks.initialized = false;
@@ -487,7 +502,7 @@ test.each(["failed import", "identical reopen"])("%s restarts an invalidated ont
   expect(nodes()[0]!.data.problems).toEqual([]);
 });
 
-test("copy keeps late edits attached to the visible original while classification is pending", async () => {
+test("copy preserves its stored other shape and keeps edits attached to the visible copy", async () => {
   const mode = { ...plain, options: true, ontology: true };
   const state = readState(null);
   const original = state.current;
@@ -497,19 +512,17 @@ test("copy keeps late edits attached to the visible original while classificatio
   mocks.check.mockResolvedValue({ result: { findings: [] } });
   await mount(mode);
   await act(async () => [...container.querySelectorAll("button")].find((b) => b.textContent === "Option")!.click());
-  const pending = deferred<string[][]>();
-  mocks.supers.mockImplementationOnce(() => pending.promise);
   await act(async () => mocks.panelProps.onCopy());
-  expect(mocks.supers).toHaveBeenCalledTimes(2);
+  expect(mocks.supers).toHaveBeenCalledTimes(1);
   const copy = mocks.optionProps.current;
   expect(copy.option).not.toBe(original.option);
-  await act(async () => nodes()[0]!.data.onRename!("Late original edit"));
-  // Complete before the debounce: open must flush to the original save destination.
-  await act(async () => pending.resolve([[]]));
+  await act(async () => nodes()[0]!.data.onRename!("Edit while classifying"));
+  // The stored other shape is explicit; copying must not classify it again.
+  await act(async () => vi.advanceTimersByTime(801));
   const saved = readState(storage.get(mode.storageKey)!);
-  expect(saved.options.find((o) => o.id === original.option)!.views[original.view]).toContain("Late original edit");
-  expect(saved.options.find((o) => o.id === copy.option)!.views[copy.view as "dft"]).not.toContain("Late original edit");
-  expect(nodes()[0]!.data.name).toBe("Original");
+  expect(saved.options.find((o) => o.id === original.option)!.views[original.view]).not.toContain("Edit while classifying");
+  expect(saved.options.find((o) => o.id === copy.option)!.views[copy.view as "dft"]).toContain("Edit while classifying");
+  expect(nodes()[0]!.data.name).toBe("Edit while classifying");
 });
 
 test.each(["failure", "success"])("reset %s retains saving until the replacement commits", async (outcome) => {
@@ -807,7 +820,7 @@ test.each(["success", "failure"])("a replaced document discards pending pattern 
   expect(container.textContent).not.toContain("Stale pattern");
 });
 
-test.each(["classification", "layout"])("failed pattern %s preserves content without partial metadata", async (stage) => {
+test.each(["classification", "layout"])("pattern %s failure leaves complete content and metadata", async (stage) => {
   mocks.check.mockResolvedValue({ result: { findings: [] } });
   await mount({ ...plain, patterns: true, ontology: true });
   await insertFirstPattern();
@@ -817,14 +830,21 @@ test.each(["classification", "layout"])("failed pattern %s preserves content wit
   (stage === "classification" ? mocks.supers : mocks.layout).mockImplementationOnce(() => pending.promise);
   await insertFirstPattern();
   await act(async () => pending.reject(new Error("Pattern failed")));
-  expect(container.textContent).toContain("Could not insert the pattern: Pattern failed");
+  expect(container.textContent).toContain(stage === "layout"
+    ? "Could not insert the pattern: Pattern failed" : "Could not classify boxes: Pattern failed");
   await act(async () => vi.advanceTimersByTime(801));
-  expect(storage.get(plain.storageKey)).toBe(before);
-  expect(nodes()).toHaveLength(6);
-  expect(mocks.flowProps.edges).toHaveLength(4);
+  const copies = stage === "layout" ? 1 : 2;
+  if (stage === "layout") expect(storage.get(plain.storageKey)).toBe(before);
+  const reopened = fromMermaid(storage.get(plain.storageKey)!);
+  const uses = readUses(reopened.patternUses);
+  expect(uses).toHaveLength(copies);
+  const ids = new Set(reopened.boxes.map((b) => b.id));
+  for (const use of uses) for (const part of use.parts) expect(ids.has(part.box)).toBe(true);
+  expect(nodes()).toHaveLength(1 + copies * 5);
+  expect(mocks.flowProps.edges).toHaveLength(copies * 4);
   // A subsequent insertion still works after the failure.
   await insertFirstPattern();
-  expect(nodes()).toHaveLength(11);
+  expect(nodes()).toHaveLength(1 + (copies + 1) * 5);
 });
 
 test("a failed picture export reports why, brings the selection back and allows the next one", async () => {
@@ -986,7 +1006,7 @@ test("history belongs to the document on the canvas", async () => {
   expect(nodes()).toEqual([]);
 });
 
-test("a shape found after the class was undone is there when the class is redone", async () => {
+test("undo cancels obsolete classification and redo retries the pending class", async () => {
   mocks.check.mockResolvedValue({ result: { findings: [] } });
   await mount({ ...plain, ontology: true });
   await act(async () => mocks.flowProps.onNodesChange([{ type: "select", id: "A", selected: true }]));
@@ -995,16 +1015,19 @@ test("a shape found after the class was undone is there when the class is redone
   const late = deferred<string[][]>();
   mocks.supers.mockImplementationOnce(() => late.promise);
   await act(async () => mocks.boxProps.onChange({ classId: "TEST_1", classLabel: "a process" }));
+  const signal = mocks.supers.mock.lastCall![1] as AbortSignal;
   await click("Undo"); // before the class has been looked up
+  expect(signal.aborted).toBe(true);
   await act(async () => late.resolve([["COB_0000035"]]));
   expect([box().classId, box().kind]).toEqual(["", "other"]);
   const lookups = mocks.supers.mock.calls.length;
+  mocks.supers.mockResolvedValueOnce([["COB_0000035"]]);
   await click("Redo");
   expect([box().classId, box().kind]).toEqual(["TEST_1", "process"]);
   await click("Undo");
   await click("Redo");
   expect(box().kind).toBe("process");
-  expect(mocks.supers.mock.calls.length).toBe(lookups); // the one answer was enough
+  expect(mocks.supers.mock.calls.length).toBe(lookups + 1); // Only the cancelled lookup is retried.
 });
 
 test("a shape found after later edits is in the earlier steps too", async () => {
@@ -1230,4 +1253,369 @@ test("a pattern file read finishing after unmount cannot overwrite restored patt
   expect(mine.get(MINE_KEY)).toBe(restored);
   expect(loadMine().map((pattern) => pattern.text)).toEqual([BUILT_IN[1]!.text]);
   expect(pendingSaves()).toHaveLength(0);
+});
+
+
+test("saved ontology diagrams open and persist edits while loading fails, then retry without replacing work", async () => {
+  const loading = deferred<{ title: string }>();
+  mocks.loadOntology.mockReturnValueOnce(loading.promise);
+  storage.set(plain.storageKey, 'flowchart TB\nA["Saved<br/>TST_0000001"]');
+  await mount({ ...plain, ontology: true });
+  expect(nodes()[0]!.data.name).toBe("Saved");
+  expect(mocks.supers).not.toHaveBeenCalled();
+  await act(async () => nodes()[0]!.data.onRename!("Edited while loading"));
+  await act(async () => vi.advanceTimersByTime(801));
+  expect(storage.get(plain.storageKey)).toContain("Edited while loading");
+  await act(async () => loading.reject(new Error("offline")));
+  expect(container.querySelector(".status")!.textContent).toContain("offline");
+  expect(mocks.check).not.toHaveBeenCalled();
+  await act(async () => nodes()[0]!.data.onRename!("Edited offline"));
+  await act(async () => vi.advanceTimersByTime(801));
+  expect(storage.get(plain.storageKey)).toContain("Edited offline");
+  mocks.check.mockResolvedValue({ result: { findings: [] } });
+  await act(async () => container.querySelector<HTMLButtonElement>(".status")!.click());
+  await act(async () => vi.advanceTimersByTime(301));
+  expect(mocks.loadOntology).toHaveBeenCalledTimes(2);
+  expect(nodes()[0]!.data.name).toBe("Edited offline");
+  expect(container.querySelector(".status")!.textContent).toBe("Quick check: no problems");
+});
+
+test("pending and failed checks retain previous markers as stale until a successful recheck", async () => {
+  mocks.check.mockResolvedValueOnce({ result: { findings: [
+    { level: "error", message: "Old box error", nodeId: "A" },
+    { level: "error", message: "Old arrow error", edgeIndex: 0 },
+  ] } });
+  await mount({ ...connected, ontology: true, patterns: true });
+  await act(async () => vi.advanceTimersByTime(301));
+  expect(nodes()[0]!.data.problems).toHaveLength(1);
+  expect(mocks.flowProps.edges[0].data.problems).toHaveLength(1);
+  const oldBoxProblems = nodes()[0]!.data.problems;
+  const oldArrowProblems = mocks.flowProps.edges[0].data.problems;
+  const pending = deferred<never>();
+  mocks.check.mockReturnValueOnce(pending.promise);
+  await act(async () => nodes()[0]!.data.onRename!("Changed"));
+  expect(nodes()[0]!.data.problems).toBe(oldBoxProblems);
+  expect(mocks.flowProps.edges[0].data.problems).toBe(oldArrowProblems);
+  expect(container.querySelector(".status")!.classList.contains("unavailable")).toBe(true);
+  expect(container.querySelector(".app")!.classList.contains("validation-stale")).toBe(true);
+  expect(container.querySelector(".status")!.textContent).toContain("Previous markers shown");
+  // More keystrokes keep the same marker data; no clearing and recreating node data.
+  await act(async () => nodes()[0]!.data.onRename!("Changed again"));
+  expect(nodes()[0]!.data.problems).toBe(oldBoxProblems);
+  expect(mocks.flowProps.edges[0].data.problems).toBe(oldArrowProblems);
+  await act(async () => vi.advanceTimersByTime(301));
+  await act(async () => pending.reject(new Error("worker failed")));
+  expect(nodes()[0]!.data.problems).toBe(oldBoxProblems);
+  expect(mocks.flowProps.edges[0].data.problems).toBe(oldArrowProblems);
+  expect(mocks.overviewProps.findings).toEqual([]);
+  expect(mocks.overviewProps.passed).toEqual([]);
+  expect(container.querySelector(".status")!.textContent).toContain("worker failed");
+  expect(container.querySelector(".status")!.classList.contains("good")).toBe(false);
+  mocks.check.mockResolvedValue({ result: { findings: [] } });
+  await act(async () => container.querySelector<HTMLButtonElement>(".status")!.click());
+  await act(async () => vi.advanceTimersByTime(301));
+  expect(container.querySelector(".status")!.textContent).toBe("Quick check: no problems");
+  expect(container.querySelector(".app")!.classList.contains("validation-stale")).toBe(false);
+  expect(nodes()[0]!.data.problems).toEqual([]);
+  expect(mocks.flowProps.edges[0].data.problems).toEqual([]);
+});
+
+test("option documents remain editable and saveable when initial ontology loading fails", async () => {
+  const mode = { ...plain, options: true, ontology: true };
+  const state = readState(null);
+  const { option, view } = state.current;
+  state.options.find((o) => o.id === option)!.views[view] = 'flowchart TB\nA["Saved option<br/>TST_0000001"]';
+  storage.set(mode.storageKey, JSON.stringify(state));
+  mocks.loadOntology.mockRejectedValueOnce(new Error("offline"));
+  await mount(mode);
+  expect(nodes()[0]!.data.name).toBe("Saved option");
+  await act(async () => nodes()[0]!.data.onRename!("Edited option offline"));
+  await act(async () => vi.advanceTimersByTime(801));
+  const saved = readState(storage.get(mode.storageKey)!);
+  expect(saved.options.find((o) => o.id === option)!.views[view]).toContain("Edited option offline");
+  expect(mocks.check).not.toHaveBeenCalled();
+});
+
+test("arrow-only edits persist without an available ontology", async () => {
+  mocks.loadOntology.mockRejectedValueOnce(new Error("offline"));
+  await mount({ ...connected, ontology: true });
+  const arrow = mocks.flowProps.edges[0];
+  await act(async () => mocks.flowProps.onEdgesChange([{ type: "select", id: arrow.id, selected: true }]));
+  await act(async () => mocks.arrowProps.onChange({ name: "offline relation", words: "offline relation" }));
+  await act(async () => vi.advanceTimersByTime(801));
+  expect(storage.get(plain.storageKey)).toContain("offline relation");
+  expect(mocks.check).not.toHaveBeenCalled();
+});
+
+test("background classification preserves edits and cannot update a replacement document", async () => {
+  const classification = deferred<string[][]>();
+  mocks.supers.mockReturnValueOnce(classification.promise);
+  mocks.check.mockResolvedValue({ result: { findings: [] } });
+  const mode = { ...plain, ontology: true, examples: [{ title: "Classed", name: "classed.mmd",
+    text: 'flowchart TB\nA["Original<br/>TST_0000001"]' }] };
+  await mount(mode);
+  await act(async () => nodes()[0]!.data.onRename!("Keep this edit"));
+  await act(async () => classification.resolve([["COB_0000035"]]));
+  expect(nodes()[0]!.data.name).toBe("Keep this edit");
+  expect(nodes()[0]!.data.kind).toBe("process");
+  await click("Undo");
+  expect(nodes()[0]!.data.name).toBe("Original");
+  expect(nodes()[0]!.data.kind).toBe("process");
+
+  const late = deferred<string[][]>();
+  mocks.supers.mockReturnValueOnce(late.promise);
+  await act(async () => [...container.querySelectorAll("button")].find((b) => b.textContent === "Classed")!.click());
+  await click("New");
+  await act(async () => late.resolve([["COB_0000035"]]));
+  expect(nodes()).toEqual([]);
+});
+
+test("classifying an untouched example does not save it as user work", async () => {
+  mocks.supers.mockResolvedValue([["COB_0000035"]]);
+  mocks.check.mockResolvedValue({ result: { findings: [] } });
+  await mount({ ...plain, ontology: true, examples: [{ title: "Classed", name: "classed.mmd",
+    text: 'flowchart TB\nA["Original<br/>TST_0000001"]' }] });
+  expect(nodes()[0]!.data.kind).toBe("process");
+  await act(async () => vi.advanceTimersByTime(1000));
+  expect(storage.has(plain.storageKey)).toBe(false);
+});
+
+test("recovery initiated elsewhere resumes automatic validation after initial loading fails", async () => {
+  mocks.loadOntology.mockRejectedValueOnce(new Error("offline"));
+  mocks.check.mockResolvedValue({ result: { findings: [] } });
+  await mount({ ...plain, ontology: true });
+  expect(container.querySelector(".status")!.textContent).toContain("offline");
+  await act(async () => publishOntology({ status: "loading", error: "" }));
+  await act(async () => publishOntology({ status: "ready", title: "Recovered ontology", revision: 1 }));
+  await act(async () => vi.advanceTimersByTime(301));
+  expect(mocks.check).toHaveBeenCalledTimes(1);
+  expect(mocks.loadOntology).toHaveBeenCalledTimes(1); // No separate App retry.
+  expect(container.querySelector(".status")!.textContent).toBe("Quick check: no problems");
+  await act(async () => nodes()[0]!.data.onRename!("Still checking"));
+  await act(async () => vi.advanceTimersByTime(301));
+  expect(mocks.check).toHaveBeenCalledTimes(2);
+});
+
+test("an explicitly stored other shape is not automatically classified on open or recovery", async () => {
+  storage.set(plain.storageKey, 'flowchart TB\nA["Deliberate shape<br/>TST_0000001"]\n%% mermantics-kinds {"A":"other"}');
+  mocks.check.mockResolvedValue({ result: { findings: [] } });
+  await mount({ ...plain, ontology: true });
+  expect(nodes()[0]!.data.kind).toBe("other");
+  expect(mocks.supers).not.toHaveBeenCalled();
+  await act(async () => publishOntology({ status: "failed", error: "crash" }));
+  await act(async () => publishOntology({ status: "ready", revision: 2, error: "" }));
+  await act(async () => vi.advanceTimersByTime(301));
+  expect(nodes()[0]!.data.kind).toBe("other");
+  expect(mocks.supers).not.toHaveBeenCalled();
+});
+
+test("choosing other cancels pending import classification, including history amendments and retries", async () => {
+  const pending = deferred<string[][]>();
+  mocks.supers.mockReturnValueOnce(pending.promise);
+  mocks.check.mockResolvedValue({ result: { findings: [] } });
+  await mount({ ...plain, ontology: true, examples: [{ title: "Classed", name: "classed.mmd",
+    text: 'flowchart TB\nA["Original<br/>TST_0000001"]' }] });
+  await act(async () => mocks.flowProps.onNodesChange([{ type: "select", id: "A", selected: true }]));
+  await act(async () => mocks.boxProps.onChange({ kind: "other" }));
+  await act(async () => nodes()[0]!.data.onRename!("Renamed"));
+  await act(async () => pending.resolve([["COB_0000035"]]));
+  expect(nodes()[0]!.data.kind).toBe("other");
+  await click("Undo");
+  expect(nodes()[0]!.data.kind).toBe("other");
+  await act(async () => publishOntology({ status: "failed", error: "crash" }));
+  await act(async () => container.querySelector<HTMLButtonElement>(".status")!.click());
+  expect(mocks.supers).toHaveBeenCalledTimes(1);
+  expect(nodes()[0]!.data.kind).toBe("other");
+});
+
+test("a new ontology generation revalidates even when failure and recovery are batched", async () => {
+  mocks.check.mockResolvedValue({ result: { findings: [] } });
+  await mount({ ...plain, ontology: true });
+  await act(async () => vi.advanceTimersByTime(301));
+  expect(mocks.check).toHaveBeenCalledTimes(1);
+  await act(async () => {
+    publishOntology({ status: "failed", error: "crash" });
+    publishOntology({ status: "ready", revision: 2, error: "" });
+  });
+  await act(async () => vi.advanceTimersByTime(301));
+  expect(mocks.check).toHaveBeenCalledTimes(2);
+});
+
+for (const interrupted of ["offline", "still loading"]) {
+  test(`autosaving while ontology is ${interrupted} preserves automatic classification after remount`, async () => {
+    storage.set(plain.storageKey, 'flowchart TB\nA["Saved<br/>TST_0000001"]');
+    const loading = deferred<{ title: string }>();
+    if (interrupted === "offline") mocks.loadOntology.mockRejectedValueOnce(new Error("offline"));
+    else mocks.loadOntology.mockReturnValueOnce(loading.promise);
+    await mount({ ...plain, ontology: true });
+    await act(async () => vi.advanceTimersByTime(801));
+    const saved = storage.get(plain.storageKey)!;
+    expect(saved).not.toContain('"A":"other"');
+    expect(fromMermaid(saved).unclassified).toEqual(["A"]);
+    await act(async () => app.unmount());
+    mocks.supers.mockResolvedValue([["COB_0000035"]]);
+    mocks.check.mockResolvedValue({ result: { findings: [] } });
+    await mount({ ...plain, ontology: true });
+    expect(mocks.supers).toHaveBeenCalledWith(["TST_0000001"], expect.any(AbortSignal));
+    expect(nodes()[0]!.data.kind).toBe("process");
+    await act(async () => vi.advanceTimersByTime(801));
+    expect(storage.get(plain.storageKey)).toContain('"A":"process"');
+  });
+}
+
+for (const explicit of [false, true]) {
+  test(`export during ontology loading preserves ${explicit ? "an explicit other shape" : "pending classification"}`, async () => {
+    storage.set(plain.storageKey, 'flowchart TB\nA["Saved<br/>TST_0000001"]');
+    mocks.loadOntology.mockReturnValueOnce(deferred<{ title: string }>().promise);
+    await mount({ ...plain, ontology: true });
+    if (explicit) {
+      await act(async () => mocks.flowProps.onNodesChange([{ type: "select", id: "A", selected: true }]));
+      await act(async () => mocks.boxProps.onChange({ kind: "other" }));
+    }
+    let exported: Blob | undefined;
+    vi.spyOn(URL, "createObjectURL").mockImplementation((blob) => { exported = blob as Blob; return "blob:export"; });
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    await act(async () => [...container.querySelectorAll("button")].find((b) => b.textContent?.startsWith("Mermaid diagram"))!.click());
+    const text = await exported!.text();
+    expect(fromMermaid(text).unclassified).toEqual(explicit ? [] : ["A"]);
+    expect(text.includes('"A":"other"')).toBe(explicit);
+  });
+}
+
+test("worker failures after loading are reported as checker unavailability", async () => {
+  mocks.check.mockResolvedValue({ result: { findings: [] } });
+  await mount({ ...plain, ontology: true });
+  await act(async () => publishOntology({ status: "failed", error: "Checker worker timed out during check; try again" }));
+  const status = container.querySelector(".status")!.textContent;
+  expect(status).toContain("Checker unavailable:");
+  expect(status).toContain("timed out during check");
+  expect(status).not.toContain("Could not load the ontology");
+});
+
+test("timeout recovery offers a longer limit and keeps the current diagram", async () => {
+  mocks.check.mockResolvedValue({ result: { findings: [] } });
+  await mount({ ...plain, ontology: true });
+  await act(async () => publishOntology({ status: "failed", timedOut: true, error: "Timed out" }));
+  expect(container.querySelector(".status")!.textContent).toContain("Retry with 5 minutes");
+  await act(async () => [...container.querySelectorAll("button")].find((b) => b.textContent === "Retry with 5 minutes")!.click());
+  expect(getOntologyState().timeoutMs).toBe(300_000);
+  expect(mocks.loadOntology).toHaveBeenCalledTimes(2);
+  expect(nodes()[0]!.data.name).toBe("Original");
+  await act(async () => vi.advanceTimersByTime(301));
+  expect(container.querySelector(".status")!.textContent).toBe("Quick check: no problems");
+  const select = container.querySelector<HTMLSelectElement>('[aria-label="Checking time limit"]')!;
+  expect(select.value).toBe("300000");
+  await act(async () => { select.value = "600000"; select.dispatchEvent(new Event("change", { bubbles: true })); });
+  expect(getOntologyState().timeoutMs).toBe(600_000);
+});
+
+for (const unavailable of ["loading", "offline"]) {
+  test(`patterns insert and save while the ontology is ${unavailable}, then classify after recovery`, async () => {
+    const loading = deferred<{ title: string }>();
+    if (unavailable === "loading") mocks.loadOntology.mockReturnValueOnce(loading.promise);
+    else mocks.loadOntology.mockRejectedValueOnce(new Error("offline"));
+    mocks.check.mockResolvedValue({ result: { findings: [] } });
+    await mount({ ...plain, ontology: true, patterns: true });
+    await insertFirstPattern();
+    const pending = nodes().filter((b) => b.data.autoClassify);
+    expect(pending.length).toBeGreaterThan(0);
+    expect(nodes().length).toBeGreaterThan(1);
+    expect(mocks.supers).not.toHaveBeenCalled();
+    expect(container.textContent).not.toContain("Could not insert the pattern");
+    await act(async () => vi.advanceTimersByTime(801));
+    const saved = fromMermaid(storage.get(plain.storageKey)!);
+    for (const box of pending) expect(saved.unclassified).toContain(box.id);
+
+    mocks.supers.mockImplementation(async (ids: string[]) => ids.map(() => ["COB_0000035"]));
+    if (unavailable === "loading") await act(async () => loading.resolve({ title: "Recovered ontology" }));
+    else await act(async () => publishOntology({ status: "ready", title: "Recovered ontology", revision: 1, error: "" }));
+    for (const box of pending) {
+      const current = nodes().find((b) => b.id === box.id)!;
+      expect(current.data.kind).toBe("process");
+      expect(current.data.autoClassify).toBeUndefined();
+    }
+    await click("Undo");
+    expect(nodes().map((b) => b.id)).toEqual(["A"]);
+    await click("Redo");
+    for (const box of pending) expect(nodes().find((b) => b.id === box.id)!.data.kind).toBe("process");
+  });
+}
+
+test("patterns in a plain modelling section do not request ontology classification", async () => {
+  await mount({ ...plain, patterns: true });
+  await insertFirstPattern();
+  expect(nodes().length).toBeGreaterThan(1);
+  expect(mocks.supers).not.toHaveBeenCalled();
+  expect(mocks.loadOntology).not.toHaveBeenCalled();
+});
+
+for (const outcome of ["success", "failure"]) {
+  test(`a ready ontology cannot delay pattern placement, even when classification ends in ${outcome}`, async () => {
+    mocks.check.mockResolvedValue({ result: { findings: [] } });
+    await mount({ ...plain, ontology: true, patterns: true });
+    expect(getOntologyState().status).toBe("ready");
+    const classification = deferred<string[][]>();
+    mocks.supers.mockReturnValueOnce(classification.promise);
+    await insertFirstPattern();
+    const inserted = nodes().filter((b) => b.data.autoClassify);
+    expect(inserted.length).toBeGreaterThan(0);
+    expect(mocks.supers).toHaveBeenCalledTimes(1);
+    // Classification is still pending: placement and persistence must already work.
+    await act(async () => vi.advanceTimersByTime(801));
+    const saved = fromMermaid(storage.get(plain.storageKey)!);
+    for (const box of inserted) expect(saved.unclassified).toContain(box.id);
+    if (outcome === "success") {
+      await act(async () => classification.resolve(inserted.map(() => ["COB_0000035"])));
+      for (const box of inserted) expect(nodes().find((b) => b.id === box.id)!.data.kind).toBe("process");
+    } else {
+      await act(async () => classification.reject(new Error("worker crashed")));
+      for (const box of inserted) expect(nodes().find((b) => b.id === box.id)!.data.autoClassify).toBe(box.data.classId);
+      expect(container.textContent).toContain("Could not classify boxes: worker crashed");
+    }
+    expect(container.textContent).not.toContain("Could not insert the pattern");
+    await click("Undo");
+    expect(nodes().map((b) => b.id)).toEqual(["A"]);
+  });
+}
+
+for (const failure of ["ontology unavailable", "lookup failed"]) {
+  test(`manual class assignments persist and classify after recovery when ${failure}`, async () => {
+    mocks.check.mockResolvedValue({ result: { findings: [] } });
+    if (failure === "ontology unavailable") mocks.loadOntology.mockRejectedValueOnce(new Error("offline"));
+    await mount({ ...plain, ontology: true });
+    await act(async () => mocks.flowProps.onNodesChange([{ type: "select", id: "A", selected: true }]));
+    if (failure === "lookup failed") mocks.supers.mockRejectedValueOnce(new Error("worker failed"));
+    await act(async () => mocks.boxProps.onChange({ classId: "TST_0000001", classLabel: "chosen class" }));
+    expect(nodes()[0]!.data.autoClassify).toBe("TST_0000001");
+    expect(nodes()[0]!.data.kind).toBe("other");
+    if (failure === "ontology unavailable") expect(mocks.supers).not.toHaveBeenCalled();
+    else expect(container.textContent).toContain("Could not classify boxes: worker failed");
+    await act(async () => vi.advanceTimersByTime(801));
+    expect(fromMermaid(storage.get(plain.storageKey)!).unclassified).toEqual(["A"]);
+    mocks.supers.mockResolvedValue([["COB_0000035"]]);
+    await act(async () => publishOntology({ status: "ready", error: "", revision: 2 }));
+    expect(nodes()[0]!.data.kind).toBe("process");
+    expect(nodes()[0]!.data.autoClassify).toBeUndefined();
+    await click("Undo");
+    expect(nodes()[0]!.data.classId).toBe("");
+    await click("Redo");
+    expect(nodes()[0]!.data.kind).toBe("process");
+  });
+}
+
+test("an explicit shape cancels manual classification and prevents recovery from overwriting it", async () => {
+  mocks.check.mockResolvedValue({ result: { findings: [] } });
+  await mount({ ...plain, ontology: true });
+  await act(async () => mocks.flowProps.onNodesChange([{ type: "select", id: "A", selected: true }]));
+  const pending = deferred<string[][]>();
+  mocks.supers.mockReturnValueOnce(pending.promise);
+  await act(async () => mocks.boxProps.onChange({ classId: "TST_0000001" }));
+  const signal = mocks.supers.mock.lastCall![1] as AbortSignal;
+  await act(async () => mocks.boxProps.onChange({ kind: "other" }));
+  expect(signal.aborted).toBe(true);
+  expect(nodes()[0]!.data.autoClassify).toBeUndefined();
+  await act(async () => pending.resolve([["COB_0000035"]]));
+  await act(async () => publishOntology({ status: "ready", revision: 2 }));
+  expect(nodes()[0]!.data.kind).toBe("other");
+  expect(mocks.supers).toHaveBeenCalledTimes(1);
 });

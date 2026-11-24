@@ -1,9 +1,8 @@
 /**
  * Owns the ontology store and runs the checks, so the page never freezes while
- * parsing the ontology or checking a large diagram. Loads and checks are handled one at a
- * time, in the order they arrive. Term searches are answered at once from the index of the
- * current ontology, so typing in a search field does not wait for a check or a download.
- * Class trees wait in the queue, so they are answered once the ontology has loaded.
+ * parsing the ontology or checking a large diagram. The client dispatches one request
+ * at a time, so searches can wait behind a load or check. This worker also queues loads,
+ * checks and class trees in arrival order; other lookups use the current ontology index.
  */
 
 import { DataFactory } from "n3";

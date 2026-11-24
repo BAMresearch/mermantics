@@ -1,7 +1,8 @@
 import { useEffect, useState, type ReactNode } from "react";
 
 import type { Term } from "../core/terms.js";
-import { lookup } from "./checker.js";
+import { lookup, type OntologyState } from "./checker.js";
+import { useOntology } from "./useOntology.js";
 import { DatastoreArrowSection, DatastoreBoxSection } from "./DatastorePanel.js";
 import type { Arrow, ArrowData, Box, BoxData, Problem } from "./model.js";
 import { shapeOf, statusOf, TERM_STATUSES, type Shape, type ShapeKind } from "./palette.js";
@@ -13,11 +14,12 @@ export interface GlobalFinding extends Problem {
   target?: { box?: string; arrow?: string };
 }
 
-function Problems({ problems }: { problems: Problem[] }) {
+function Problems({ problems, stale }: { problems: Problem[]; stale: boolean }) {
   if (!problems.length) return null;
   return (
     <section className="panel-section">
-      <h3>Problems</h3>
+      <h3>{stale ? "Previous findings" : "Problems"}</h3>
+      {stale && <p className="muted">These findings have not been confirmed for the current diagram.</p>}
       <ul className="problems">
         {problems.map((p, i) => (
           <li key={i} className={p.level}>
@@ -31,15 +33,24 @@ function Problems({ problems }: { problems: Problem[] }) {
   );
 }
 
-function useTerm(id: string): Term | null {
+function useTerm(id: string) {
   const [term, setTerm] = useState<Term | null>(null);
+  const [error, setError] = useState("");
+  const [retry, setRetry] = useState(0);
+  const { revision } = useOntology();
   useEffect(() => {
     let live = true;
     setTerm(null);
-    if (id) lookup([id]).then(([t]) => { if (live) setTerm(t ?? null); }).catch(() => {});
+    setError("");
+    if (id) lookup([id]).then(([t]) => { if (live) setTerm(t ?? null); })
+      .catch((e: Error) => { if (live) setError(e.message); });
     return () => { live = false; };
-  }, [id]);
-  return term;
+  }, [id, retry, revision]);
+  return { term, error, retry: () => setRetry((r) => r + 1) };
+}
+
+function TermError({ error, retry }: { error: string; retry: () => void }) {
+  return error ? <p role="alert">Could not load term details: {error} <button type="button" onClick={retry}>Retry details</button></p> : null;
 }
 
 export interface QuestionLink {
@@ -50,7 +61,8 @@ export interface QuestionLink {
 }
 
 export function BoxDetails({ box, shapes, ontology, datastore = false, boxes = [], onChange, onDelete, questions = [],
-                            onToggleQuestion, parts = [], termStatus = false }: {
+                            onToggleQuestion, parts = [], termStatus = false, validationStale = false }: {
+  validationStale?: boolean;
   termStatus?: boolean; // design options: is this box an existing, proposed, changed or deprecated term?
   box: Box;
   shapes: Shape[]; // the shapes a box can be shown as in this section
@@ -64,7 +76,7 @@ export function BoxDetails({ box, shapes, ontology, datastore = false, boxes = [
   parts?: { pattern: string; part: string }[]; // the pattern parts this box plays
 }) {
   const d = box.data;
-  const term = useTerm(d.classId);
+  const { term, error, retry } = useTerm(d.classId);
   const [changing, setChanging] = useState(false);
   useEffect(() => setChanging(false), [box.id]);
   const shape = shapes.find((s) => s.kind === d.kind) ?? shapeOf(d.kind);
@@ -144,6 +156,7 @@ export function BoxDetails({ box, shapes, ontology, datastore = false, boxes = [
               <div className="class-label">{term?.label ?? d.classLabel}</div>
               <div className="class-id">{d.classId}</div>
               {term?.definition && <p className="class-def">{term.definition}</p>}
+              <TermError error={error} retry={retry} />
               {!changing && <button type="button" className="link" onClick={() => setChanging(true)}>Choose a more specific kind...</button>}
             </div>
           ) : (
@@ -186,7 +199,7 @@ export function BoxDetails({ box, shapes, ontology, datastore = false, boxes = [
         </section>
       )}
 
-      <Problems problems={d.problems} />
+      <Problems problems={d.problems} stale={validationStale} />
 
       <div className="panel-actions">
         <span className="muted">Box id: {box.id}</span>
@@ -196,7 +209,8 @@ export function BoxDetails({ box, shapes, ontology, datastore = false, boxes = [
   );
 }
 
-export function ArrowDetails({ arrow, srcName, dstName, dstKind, ontology, datastore = false, onChange, onReconnect, onSwap, onFlip, onDelete }: {
+export function ArrowDetails({ arrow, srcName, dstName, dstKind, ontology, datastore = false, onChange, onReconnect, onSwap, onFlip, onDelete, validationStale = false }: {
+  validationStale?: boolean;
   arrow: Arrow;
   ontology: boolean; // false in process modelling: arrows are plain words
   datastore?: boolean; // BAM Data Store: parent-child arrows and datasets, no relation to choose
@@ -210,7 +224,7 @@ export function ArrowDetails({ arrow, srcName, dstName, dstKind, ontology, datas
   onDelete: () => void;
 }) {
   const d = arrow.data!;
-  const term = useTerm(d.curie);
+  const { term, error, retry } = useTerm(d.curie);
   return (
     <div className="panel">
       <div className="panel-kind"><span className="dot" />Arrow</div>
@@ -239,6 +253,7 @@ export function ArrowDetails({ arrow, srcName, dstName, dstKind, ontology, datas
               <div className="class-label">{term?.label ?? d.name}</div>
               <div className="class-id">{d.curie}</div>
               {term?.definition && <p className="class-def">{term.definition}</p>}
+              <TermError error={error} retry={retry} />
               <p className="muted-inline">So it is checked like this relation: it must fit the same kinds of boxes.</p>
             </div>
           ) : (
@@ -256,6 +271,7 @@ export function ArrowDetails({ arrow, srcName, dstName, dstKind, ontology, datas
               <div className="class-label">{term?.label ?? d.name}</div>
               <div className="class-id">{d.curie}</div>
               {term?.definition && <p className="class-def">{term.definition}</p>}
+              <TermError error={error} retry={retry} />
             </div>
           ) : (
             <label className="field">
@@ -266,7 +282,7 @@ export function ArrowDetails({ arrow, srcName, dstName, dstKind, ontology, datas
           <button type="button" className="link" onClick={onReconnect}>Choose another relation...</button>
         </section>
       )}
-      <Problems problems={d.problems} />
+      <Problems problems={d.problems} stale={validationStale} />
       <div className="panel-actions">
         <span />
         <button type="button" className="danger" onClick={onDelete}>Delete arrow</button>
@@ -275,17 +291,18 @@ export function ArrowDetails({ arrow, srcName, dstName, dstKind, ontology, datas
   );
 }
 
-export function Overview({ status, ontology, datastore = false, checkedAgainst = "", findings, passed, onSelect, uses = [], onForget,
+export function Overview({ status, ontology, ontologyState = "idle", datastore = false, checkedAgainst = "", findings, passed, onSelect, uses = [], onForget,
                           ownRelations = [], onForgetRelation, children }: {
   status: string;
   datastore?: boolean;
   children?: ReactNode; // shown after the status
   ontology: boolean; // false in process modelling: nothing is checked
+  ontologyState?: OntologyState["status"];
   checkedAgainst?: string; // the ontology's title, or why it could not be loaded
   findings: GlobalFinding[];
   passed: string[];
   onSelect: (target: GlobalFinding["target"]) => void;
-  uses?: { id: string; title: string; version: string; boxes: number; problems: number }[];
+  uses?: { id: string; title: string; version: string; boxes: number; problems: number | null }[];
   onForget?: (useId: string) => void;
   ownRelations?: OwnRelation[];
   onForgetRelation?: (r: OwnRelation) => void;
@@ -293,9 +310,8 @@ export function Overview({ status, ontology, datastore = false, checkedAgainst =
   return (
     <div className="panel">
       <div className="panel-kind"><span className="dot" />Your model</div>
-      {ontology && checkedAgainst && (checkedAgainst.startsWith("Could not")
-        ? <p className="muted-inline">{checkedAgainst}</p>
-        : <p className="muted-inline">{QUICK_CHECK_HINT}</p>)}
+      {ontology && checkedAgainst && (ontologyState === "ready" || checkedAgainst !== status)
+        && <p className="muted-inline">{ontologyState === "ready" ? QUICK_CHECK_HINT : checkedAgainst}</p>}
       <p className="muted">{status}</p>
       {children}
       {findings.length > 0 && (
@@ -317,7 +333,7 @@ export function Overview({ status, ontology, datastore = false, checkedAgainst =
           <ul className="uses">
             {uses.map((u) => (
               <li key={u.id}>
-                <span className={`pill ${u.problems ? "warning" : "ok"}`}>{u.problems ? `${u.problems} to fix` : "follows it"}</span>
+                <span className={`pill ${u.problems === null ? "" : u.problems ? "warning" : "ok"}`}>{u.problems === null ? "not checked" : u.problems ? `${u.problems} to fix` : "follows it"}</span>
                 <span className="use-title">{u.title}{u.version ? ` ${u.version}` : ""}</span>
                 <button type="button" className="link" title="Keep the boxes, but stop checking them against this pattern"
                         onClick={() => onForget?.(u.id)}>Stop checking</button>

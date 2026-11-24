@@ -26,6 +26,7 @@ export interface BoxData extends Record<string, unknown> {
   name: string;
   kind: ShapeKind;
   classId: string; // "" if none yet
+  autoClassify?: string; // class awaiting an automatic shape; omit its temporary other kind on export
   classLabel: string; // the ontology's label for classId
   lines: string[]; // extra text lines (fields, comments); for a vocabulary: "CODE: ID label"
   css: string[]; // Mermaid style classes, kept on import and export
@@ -252,7 +253,10 @@ export function toMermaid(boxes: Box[], arrows: Arrow[], useCase: UseCase = empt
   out.push(LAYOUT_PREFIX + JSON.stringify(pos));
   // Notes and lists of options are known from their style class; the other kinds are kept here.
   const kinds: Record<string, ShapeKind> = {};
-  for (const b of boxes) if (b.data.kind !== "note" && b.data.kind !== "vocab") kinds[b.id] = b.data.kind;
+  for (const b of boxes) {
+    const awaiting = b.data.kind === "other" && b.data.classId && b.data.autoClassify === b.data.classId;
+    if (b.data.kind !== "note" && b.data.kind !== "vocab" && !awaiting) kinds[b.id] = b.data.kind;
+  }
   if (Object.keys(kinds).length) out.push(KINDS_PREFIX + JSON.stringify(kinds));
   // The user's own kinds of thing for "something else" boxes (process modelling).
   const kindNames: Record<string, string> = {};
@@ -278,6 +282,8 @@ export interface Imported {
   useCase: UseCase;
   patternUses: unknown; // read with patterns.readUses
   warnings: string[];
+  /** Classed boxes without an explicitly stored shape, eligible for automatic classification. */
+  unclassified: string[];
 }
 
 function readBox(raw: string, css: Set<string>, storedKind: unknown): Pick<BoxData, "name" | "kind" | "classId" | "classLabel" | "lines" | "css" | "openbis"> {
@@ -384,6 +390,7 @@ export function fromMermaid(text: string): Imported {
     const p = pos[node.id];
     const data = readBox(node.label, node.css, kinds[node.id]);
     const extra: Partial<BoxData> = {};
+    if (data.kind === "other" && data.classId && !isShapeKind(kinds[node.id])) extra.autoClassify = data.classId;
     const kindName = kindNames[node.id];
     if (data.kind === "other" && typeof kindName === "string" && kindName.trim()) extra.kindName = kindName.trim();
     if (DATASTORE_KINDS.has(data.kind)) {
@@ -416,5 +423,7 @@ export function fromMermaid(text: string): Imported {
     }
     return { id: `a${i}`, source: e.src, target: e.dst, data: { kind: "relation", name, curie, words, own, problems: [] } };
   });
-  return { boxes, arrows, positioned: boxes.every((b) => pos[b.id] !== undefined), useCase, patternUses, warnings };
+  const unclassified = boxes.filter((b) => b.data.kind === "other" && b.data.classId && !isShapeKind(kinds[b.id]))
+    .map((b) => b.id);
+  return { boxes, arrows, unclassified, positioned: boxes.every((b) => pos[b.id] !== undefined), useCase, patternUses, warnings };
 }

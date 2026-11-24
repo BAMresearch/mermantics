@@ -102,6 +102,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .status { position: absolute; left: calc(50% + 95px); bottom: 16px; transform: translateX(-50%); white-space: nowrap; z-index: 5; border: 1px solid var(--line);
   background: #fff; border-radius: 999px; padding: 6px 16px; box-shadow: 0 2px 10px rgb(15 23 42 / 0.08); cursor: pointer; font-weight: 500; }
 .status::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 8px; vertical-align: 1px; background: #16a34a; }
+.status.unavailable::before { background: var(--muted); }
 .status.warn::before { background: var(--warning); }
 .status.bad::before { background: var(--error); }
 .notice { position: absolute; top: 12px; left: 12px; right: 12px; z-index: 5; background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 8px 12px; font-size: 13px; cursor: pointer; }
@@ -575,3 +576,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .save-notice small { display: block; margin-top: 5px; }
 .start > .save-notice { width: 100%; box-sizing: border-box; text-align: left; }
 .recovery-restore { margin-top: 20px; }
+
+/* Keep previous markers visible during rechecking, without presenting them as current. */
+.validation-stale .box.has-error, .validation-stale .box.has-warning { border-style: dashed; }
+.validation-stale .box .badge { opacity: 0.65; filter: saturate(0.45); }
+.validation-stale .react-flow__edge.validation-problem { opacity: 0.55; }
