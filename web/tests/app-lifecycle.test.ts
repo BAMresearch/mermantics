@@ -3,6 +3,7 @@
 import { createElement, act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { publishOntology, resetOntology } from "./helpers/ontology-state.js";
 import type { Box } from "../src/canvas/model.js";
 
 const mocks = vi.hoisted(() => ({ loadOntology: vi.fn(), overviewProps: {} as any, narrow: false, flowRenders: 0, layout: vi.fn(), check: vi.fn(), supers: vi.fn(), fit: vi.fn(), initialized: false, cloneOnSet: false, picture: vi.fn(), nodes: [] as Box[], flowProps: {} as any, optionProps: {} as any, panelProps: {} as any, relationProps: {} as any, linkProps: {} as any, arrowProps: {} as any, boxProps: {} as any }));
@@ -38,7 +39,19 @@ vi.mock("../src/canvas/canvasImage.js", () => ({
   afterPaint: async () => {}, drawnBounds: () => ({ x: 0, y: 0, width: 100, height: 50 }), canvasImage: mocks.picture,
 }));
 vi.mock("../src/canvas/media.js", () => ({ NARROW: "narrow", TOUCH: "touch", useMedia: (query: string) => query === "narrow" && mocks.narrow }));
-vi.mock("../src/canvas/checker.js", () => ({ check: mocks.check, supers: mocks.supers, loadOntology: mocks.loadOntology }));
+vi.mock("../src/canvas/checker.js", async () => {
+  const state = await import("./helpers/ontology-state.js");
+  return { ...state, check: mocks.check, supers: mocks.supers, loadOntology: () => {
+    state.publishOntology({ status: "loading", error: "" });
+    return mocks.loadOntology().then((info: { title: string }) => {
+      state.publishOntology({ status: "ready", title: info.title, revision: state.getOntologyState().revision + 1 });
+      return info;
+    }).catch((error: Error) => {
+      state.publishOntology({ status: "failed", error: error.message });
+      throw error;
+    });
+  } };
+});
 vi.mock("../src/canvas/ZoomBar.js", () => ({ ZoomBar: () => null, loadWheelMode: () => "move", saveWheelMode: () => {} }));
 vi.mock("../src/canvas/BoxNode.js", () => ({ BoxNode: () => null, worst: () => null }));
 vi.mock("../src/canvas/FloatingEdge.js", () => ({ FloatingEdge: () => null }));
@@ -95,6 +108,7 @@ const mount = async (mode = plain) => act(async () => { app = createRoot(contain
 const flushFrames = () => { const pending = frames.splice(0); pending.forEach((f) => f(0)); };
 
 beforeEach(() => {
+  resetOntology();
   vi.useFakeTimers();
   mocks.narrow = false;
   layoutWidth = 1200;
@@ -488,7 +502,7 @@ test.each(["failed import", "identical reopen"])("%s restarts an invalidated ont
   expect(nodes()[0]!.data.problems).toEqual([]);
 });
 
-test("copy opens before classification finishes and keeps edits attached to the visible copy", async () => {
+test("copy preserves its stored other shape and keeps edits attached to the visible copy", async () => {
   const mode = { ...plain, options: true, ontology: true };
   const state = readState(null);
   const original = state.current;
@@ -498,16 +512,13 @@ test("copy opens before classification finishes and keeps edits attached to the 
   mocks.check.mockResolvedValue({ result: { findings: [] } });
   await mount(mode);
   await act(async () => [...container.querySelectorAll("button")].find((b) => b.textContent === "Option")!.click());
-  const pending = deferred<string[][]>();
-  mocks.supers.mockImplementationOnce(() => pending.promise);
   await act(async () => mocks.panelProps.onCopy());
-  expect(mocks.supers).toHaveBeenCalledTimes(2);
+  expect(mocks.supers).toHaveBeenCalledTimes(1);
   const copy = mocks.optionProps.current;
   expect(copy.option).not.toBe(original.option);
   await act(async () => nodes()[0]!.data.onRename!("Edit while classifying"));
-  // The copy is already open and saveable, even while classification is pending.
+  // The stored other shape is explicit; copying must not classify it again.
   await act(async () => vi.advanceTimersByTime(801));
-  await act(async () => pending.resolve([[]]));
   const saved = readState(storage.get(mode.storageKey)!);
   expect(saved.options.find((o) => o.id === original.option)!.views[original.view]).not.toContain("Edit while classifying");
   expect(saved.options.find((o) => o.id === copy.option)!.views[copy.view as "dft"]).toContain("Edit while classifying");
@@ -1346,4 +1357,65 @@ test("classifying an untouched example does not save it as user work", async () 
   expect(nodes()[0]!.data.kind).toBe("process");
   await act(async () => vi.advanceTimersByTime(1000));
   expect(storage.has(plain.storageKey)).toBe(false);
+});
+
+test("recovery initiated elsewhere resumes automatic validation after initial loading fails", async () => {
+  mocks.loadOntology.mockRejectedValueOnce(new Error("offline"));
+  mocks.check.mockResolvedValue({ result: { findings: [] } });
+  await mount({ ...plain, ontology: true });
+  expect(container.querySelector(".status")!.textContent).toContain("offline");
+  await act(async () => publishOntology({ status: "loading", error: "" }));
+  await act(async () => publishOntology({ status: "ready", title: "Recovered ontology", revision: 1 }));
+  await act(async () => vi.advanceTimersByTime(301));
+  expect(mocks.check).toHaveBeenCalledTimes(1);
+  expect(mocks.loadOntology).toHaveBeenCalledTimes(1); // No separate App retry.
+  expect(container.querySelector(".status")!.textContent).toBe("Quick check: no problems");
+  await act(async () => nodes()[0]!.data.onRename!("Still checking"));
+  await act(async () => vi.advanceTimersByTime(301));
+  expect(mocks.check).toHaveBeenCalledTimes(2);
+});
+
+test("an explicitly stored other shape is not automatically classified on open or recovery", async () => {
+  storage.set(plain.storageKey, 'flowchart TB\nA["Deliberate shape<br/>TST_0000001"]\n%% mermantics-kinds {"A":"other"}');
+  mocks.check.mockResolvedValue({ result: { findings: [] } });
+  await mount({ ...plain, ontology: true });
+  expect(nodes()[0]!.data.kind).toBe("other");
+  expect(mocks.supers).not.toHaveBeenCalled();
+  await act(async () => publishOntology({ status: "failed", error: "crash" }));
+  await act(async () => publishOntology({ status: "ready", revision: 2, error: "" }));
+  await act(async () => vi.advanceTimersByTime(301));
+  expect(nodes()[0]!.data.kind).toBe("other");
+  expect(mocks.supers).not.toHaveBeenCalled();
+});
+
+test("choosing other cancels pending import classification, including history amendments and retries", async () => {
+  const pending = deferred<string[][]>();
+  mocks.supers.mockReturnValueOnce(pending.promise);
+  mocks.check.mockResolvedValue({ result: { findings: [] } });
+  await mount({ ...plain, ontology: true, examples: [{ title: "Classed", name: "classed.mmd",
+    text: 'flowchart TB\nA["Original<br/>TST_0000001"]' }] });
+  await act(async () => mocks.flowProps.onNodesChange([{ type: "select", id: "A", selected: true }]));
+  await act(async () => mocks.boxProps.onChange({ kind: "other" }));
+  await act(async () => nodes()[0]!.data.onRename!("Renamed"));
+  await act(async () => pending.resolve([["COB_0000035"]]));
+  expect(nodes()[0]!.data.kind).toBe("other");
+  await click("Undo");
+  expect(nodes()[0]!.data.kind).toBe("other");
+  await act(async () => publishOntology({ status: "failed", error: "crash" }));
+  await act(async () => container.querySelector<HTMLButtonElement>(".status")!.click());
+  expect(mocks.supers).toHaveBeenCalledTimes(1);
+  expect(nodes()[0]!.data.kind).toBe("other");
+});
+
+test("a new ontology generation revalidates even when failure and recovery are batched", async () => {
+  mocks.check.mockResolvedValue({ result: { findings: [] } });
+  await mount({ ...plain, ontology: true });
+  await act(async () => vi.advanceTimersByTime(301));
+  expect(mocks.check).toHaveBeenCalledTimes(1);
+  await act(async () => {
+    publishOntology({ status: "failed", error: "crash" });
+    publishOntology({ status: "ready", revision: 2, error: "" });
+  });
+  await act(async () => vi.advanceTimersByTime(301));
+  expect(mocks.check).toHaveBeenCalledTimes(2);
 });

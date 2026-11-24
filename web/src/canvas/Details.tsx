@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 
 import type { Term } from "../core/terms.js";
 import { lookup } from "./checker.js";
+import { useOntology } from "./useOntology.js";
 import { DatastoreArrowSection, DatastoreBoxSection } from "./DatastorePanel.js";
 import type { Arrow, ArrowData, Box, BoxData, Problem } from "./model.js";
 import { shapeOf, statusOf, TERM_STATUSES, type Shape, type ShapeKind } from "./palette.js";
@@ -31,15 +32,24 @@ function Problems({ problems }: { problems: Problem[] }) {
   );
 }
 
-function useTerm(id: string): Term | null {
+function useTerm(id: string) {
   const [term, setTerm] = useState<Term | null>(null);
+  const [error, setError] = useState("");
+  const [retry, setRetry] = useState(0);
+  const { revision } = useOntology();
   useEffect(() => {
     let live = true;
     setTerm(null);
-    if (id) lookup([id]).then(([t]) => { if (live) setTerm(t ?? null); }).catch(() => {});
+    setError("");
+    if (id) lookup([id]).then(([t]) => { if (live) setTerm(t ?? null); })
+      .catch((e: Error) => { if (live) setError(e.message); });
     return () => { live = false; };
-  }, [id]);
-  return term;
+  }, [id, retry, revision]);
+  return { term, error, retry: () => setRetry((r) => r + 1) };
+}
+
+function TermError({ error, retry }: { error: string; retry: () => void }) {
+  return error ? <p role="alert">Could not load term details: {error} <button type="button" onClick={retry}>Retry details</button></p> : null;
 }
 
 export interface QuestionLink {
@@ -64,7 +74,7 @@ export function BoxDetails({ box, shapes, ontology, datastore = false, boxes = [
   parts?: { pattern: string; part: string }[]; // the pattern parts this box plays
 }) {
   const d = box.data;
-  const term = useTerm(d.classId);
+  const { term, error, retry } = useTerm(d.classId);
   const [changing, setChanging] = useState(false);
   useEffect(() => setChanging(false), [box.id]);
   const shape = shapes.find((s) => s.kind === d.kind) ?? shapeOf(d.kind);
@@ -144,6 +154,7 @@ export function BoxDetails({ box, shapes, ontology, datastore = false, boxes = [
               <div className="class-label">{term?.label ?? d.classLabel}</div>
               <div className="class-id">{d.classId}</div>
               {term?.definition && <p className="class-def">{term.definition}</p>}
+              <TermError error={error} retry={retry} />
               {!changing && <button type="button" className="link" onClick={() => setChanging(true)}>Choose a more specific kind...</button>}
             </div>
           ) : (
@@ -210,7 +221,7 @@ export function ArrowDetails({ arrow, srcName, dstName, dstKind, ontology, datas
   onDelete: () => void;
 }) {
   const d = arrow.data!;
-  const term = useTerm(d.curie);
+  const { term, error, retry } = useTerm(d.curie);
   return (
     <div className="panel">
       <div className="panel-kind"><span className="dot" />Arrow</div>
@@ -239,6 +250,7 @@ export function ArrowDetails({ arrow, srcName, dstName, dstKind, ontology, datas
               <div className="class-label">{term?.label ?? d.name}</div>
               <div className="class-id">{d.curie}</div>
               {term?.definition && <p className="class-def">{term.definition}</p>}
+              <TermError error={error} retry={retry} />
               <p className="muted-inline">So it is checked like this relation: it must fit the same kinds of boxes.</p>
             </div>
           ) : (
@@ -256,6 +268,7 @@ export function ArrowDetails({ arrow, srcName, dstName, dstKind, ontology, datas
               <div className="class-label">{term?.label ?? d.name}</div>
               <div className="class-id">{d.curie}</div>
               {term?.definition && <p className="class-def">{term.definition}</p>}
+              <TermError error={error} retry={retry} />
             </div>
           ) : (
             <label className="field">

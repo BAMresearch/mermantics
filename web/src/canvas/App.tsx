@@ -18,6 +18,7 @@ import { applyPositions, DocumentWork } from "./document.js";
 import logo from "../../../assets/mermantics-logo.svg";
 import { BoxNode, worst } from "./BoxNode.js";
 import { check, loadOntology, supers } from "./checker.js";
+import { useOntology } from "./useOntology.js";
 import { DatastoreLinkMenu, WhereThingsGo } from "./DatastorePanel.js";
 import { DetailsResize } from "./DetailsResize.js";
 import { ArrowDetails, BoxDetails, Overview, SelectionPanel, type GlobalFinding } from "./Details.js";
@@ -191,9 +192,12 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
     onBoxesChange(changes);
   }, [onBoxesChange]);
   const [docName, setDocName] = useState("model.mmd");
-  const [ontoStatus, setOntoStatus] = useState(mode.ontology ? "Loading PMDco 3.1.2..." : "");
+  const ontology = useOntology();
+  const ontologyState = ontology.status;
+  const ontoStatus = ontologyState === "ready" ? ontology.title : ontologyState === "failed"
+    ? `Could not load the ontology: ${ontology.error}` : "Loading PMDco 3.1.2...";
   const [ready, setReady] = useState(false);
-  const [ontologyState, setOntologyState] = useState<"loading" | "ready" | "failed">("loading");
+  const awaitingClassification = useRef(new Map<string, string>());
   const [ontologyRevision, setOntologyRevision] = useState(0);
   const [checkRevision, setCheckRevision] = useState(0);
   const retryCheck = () => {
@@ -391,6 +395,9 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
       relayout.current = !imported.positioned && placed.length > 0;
       const uses = readUses(imported.patternUses);
       // Commit refs and the baseline together; measurement updates must not disable saving.
+      const unclassified = new Set(imported.unclassified);
+      awaitingClassification.current = new Map(placed.filter((b) => unclassified.has(b.id))
+        .map((b) => [b.id, b.data.classId]));
       opened.current = contentKey(placed, imported.arrows, uses, mode.options ? null : imported.useCase);
       changed.current = persist || !(untouched || target);
       boxesRef.current = placed;
@@ -474,19 +481,8 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
 
   useEffect(() => {
     if (!mode.ontology) return;
-    let active = true;
-    setOntologyState("loading");
-    setOntoStatus("Loading PMDco 3.1.2...");
-    loadOntology().then((info) => {
-      if (!active) return;
-      setOntoStatus(info.title);
-      setOntologyState("ready");
-    }).catch((e: Error) => {
-      if (!active) return;
-      setOntoStatus(`Could not load the ontology: ${e.message}`);
-      setOntologyState("failed");
-    });
-    return () => { active = false; };
+    // The shared snapshot reports failures and recovery, including other consumers' retries.
+    void loadOntology().catch(() => {});
   }, [mode.ontology, ontologyRevision]);
 
   // Enrich imported shapes after opening. Apply only to matching classes in the
@@ -495,10 +491,12 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
     if (!ready || !mode.ontology || ontologyState !== "ready") return;
     let active = true;
     const document = work.current();
-    const snapshot = boxesRef.current;
+    const candidates = awaitingClassification.current;
+    const snapshot = boxesRef.current.filter((b) => candidates.get(b.id) === b.data.classId && b.data.kind === "other");
+    if (!snapshot.length) return;
     void classify(snapshot).then((classified) => {
       if (!active || !work.owns(document)) return;
-      const shapes = new Map(classified.filter((b) => b.data.kind !== "other").map((b) => [b.id, b.data]));
+      const shapes = new Map(classified.filter((b) => candidates.get(b.id) === b.data.classId && b.data.kind !== "other").map((b) => [b.id, b.data]));
       const apply = (bs: Box[]) => bs.map((b) => {
         const shape = shapes.get(b.id);
         return shape && b.data.kind === "other" && b.data.classId === shape.classId
@@ -512,11 +510,12 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
       }
       setBoxes(apply);
       history.amend((s) => snapshotOf(apply(s.boxes), s.arrows, s.uses, s.useCase));
+      for (const b of snapshot) candidates.delete(b.id);
     }).catch((error: Error) => {
       if (active && work.owns(document)) setNotice(`Could not classify imported boxes: ${error.message}`);
     });
     return () => { active = false; };
-  }, [ready, mode.ontology, mode.options, ontologyState, checkRevision, history, setBoxes, work]);
+  }, [ready, mode.ontology, mode.options, ontologyState, ontology.revision, checkRevision, history, setBoxes, work]);
 
   // ---- checking -------------------------------------------------------------------------
 
@@ -588,7 +587,7 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
       }
     }, 300);
     return () => clearTimeout(timer);
-  }, [key, checkRevision, ready, ontologyState, ontoStatus, mode.ontology, mode.options, store, textNow, setArrows, setBoxes, work]);
+  }, [key, checkRevision, ready, ontologyState, ontology.revision, ontoStatus, mode.ontology, mode.options, store, textNow, setArrows, setBoxes, work]);
 
   // Persist every document edit independently of ontology availability and checks.
   useEffect(() => {
@@ -835,6 +834,7 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
   }, [history, setBoxes, work]);
 
   const patchBox = useCallback((id: string, patch: Partial<BoxData>) => {
+    if ("kind" in patch || "classId" in patch) awaitingClassification.current.delete(id);
     setBoxes((bs) => bs.map((b) => (b.id === id ? { ...b, data: { ...b.data, ...patch } } : b)));
     if (patch.classId && loading.current === null) shapeFromClass(id, patch.classId);
   }, [setBoxes, shapeFromClass]);

@@ -1,3 +1,4 @@
+import { useOntology } from "./useOntology.js";
 /**
  * The parts of the PMD Hackathon - Computations section: the bar to pick an option and a view,
  * the panel with an option's notes, the compare view, and the tree of terms.
@@ -334,6 +335,9 @@ export function TermsTree({ option, termsText, onSelect }: {
   const [error, setError] = useState("");
   const [retry, setRetry] = useState(0);
   const [labels, setLabels] = useState<Record<string, string>>({});
+  const [labelError, setLabelError] = useState("");
+  const [labelRetry, setLabelRetry] = useState(0);
+  const { revision } = useOntology();
   const parsed = useMemo(() => fromMermaid(termsText), [termsText]);
   useEffect(() => {
     let live = true;
@@ -342,18 +346,19 @@ export function TermsTree({ option, termsText, onSelect }: {
     loadTrees().then((ts) => { if (live) setBase(ts); })
       .catch((e: Error) => { if (live) setError(e.message); });
     return () => { live = false; };
-  }, [retry]);
+  }, [retry, revision]);
   // Labels for the PMDco classes that new terms sit under, outside the two trees.
   useEffect(() => {
     const ids = [...new Set(parsed.boxes.map((b) => b.data.classId).filter((x) => x && !labels[x]))];
+    setLabelError("");
     if (!ids.length) return;
     let live = true;
     lookup(ids).then((ts) => {
       if (!live) return;
       setLabels((l) => ({ ...l, ...Object.fromEntries(ids.map((id, i) => [id, ts[i]?.label ?? id])) }));
-    }).catch(() => {});
+    }).catch((e: Error) => { if (live) setLabelError(e.message); });
     return () => { live = false; };
-  }, [parsed, labels]);
+  }, [parsed, labels, labelRetry, revision]);
   const tree = useMemo(() => (base ? mergeTree(base, parsed.boxes, parsed.arrows, (id) => labels[id] ?? id) : null),
                        [base, parsed, labels]);
   const counts = tree ? countStatuses(tree) : {};
@@ -365,6 +370,7 @@ export function TermsTree({ option, termsText, onSelect }: {
         option's Terms view.
         {tree && ` ${counts.proposed ?? 0} new, ${counts.changed ?? 0} changed, ${counts.deprecated ?? 0} deprecated.`}
       </p>
+      {labelError && <p role="alert">Could not load class labels: {labelError} <button type="button" onClick={() => setLabelRetry((r) => r + 1)}>Retry labels</button></p>}
       {error ? <p role="alert">Could not load the PMDco tree: {error} <button type="button" onClick={() => setRetry((r) => r + 1)}>Retry tree</button></p>
         : !tree ? <p className="muted">Loading PMDco...</p> : (
         <ul className="tt-list">{tree.map((n) => <TermItem key={n.key} node={n} onSelect={onSelect} depth={0} />)}</ul>

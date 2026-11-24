@@ -176,3 +176,38 @@ test.each([null, {}, { id: "1", type: "loaded" }, { id: 0, type: "loaded" },
     await loaded();
     expect(FakeWorker.instances).toHaveLength(2);
   });
+
+test("ontology subscribers observe failures and recovery initiated by a search", async () => {
+  const seen: string[] = [];
+  const unsubscribe = client.subscribeOntology(() => seen.push(client.getOntologyState().status));
+  expect(client.getOntologyState().status).toBe("idle");
+  const initial = client.loadOntology();
+  const rejected = expect(initial).rejects.toThrow("offline");
+  latest().onerror!(new ErrorEvent("error", { message: "offline" }));
+  await rejected;
+  expect(client.getOntologyState()).toMatchObject({ status: "failed", error: "offline", revision: 0 });
+  const search = client.search("Material", []);
+  const fresh = latest();
+  fresh.reply({ type: "loaded", id: fresh.request().id, ontology: info });
+  await vi.advanceTimersByTimeAsync(0);
+  expect(client.getOntologyState()).toMatchObject({ status: "ready", title: info.title, error: "", revision: 1 });
+  fresh.reply({ type: "found", id: fresh.request().id, result: { terms: [], total: 0 } });
+  await search;
+  expect(seen).toEqual(["loading", "failed", "loading", "ready"]);
+  unsubscribe();
+  fresh.onerror!(new ErrorEvent("error", { message: "crashed while idle" }));
+  expect(client.getOntologyState().status).toBe("failed");
+  expect(seen).toHaveLength(4);
+});
+
+test("a load response queued just before a crash cannot announce a recovered worker", async () => {
+  const loading = client.loadOntology();
+  const rejected = expect(loading).rejects.toThrow("stopped");
+  const worker = latest();
+  worker.reply({ type: "loaded", id: worker.request().id, ontology: info });
+  worker.onerror!(new ErrorEvent("error", { message: "crash" }));
+  await rejected;
+  expect(client.getOntologyState()).toMatchObject({ status: "failed", revision: 0 });
+  await loaded();
+  expect(client.getOntologyState()).toMatchObject({ status: "ready", revision: 1 });
+});

@@ -278,6 +278,8 @@ export interface Imported {
   useCase: UseCase;
   patternUses: unknown; // read with patterns.readUses
   warnings: string[];
+  /** Classed boxes without an explicitly stored shape, eligible for automatic classification. */
+  unclassified: string[];
 }
 
 function readBox(raw: string, css: Set<string>, storedKind: unknown): Pick<BoxData, "name" | "kind" | "classId" | "classLabel" | "lines" | "css" | "openbis"> {
@@ -416,5 +418,7 @@ export function fromMermaid(text: string): Imported {
     }
     return { id: `a${i}`, source: e.src, target: e.dst, data: { kind: "relation", name, curie, words, own, problems: [] } };
   });
-  return { boxes, arrows, positioned: boxes.every((b) => pos[b.id] !== undefined), useCase, patternUses, warnings };
+  const unclassified = boxes.filter((b) => b.data.kind === "other" && b.data.classId && !isShapeKind(kinds[b.id]))
+    .map((b) => b.id);
+  return { boxes, arrows, unclassified, positioned: boxes.every((b) => pos[b.id] !== undefined), useCase, patternUses, warnings };
 }

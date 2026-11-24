@@ -11,6 +11,23 @@ const pending = new Map<number, Pending>();
 let nextId = 1;
 let worker: Worker | null = null;
 let ontology: Promise<OntologyInfo> | null = null;
+export type OntologyState = {
+  status: "idle" | "loading" | "ready" | "failed";
+  title: string;
+  error: string;
+  revision: number; // advances only after a successful load
+};
+let ontologyState: OntologyState = { status: "idle", title: "", error: "", revision: 0 };
+const listeners = new Set<() => void>();
+export const getOntologyState = () => ontologyState;
+export function subscribeOntology(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => { listeners.delete(listener); };
+}
+function publishOntology(patch: Partial<OntologyState>): void {
+  ontologyState = { ...ontologyState, ...patch };
+  for (const listener of listeners) listener();
+}
 // Includes time queued behind ontology loading or another check. Allow slow devices
 // two minutes, but never leave the UI waiting indefinitely for a silent worker.
 const REQUEST_TIMEOUT_MS = 120_000;
@@ -35,6 +52,7 @@ function failWorker(current: Worker, error: Error): void {
     p.reject(error);
   }
   pending.clear();
+  publishOntology({ status: "failed", error: error.message });
 }
 
 /** The worker starts when it is first needed, so process modelling (no ontology) never starts it. */
@@ -88,12 +106,18 @@ export const PMDCO = {
 
 export function loadOntology(): Promise<OntologyInfo> {
   if (ontology) return ontology;
+  publishOntology({ status: "loading", error: "" });
   const loading = ask<"load">({ type: "load", name: PMDCO.name, title: PMDCO.title, url: PMDCO.url })
     .then((r) => {
       if (r.type !== "loaded") throw new Error("unexpected answer");
+      if (ontology !== loading) throw new Error("Checker worker stopped; try again");
+      publishOntology({ status: "ready", title: r.ontology.title, error: "", revision: ontologyState.revision + 1 });
       return r.ontology;
     }).catch((error: unknown) => {
-      if (ontology === loading) ontology = null;
+      if (ontology === loading) {
+        ontology = null;
+        publishOntology({ status: "failed", error: error instanceof Error ? error.message : String(error) });
+      }
       throw error;
     });
   ontology = loading;

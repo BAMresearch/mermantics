@@ -108,7 +108,7 @@ export function RelationMenu({ x, y, srcName, dstName, srcClasses, dstClasses, t
   const pickOwn = (r: OwnRelation) => onChoose({ kind: "relation", name: r.curie ? r.name : r.words, curie: r.curie, words: r.words, own: true });
 
   // Own relations that can be used here: not linked (always), or whose parent fits.
-  const ownHere = quick === null ? [] : own.filter((r) => !r.curie || fitting(quick, r.curie));
+  const ownHere = own.filter((r) => !r.curie || (quick !== null && fitting(quick, r.curie)));
   const common = (quick ?? []).filter((r) => COMMON_RELATIONS.some((c) => c.id === r.id));
 
   const makeOwn = () => {

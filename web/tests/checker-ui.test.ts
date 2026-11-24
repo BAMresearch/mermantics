@@ -2,19 +2,22 @@
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { publishOntology, resetOntology } from "./helpers/ontology-state.js";
 import type { SearchResult, Term } from "../src/core/terms.js";
 
 const mocks = vi.hoisted(() => ({ search: vi.fn(), trees: vi.fn(), lookup: vi.fn(), relations: vi.fn() }));
-vi.mock("../src/canvas/checker.js", () => ({ ...mocks, check: vi.fn() }));
+vi.mock("../src/canvas/checker.js", async () => ({ ...await import("./helpers/ontology-state.js"), ...mocks, check: vi.fn() }));
 import { TermSearch } from "../src/canvas/TermSearch.js";
 import { TermsTree } from "../src/canvas/OptionsPanel.js";
 import { RelationMenu } from "../src/canvas/RelationMenu.js";
-import { Overview } from "../src/canvas/Details.js";
+import { fromMermaid } from "../src/canvas/model.js";
+import { BoxDetails, Overview } from "../src/canvas/Details.js";
 import { readState } from "../src/canvas/options.js";
 
 let host: HTMLDivElement;
 let root: Root;
 beforeEach(() => {
+  resetOntology();
   vi.useFakeTimers();
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   for (const mock of Object.values(mocks)) mock.mockReset();
@@ -129,4 +132,51 @@ test("unknown pattern validity is not rendered as following the pattern", async 
   expect(host.textContent).toContain("not checked");
   expect(host.textContent).not.toContain("follows it");
   expect(host.querySelector(".pill.ok")).toBeNull();
+});
+
+
+for (const recovery of ["retry", "worker recovery"]) {
+  test(`term details recover through ${recovery} without changing selection`, async () => {
+    mocks.lookup.mockRejectedValueOnce(new Error("offline")).mockResolvedValueOnce([
+      { ...result("Recovered term").terms[0]!, definition: "Recovered definition" },
+    ]);
+    const box = fromMermaid('flowchart TB\nA["Box<br/>TST_0000001"]').boxes[0]!;
+    await act(async () => root.render(createElement(BoxDetails, { box, shapes: [], ontology: true,
+      onChange: vi.fn(), onDelete: vi.fn() })));
+    expect(host.textContent).toContain("Could not load term details: offline");
+    if (recovery === "retry") await click("Retry details");
+    else await act(async () => publishOntology({ status: "ready", revision: 1, title: "Recovered" }));
+    expect(mocks.lookup).toHaveBeenCalledTimes(2);
+    expect(host.textContent).toContain("Recovered definition");
+    expect(host.textContent).not.toContain("Could not load term details");
+  });
+
+  test(`tree class labels recover through ${recovery} without remounting`, async () => {
+    mocks.trees.mockResolvedValue([]);
+    mocks.lookup.mockRejectedValueOnce(new Error("offline")).mockResolvedValueOnce([result("Recovered label").terms[0]]);
+    await act(async () => root.render(createElement(TermsTree, { option: readState(null).options[0]!,
+      termsText: 'flowchart TB\nA["Custom<br/>TST_0000001"]' })));
+    expect(host.textContent).toContain("Could not load class labels: offline");
+    if (recovery === "retry") await click("Retry labels");
+    else await act(async () => publishOntology({ status: "ready", revision: 1, title: "Recovered" }));
+    expect(mocks.lookup).toHaveBeenCalledTimes(2);
+    expect(host.textContent).not.toContain("Could not load class labels");
+  });
+}
+
+test("unlinked custom relations remain selectable while loading and after failure", async () => {
+  const pending = deferred<[]>();
+  mocks.relations.mockReturnValueOnce(pending.promise);
+  const choose = vi.fn();
+  await act(async () => root.render(createElement(RelationMenu, { ...relationProps, onChoose: choose,
+    own: [{ words: "custom unlinked", curie: "", name: "custom unlinked" },
+      { words: "custom linked", curie: "TST_1", name: "linked" }] })));
+  expect(host.textContent).toContain("custom unlinked");
+  expect(host.textContent).not.toContain("custom linked");
+  await act(async () => pending.reject(new Error("offline")));
+  expect(host.textContent).toContain("custom unlinked");
+  expect(host.textContent).not.toContain("custom linked");
+  await act(async () => [...host.querySelectorAll<HTMLButtonElement>("button")]
+    .find((b) => b.textContent?.startsWith("custom unlinked"))!.click());
+  expect(choose).toHaveBeenCalledWith(expect.objectContaining({ words: "custom unlinked", curie: "", own: true }));
 });
