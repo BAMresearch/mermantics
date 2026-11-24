@@ -1498,3 +1498,43 @@ test("timeout recovery offers a longer limit and keeps the current diagram", asy
   await act(async () => { select.value = "600000"; select.dispatchEvent(new Event("change", { bubbles: true })); });
   expect(getOntologyState().timeoutMs).toBe(600_000);
 });
+
+for (const unavailable of ["loading", "offline"]) {
+  test(`patterns insert and save while the ontology is ${unavailable}, then classify after recovery`, async () => {
+    const loading = deferred<{ title: string }>();
+    if (unavailable === "loading") mocks.loadOntology.mockReturnValueOnce(loading.promise);
+    else mocks.loadOntology.mockRejectedValueOnce(new Error("offline"));
+    mocks.check.mockResolvedValue({ result: { findings: [] } });
+    await mount({ ...plain, ontology: true, patterns: true });
+    await insertFirstPattern();
+    const pending = nodes().filter((b) => b.data.autoClassify);
+    expect(pending.length).toBeGreaterThan(0);
+    expect(nodes().length).toBeGreaterThan(1);
+    expect(mocks.supers).not.toHaveBeenCalled();
+    expect(container.textContent).not.toContain("Could not insert the pattern");
+    await act(async () => vi.advanceTimersByTime(801));
+    const saved = fromMermaid(storage.get(plain.storageKey)!);
+    for (const box of pending) expect(saved.unclassified).toContain(box.id);
+
+    mocks.supers.mockImplementation(async (ids: string[]) => ids.map(() => ["COB_0000035"]));
+    if (unavailable === "loading") await act(async () => loading.resolve({ title: "Recovered ontology" }));
+    else await act(async () => publishOntology({ status: "ready", title: "Recovered ontology", revision: 1, error: "" }));
+    for (const box of pending) {
+      const current = nodes().find((b) => b.id === box.id)!;
+      expect(current.data.kind).toBe("process");
+      expect(current.data.autoClassify).toBeUndefined();
+    }
+    await click("Undo");
+    expect(nodes().map((b) => b.id)).toEqual(["A"]);
+    await click("Redo");
+    for (const box of pending) expect(nodes().find((b) => b.id === box.id)!.data.kind).toBe("process");
+  });
+}
+
+test("patterns in a plain modelling section do not request ontology classification", async () => {
+  await mount({ ...plain, patterns: true });
+  await insertFirstPattern();
+  expect(nodes().length).toBeGreaterThan(1);
+  expect(mocks.supers).not.toHaveBeenCalled();
+  expect(mocks.loadOntology).not.toHaveBeenCalled();
+});

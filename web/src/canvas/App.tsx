@@ -670,7 +670,9 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
     try {
       // Prepare with pattern-local IDs; free IDs and the position depend on the diagram at commit.
       const inserted = instantiate(pattern, { x: 0, y: 0 });
-      let placed = await classify(inserted.boxes);
+      // Insert immediately when the ontology is unavailable. Imported autoClassify
+      // markers survive placement and saving; the background effect resolves them later.
+      let placed = mode.ontology && ontologyState === "ready" ? await classify(inserted.boxes) : inserted.boxes;
       if (!valid()) return;
       if (!inserted.positioned) placed = await layout(placed, inserted.arrows);
       if (!valid()) return;
@@ -694,7 +696,7 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
     } catch (error) {
       if (valid()) setNotice(`Could not insert the pattern: ${(error as Error).message}`);
     }
-  }, [append, flow, fitDocument, recordEdit, work]);
+  }, [append, flow, fitDocument, recordEdit, mode.ontology, ontologyState, work]);
 
   const onDrop = useCallback((e: DragEvent) => {
     e.preventDefault();
@@ -1365,7 +1367,7 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
           ) : (
             <Overview status={mode.ontology ? checkState.status
                                 : `${boxes.length} box${boxes.length === 1 ? "" : "es"}, ${arrows.length} arrow${arrows.length === 1 ? "" : "s"}`}
-                      ontology={mode.ontology} datastore={mode.datastore} checkedAgainst={mode.ontology ? ontoStatus : ""} findings={checkState.findings} passed={checkState.passed} onSelect={select}
+                      ontology={mode.ontology} ontologyState={ontologyState} datastore={mode.datastore} checkedAgainst={mode.ontology ? ontoStatus : ""} findings={checkState.findings} passed={checkState.passed} onSelect={select}
                       uses={patternUses.map((u) => ({ id: u.id, title: u.title, version: u.version, boxes: u.parts.length,
                                                       problems: checkState.phase === "checked" ? checkState.perUse[u.id] ?? 0 : null }))}
                       onForget={(id) => setPatternUses((us) => us.filter((u) => u.id !== id))}

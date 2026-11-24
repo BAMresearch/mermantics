@@ -193,3 +193,17 @@ test("details label retained markers as previous findings while rechecking", asy
   expect(host.textContent).toContain("Problems");
   expect(host.textContent).not.toContain("Previous findings");
 });
+
+test.each(["failed", "loading"] as const)("Overview uses %s state rather than parsing availability wording", async (ontologyState) => {
+  await act(async () => root.render(createElement(Overview, { status: "Validation pending", ontology: true,
+    ontologyState, checkedAgainst: "Custom availability message", findings: [], passed: [], onSelect: vi.fn() })));
+  expect(host.textContent).toContain("Custom availability message");
+});
+
+test("Overview treats a ready ontology as ready regardless of its title", async () => {
+  await act(async () => root.render(createElement(Overview, { status: "Checked", ontology: true,
+    ontologyState: "ready", checkedAgainst: "Checker unavailable is an unusual ontology title",
+    findings: [], passed: [], onSelect: vi.fn() })));
+  expect(host.textContent).not.toContain("Checker unavailable is an unusual ontology title");
+  expect(host.querySelector(".muted-inline")!.textContent).not.toBe("");
+});

@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 
 import type { Term } from "../core/terms.js";
-import { lookup } from "./checker.js";
+import { lookup, type OntologyState } from "./checker.js";
 import { useOntology } from "./useOntology.js";
 import { DatastoreArrowSection, DatastoreBoxSection } from "./DatastorePanel.js";
 import type { Arrow, ArrowData, Box, BoxData, Problem } from "./model.js";
@@ -291,12 +291,13 @@ export function ArrowDetails({ arrow, srcName, dstName, dstKind, ontology, datas
   );
 }
 
-export function Overview({ status, ontology, datastore = false, checkedAgainst = "", findings, passed, onSelect, uses = [], onForget,
+export function Overview({ status, ontology, ontologyState = "idle", datastore = false, checkedAgainst = "", findings, passed, onSelect, uses = [], onForget,
                           ownRelations = [], onForgetRelation, children }: {
   status: string;
   datastore?: boolean;
   children?: ReactNode; // shown after the status
   ontology: boolean; // false in process modelling: nothing is checked
+  ontologyState?: OntologyState["status"];
   checkedAgainst?: string; // the ontology's title, or why it could not be loaded
   findings: GlobalFinding[];
   passed: string[];
@@ -309,9 +310,7 @@ export function Overview({ status, ontology, datastore = false, checkedAgainst =
   return (
     <div className="panel">
       <div className="panel-kind"><span className="dot" />Your model</div>
-      {ontology && checkedAgainst && ((checkedAgainst.startsWith("Could not") || checkedAgainst.startsWith("Checker unavailable"))
-        ? <p className="muted-inline">{checkedAgainst}</p>
-        : <p className="muted-inline">{QUICK_CHECK_HINT}</p>)}
+      {ontology && checkedAgainst && <p className="muted-inline">{ontologyState === "ready" ? QUICK_CHECK_HINT : checkedAgainst}</p>}
       <p className="muted">{status}</p>
       {children}
       {findings.length > 0 && (
