@@ -66,7 +66,10 @@ vi.mock("../src/canvas/DatastorePanel.js", () => ({
 }));
 
 import { MSE_SHAPES } from "../src/canvas/palette.js";
-import { readUses } from "../src/canvas/patterns.js";
+import { pendingSaves, retrySaves } from "../src/canvas/persistence.js";
+import * as recovery from "../src/canvas/recovery.js";
+import { BUILT_IN, MINE_KEY, loadMine, readUses } from "../src/canvas/patterns.js";
+import { Start } from "../src/canvas/Start.js";
 import { App } from "../src/canvas/App.js";
 import { MODES, type Mode } from "../src/canvas/mode.js";
 import { readState } from "../src/canvas/options.js";
@@ -121,6 +124,10 @@ beforeEach(() => {
 afterEach(async () => {
   if (app) await act(async () => app.unmount());
   container.remove();
+  // Failed-save retention intentionally outlives App mounts, but not individual tests.
+  vi.stubGlobal("sessionStorage", { setItem: () => {} });
+  vi.stubGlobal("localStorage", { setItem: () => {} });
+  retrySaves();
   vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
@@ -1049,4 +1056,178 @@ test.each(["Tidy up", "a pattern"])("%s finishing while a field has focus is a s
   expect(nodes()[0]!.data.name).toBe("Typed");
   await click("Undo");
   expect(nodes()[0]!.data.name).toBe("Original");
+});
+
+
+test("failed autosave keeps the latest diagram through section switching", async () => {
+  await mount();
+  let fail = true;
+  vi.stubGlobal("sessionStorage", {
+    getItem: (k: string) => storage.get(k) ?? null,
+    setItem: (k: string, v: string) => { if (fail) throw new Error("full"); storage.set(k, v); },
+  });
+  await act(async () => nodes()[0]!.data.onRename!("First unsaved edit"));
+  await act(async () => vi.advanceTimersByTime(801));
+  expect(container.querySelector(".save-notice")!.textContent).toContain("could not be saved");
+  await act(async () => nodes()[0]!.data.onRename!("Edit just before switching"));
+  await act(async () => app.unmount());
+  await mount({ ...plain, id: "datastore", storageKey: MODES.datastore.storageKey });
+  expect(nodes()[0]!.data.name).toBe("Original");
+  expect(container.querySelector(".save-notice")!.textContent).toContain("Model anything");
+  await act(async () => app.unmount());
+  await mount();
+  expect(nodes()[0]!.data.name).toBe("Edit just before switching");
+  fail = false;
+  await act(async () => [...container.querySelectorAll("button")].find((b) => b.textContent === "Retry save")!.click());
+  expect(storage.get(plain.storageKey)).toContain("Edit just before switching");
+  expect(container.querySelector(".save-notice")).toBeNull();
+});
+
+test.each([false, true])("recovery download flushes a pending edit even if storage recovers (%s)", async (recovers) => {
+  await mount();
+  let fail = true;
+  vi.stubGlobal("sessionStorage", {
+    getItem: (k: string) => storage.get(k) ?? null,
+    setItem: (k: string, v: string) => { if (fail) throw new Error("full"); storage.set(k, v); },
+  });
+  await act(async () => nodes()[0]!.data.onRename!("Earlier failure"));
+  await act(async () => vi.advanceTimersByTime(801));
+  await act(async () => nodes()[0]!.data.onRename!("Newest edit before debounce"));
+  const download = vi.spyOn(recovery, "downloadRecovery").mockImplementation(() => {});
+  fail = !recovers;
+  await act(async () => [...container.querySelectorAll("button")].find((b) => b.textContent === "Download recovery copy")!.click());
+  const entries = download.mock.calls[0]![0];
+  expect(entries.find((p) => p.key === plain.storageKey)!.text).toContain("Newest edit before debounce");
+  expect(pendingSaves()).toHaveLength(recovers ? 0 : 1);
+});
+
+test("computations recovery flushes the canvas and retains other option views", async () => {
+  const mode = { ...MODES.comp, ontology: false };
+  await mount(mode);
+  vi.stubGlobal("sessionStorage", { getItem: () => null, setItem: () => { throw new Error("full"); } });
+  await act(async () => nodes()[0]!.data.onRename!("Unsaved computation"));
+  await act(async () => vi.advanceTimersByTime(801));
+  const older = JSON.parse(pendingSaves()[0]!.text);
+  await act(async () => nodes()[0]!.data.onRename!("Latest computation"));
+  const download = vi.spyOn(recovery, "downloadRecovery").mockImplementation(() => {});
+  await act(async () => [...container.querySelectorAll("button")].find((b) => b.textContent === "Download recovery copy")!.click());
+  const entries = download.mock.calls[0]![0];
+  // The exported file also passes restore validation.
+  const restored = recovery.readRecovery(recovery.recoveryFile(entries));
+  const state = JSON.parse(restored[0]!.text);
+  expect(state.options).toHaveLength(older.options.length);
+  for (const option of state.options) for (const view of ["terms", "dft", "fem"]) {
+    if (option.id === state.current.option && view === state.current.view) expect(option.views[view]).toContain("Latest computation");
+    else expect(option.views[view]).toBe(older.options.find((o: { id: string }) => o.id === option.id).views[view]);
+  }
+});
+
+
+test("failed custom-pattern imports and removals survive remounting", async () => {
+  await mount({ ...plain, patterns: true });
+  vi.stubGlobal("localStorage", { getItem: () => null, setItem: () => { throw new Error("blocked"); } });
+  const input = container.querySelectorAll<HTMLInputElement>('input[accept=".mmd,.md,.txt"]')[1]!;
+  for (const pattern of BUILT_IN.slice(0, 2)) {
+    Object.defineProperty(input, "files", { configurable: true, value: [{ name: "pattern.mmd", text: async () => pattern.text }] });
+    await act(async () => input.dispatchEvent(new Event("change", { bubbles: true })));
+  }
+  expect(container.querySelectorAll(".pattern-actions")).toHaveLength(2);
+  expect(container.querySelector(".save-notice")!.textContent).toContain("Custom patterns");
+  await act(async () => app.unmount());
+  await mount({ ...plain, patterns: true });
+  expect(container.querySelectorAll(".pattern-actions")).toHaveLength(2);
+  await act(async () => container.querySelector<HTMLButtonElement>(".pattern-actions .danger-link")!.click());
+  expect(container.querySelectorAll(".pattern-actions")).toHaveLength(1);
+  await act(async () => app.unmount());
+  await mount({ ...plain, patterns: true });
+  expect(container.querySelectorAll(".pattern-actions")).toHaveLength(1);
+  expect(container.querySelector(".save-notice")!.textContent).toContain("Custom patterns");
+});
+
+
+test.each(["frontmatter", "legacy source"])("pattern %s survives real import/save-failure/download/restore flow", async (kind) => {
+  const mine = new Map<string, string>();
+  const frontmatter = "---\ntitle: Imported pattern\nconfig:\n  theme: neutral\n---\n" + BUILT_IN[0]!.text;
+  const legacy = BUILT_IN[0]!.text + "\nUnsupported old content!!!";
+  if (kind === "legacy source") mine.set(MINE_KEY, JSON.stringify([legacy]));
+  let fail = false;
+  vi.stubGlobal("localStorage", {
+    getItem: (key: string) => mine.get(key) ?? null,
+    setItem: (key: string, value: string) => { if (fail) throw new Error("blocked"); mine.set(key, value); },
+  });
+  const mode = { ...plain, patterns: true };
+  await mount(mode);
+  fail = true;
+  vi.stubGlobal("sessionStorage", { getItem: () => null, setItem: () => { throw new Error("blocked"); } });
+  const input = container.querySelectorAll<HTMLInputElement>('input[accept=".mmd,.md,.txt"]')[1]!;
+  const imported = kind === "frontmatter" ? frontmatter : BUILT_IN[1]!.text;
+  Object.defineProperty(input, "files", { value: [{ name: "pattern.mmd", text: async () => imported }] });
+  await act(async () => input.dispatchEvent(new Event("change", { bubbles: true })));
+  await act(async () => nodes()[0]!.data.onRename!("Also recover this diagram"));
+  await act(async () => vi.advanceTimersByTime(801));
+  let blob: Blob | undefined;
+  vi.spyOn(URL, "createObjectURL").mockImplementation((value) => { blob = value as Blob; return "blob:recovery"; });
+  vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+  await act(async () => [...container.querySelectorAll("button")].find((b) => b.textContent === "Download recovery copy")!.click());
+  expect(blob).toBeDefined();
+  const backup = await blob!.text();
+  expect(recovery.readRecovery(backup)).toHaveLength(2);
+  await act(async () => app.unmount());
+  // Simulate a reload: remove both the retained writes and all browser copies.
+  fail = false;
+  vi.stubGlobal("sessionStorage", { getItem: (k: string) => storage.get(k) ?? null, setItem: (k: string, v: string) => storage.set(k, v) });
+  retrySaves(); mine.clear(); storage.clear();
+  await act(async () => { app = createRoot(container); app.render(createElement(Start, { onChoose: () => {} })); });
+  const restoreInput = container.querySelector<HTMLInputElement>('input[type="file"]')!;
+  Object.defineProperty(restoreInput, "files", { value: [{ name: "recovery.json", text: async () => backup }] });
+  await act(async () => restoreInput.dispatchEvent(new Event("change", { bubbles: true })));
+  if (kind === "legacy source") expect(container.textContent).toContain("source files needing repair");
+  await act(async () => [...container.querySelectorAll("button")].find((b) => b.textContent === "Restore this copy")!.click());
+  expect(storage.get(mode.storageKey)).toContain("Also recover this diagram");
+  expect(loadMine().some((p) => p.text === imported && !p.unavailable)).toBe(true);
+  await act(async () => app.unmount());
+  await mount(mode);
+  expect(nodes()[0]!.data.name).toBe("Also recover this diagram");
+  if (kind === "legacy source") {
+    expect(loadMine().some((p) => p.text === legacy && !!p.unavailable)).toBe(true);
+    expect(container.textContent).toContain("Needs repair:");
+    expect(container.querySelector<HTMLButtonElement>("button.pattern:disabled")).not.toBeNull();
+    await act(async () => [...container.querySelectorAll("button")].find((b) => b.textContent === "Download original")!.click());
+    expect(await blob!.text()).toBe(legacy);
+  } else expect(loadMine()[0]!.text).toBe(frontmatter);
+});
+
+test("a new malformed custom-pattern import is rejected before saving", async () => {
+  await mount({ ...plain, patterns: true });
+  const write = vi.fn();
+  vi.stubGlobal("localStorage", { getItem: () => null, setItem: write });
+  const input = container.querySelectorAll<HTMLInputElement>('input[accept=".mmd,.md,.txt"]')[1]!;
+  Object.defineProperty(input, "files", { value: [{ name: "broken.mmd", text: async () => BUILT_IN[0]!.text + "\nBroken content!!!" }] });
+  await act(async () => input.dispatchEvent(new Event("change", { bubbles: true })));
+  expect(write).not.toHaveBeenCalled();
+  expect(container.querySelectorAll(".pattern-actions")).toHaveLength(0);
+  expect(container.textContent).toContain("Could not import pattern");
+  expect(container.textContent).toContain("Unreadable diagram content");
+});
+
+test("a pattern file read finishing after unmount cannot overwrite restored patterns", async () => {
+  const mine = new Map([[MINE_KEY, JSON.stringify([BUILT_IN[0]!.text])]]);
+  const write = vi.fn((key: string, value: string) => { mine.set(key, value); });
+  vi.stubGlobal("localStorage", { getItem: (key: string) => mine.get(key) ?? null, setItem: write });
+  await mount({ ...plain, patterns: true });
+  const pending = deferred<string>();
+  const input = container.querySelectorAll<HTMLInputElement>('input[accept=".mmd,.md,.txt"]')[1]!;
+  Object.defineProperty(input, "files", { value: [{ name: "late.mmd", text: () => pending.promise }] });
+  await act(async () => input.dispatchEvent(new Event("change", { bubbles: true })));
+  await act(async () => app.unmount());
+
+  const restored = JSON.stringify([BUILT_IN[1]!.text]);
+  recovery.restoreRecovery(recovery.recoveryFile([{ area: "local", key: MINE_KEY, text: restored }]));
+  write.mockClear();
+  await act(async () => pending.resolve(BUILT_IN[2]!.text));
+
+  expect(write).not.toHaveBeenCalled();
+  expect(mine.get(MINE_KEY)).toBe(restored);
+  expect(loadMine().map((pattern) => pattern.text)).toEqual([BUILT_IN[1]!.text]);
+  expect(pendingSaves()).toHaveLength(0);
 });

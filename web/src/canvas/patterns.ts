@@ -8,6 +8,10 @@
  * later check that the diagram still follows the pattern.
  */
 
+import { hasStrings, isRecord } from "./validation.js";
+import { validateRecoveryDiagram } from "./recoveryDiagram.js";
+import { readStored, writeStored } from "./persistence.js";
+
 import { fromMermaid, makeId, toMermaid, type Arrow, type Box, type Problem } from "./model.js";
 
 import inputsOutputs from "../../patterns/process-inputs-outputs.mmd?raw";
@@ -37,6 +41,7 @@ export interface PatternMeta {
 export interface Pattern extends PatternMeta {
   text: string; // the pattern diagram, Mermaid
   builtIn: boolean;
+  unavailable?: string; // retained source that must be repaired before insertion
 }
 
 /** The built-in patterns each section offers: materials science the PMDco ones, computations its own as well. */
@@ -111,22 +116,71 @@ export const BUILT_IN: Pattern[] = [inputsOutputs, processChain, measurement, ro
 
 // ---- my patterns, kept in this browser ----------------------------------------------------
 
-const MINE_KEY = "mermantics-my-patterns";
+export const MINE_KEY = "mermantics-my-patterns";
+
+/** The same boundary for new imports and recovery of active patterns. */
+export function importPattern(text: string): Pattern {
+  validateRecoveryDiagram(text);
+  const pattern = parsePattern(text);
+  if (!pattern) throw new Error("A pattern needs a name and at least one box.");
+  return pattern;
+}
+
+/** Legacy source is kept verbatim, but never inserted as a diagram until repaired. */
+export interface PatternSource { id: string; title: string; text: string; unavailable: string }
+export function isPatternSource(value: unknown): value is PatternSource {
+  return isRecord(value) && hasStrings(value, ["id", "title", "text", "unavailable"])
+    && !!value.id && !!value.title && !!value.unavailable;
+}
+function sourcePattern(source: PatternSource): Pattern {
+  return { description: "Download the original source, repair it, and import it again.", version: "", source: "", questions: [],
+    ...source, builtIn: false };
+}
+
+/** Read old string collections without dropping patterns the tolerant importer once accepted. */
+export function readMine(raw: unknown): Pattern[] {
+  if (!Array.isArray(raw)) throw new Error("The custom-pattern collection is not a list.");
+  const ids = new Set<string>();
+  // Reserve original IDs so a recovery-only item cannot replace a later active pattern.
+  const reserved = new Set(raw.map((item) => typeof item === "string" ? readMeta(item)?.id : isPatternSource(item) ? item.id : ""));
+  const sourceId = (index: number) => {
+    let id = `recovered-pattern-${index + 1}`;
+    while (ids.has(id) || reserved.has(id)) id += "-copy";
+    return id;
+  };
+  return raw.map((item, index) => {
+    let pattern: Pattern;
+    if (isPatternSource(item)) pattern = sourcePattern(item);
+    else if (typeof item === "string") {
+      try { pattern = importPattern(item); }
+      catch (error) {
+        const meta = readMeta(item);
+        pattern = sourcePattern({ id: sourceId(index), title: meta?.title || `Recovered pattern ${index + 1}`,
+          text: item, unavailable: (error as Error).message });
+      }
+    } else throw new Error(`Custom pattern ${index + 1} has an unsupported storage format.`);
+    if (ids.has(pattern.id)) {
+      pattern = sourcePattern({ id: sourceId(index), title: pattern.title, text: pattern.text, unavailable: "Duplicate pattern ID. Rename it before importing." });
+    }
+    ids.add(pattern.id);
+    return pattern;
+  });
+}
+
+export function storedPatterns(patterns: Pattern[]): (string | PatternSource)[] {
+  return patterns.filter((p) => !p.builtIn).map((p) => p.unavailable
+    ? { id: p.id, title: p.title, text: p.text, unavailable: p.unavailable } : p.text);
+}
 
 export function loadMine(): Pattern[] {
-  try {
-    const raw = JSON.parse(localStorage.getItem(MINE_KEY) ?? "[]") as unknown;
-    if (!Array.isArray(raw)) return [];
-    return raw.filter((t): t is string => typeof t === "string").map((t) => parsePattern(t)).filter((p): p is Pattern => !!p);
-  } catch {
-    return [];
-  }
+  try { return readMine(JSON.parse(readStored("local", MINE_KEY) ?? "[]")); }
+  catch { return []; }
 }
 
 export function saveMine(patterns: Pattern[]) {
-  try {
-    localStorage.setItem(MINE_KEY, JSON.stringify(patterns.filter((p) => !p.builtIn).map((p) => p.text)));
-  } catch { /* storage can be off */ }
+  // Also protects callers holding patterns accepted by older, tolerant import paths.
+  const kept = storedPatterns(readMine(storedPatterns(patterns)));
+  return writeStored("local", MINE_KEY, JSON.stringify(kept));
 }
 
 // ---- making a pattern from a selection ----------------------------------------------------

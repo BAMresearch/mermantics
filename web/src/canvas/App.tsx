@@ -33,13 +33,14 @@ import { NARROW, TOUCH, useMedia } from "./media.js";
 import { emptyUseCase, fromMermaid, makeId, toMermaid, type Arrow, type ArrowData, type Box, type BoxData, type Problem,
          type UseCase } from "./model.js";
 import type { Mode } from "./mode.js";
+import { SaveNotice } from "./SaveNotice.js";
 import { onLeaving, saveDiagram, savedDiagram } from "./saved.js";
 import { checkStatus, Compare, OptionBar, OptionPanel, TermsTree } from "./OptionsPanel.js";
 import { EMPTY_VIEW, newOptionId, nextLetter, originalView, readState, resultsMarkdown, VIEWS, type DesignOption,
          type OptionsState, type ViewId } from "./options.js";
 import { datastoreLinkOrder, DATASTORE_LINKS, IS_ATTACHED_TO, IS_CHILD_OF, IS_PARENT_OF, KIND_BY_ANCESTOR, openbisFor, shapeOf, statusOf,
          type Shape, type ShapeKind } from "./palette.js";
-import { BUILT_IN, checkUses, instantiate, loadMine, parsePattern, patternFromSelection, readUses, remapInsertion, saveMine, slug,
+import { BUILT_IN, checkUses, importPattern, instantiate, loadMine, patternFromSelection, readUses, remapInsertion, saveMine, slug,
          type Pattern, type PatternUse } from "./patterns.js";
 import { loadOwnRelations, PlainRelationMenu, RelationMenu, saveOwnRelations, type Choice,
          type OwnRelation } from "./RelationMenu.js";
@@ -224,6 +225,12 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
   const [focused, setFocused] = useState<string | null>(null); // competency question shown on the canvas
   const [patternUses, setPatternUses] = useState<PatternUse[]>([]);
   const [myPatterns, setMyPatterns] = useState<Pattern[]>(loadMine);
+  const myPatternsRef = useRef(myPatterns);
+  const updatePatterns = useCallback((next: Pattern[]) => {
+    myPatternsRef.current = next;
+    setMyPatterns(next);
+    saveMine(next);
+  }, []);
   const [ownRelations, setOwnRelations] = useState<OwnRelation[]>(() => loadOwnRelations(mode.relationsKey));
   const rememberRelation = useCallback((r: OwnRelation) => {
     setOwnRelations((list) => {
@@ -240,6 +247,9 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
     });
   }, [mode.relationsKey]);
   const patternInput = useRef<HTMLInputElement>(null);
+  // Pending reads belong to this editor lifetime; leaving it must revoke storage writes too.
+  const patternReadGeneration = useRef(0);
+  useEffect(() => () => { patternReadGeneration.current++; }, []);
   const wrapper = useRef<HTMLDivElement>(null);
   const pointer = useRef({ x: 0, y: 0 });
   const fileInput = useRef<HTMLInputElement>(null);
@@ -604,6 +614,7 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
                               [myPatterns, mode.patternIds]);
 
   const insertPattern = useCallback(async (pattern: Pattern, at?: { x: number; y: number }) => {
+    if (pattern.unavailable) return;
     if (loading.current !== null) return;
     // Undo or redo while the pattern is being placed drops it, like any other work for the state before.
     const valid = work.beginEdit();
@@ -650,13 +661,12 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
     addBox(shapeOf(kind), at);
   }, [addBox, allPatterns, flow, insertPattern]);
 
-  const keepPattern = useCallback((pattern: Pattern) => {
-    setMyPatterns((ps) => {
-      const next = [...ps.filter((p) => p.id !== pattern.id), pattern];
-      saveMine(next);
-      return next;
-    });
-  }, []);
+  const keepPattern = useCallback((text: string, name: string) => {
+    try {
+      const accepted = importPattern(text);
+      updatePatterns([...myPatternsRef.current.filter((p) => p.id !== accepted.id), accepted]);
+    } catch (error) { setNotice(`Could not import pattern “${name}”: ${(error as Error).message}`); }
+  }, [updatePatterns]);
 
   // ---- arrows ---------------------------------------------------------------------------
 
@@ -1092,6 +1102,8 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
         <div className="bar-spacer" />
       </header>
 
+      <SaveNotice flush={saveNow} />
+
       {mode.options && opts && (
         <OptionBar options={opts.options} current={opts.current} onGo={goTo}
                    onCompare={() => { closeConnections(); flushedOptions(); setComparing(true); }} />
@@ -1115,21 +1127,18 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
           <h2>Patterns</h2>
           {allPatterns.map((p) => (
             <div key={`${p.builtIn ? "b" : "m"}-${p.id}`} className="pattern-item">
-              <button type="button" className="shape pattern" draggable title={p.description}
+              <button type="button" className="shape pattern" disabled={!!p.unavailable} draggable={!p.unavailable} title={p.description}
                       onDragStart={(e) => { e.dataTransfer.setData("application/mermantics-pattern", p.id); e.dataTransfer.effectAllowed = "copy"; }}
                       onClick={() => void insertPattern(p)}>
                 <span className="pattern-icon" aria-hidden="true"><i /><i /><i /></span>
                 <span className="shape-text"><b>{p.title}</b><small>{p.builtIn ? (p.id.startsWith("pmdco-") ? "from PMDco" : "for this workshop") : "my pattern"}{p.version ? ` · ${p.version}` : ""}</small></span>
                 <Grip />
               </button>
+              {p.unavailable && <p className="palette-hint" role="status">Needs repair: {p.unavailable} Your original source is preserved; download it to repair and import again.</p>}
               {!p.builtIn && (
                 <span className="pattern-actions">
-                  <button type="button" className="link" onClick={() => save(p.text, `${p.id}.mmd`)}>Download</button>
-                  <button type="button" className="link danger-link" onClick={() => setMyPatterns((ps) => {
-                    const next = ps.filter((x) => x.id !== p.id);
-                    saveMine(next);
-                    return next;
-                  })}>Remove</button>
+                  <button type="button" className="link" onClick={() => save(p.text, `${p.id}.mmd`)}>{p.unavailable ? "Download original" : "Download"}</button>
+                  <button type="button" className="link danger-link" onClick={() => updatePatterns(myPatternsRef.current.filter((x) => x.id !== p.id))}>Remove</button>
                 </span>
               )}
             </div>
@@ -1139,9 +1148,14 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
             const file = e.target.files?.[0];
             e.target.value = "";
             if (!file) return;
-            const pattern = parsePattern(await file.text());
-            if (pattern) keepPattern(pattern);
-            else setNotice(`${file.name} is not a pattern file: it has no pattern name. Use "Import" at the top to open it as a model.`);
+            const generation = patternReadGeneration.current;
+            try {
+              const text = await file.text();
+              if (generation !== patternReadGeneration.current) return;
+              keepPattern(text, file.name);
+            } catch (error) {
+              if (generation === patternReadGeneration.current) setNotice(`Could not import ${file.name}: ${(error as Error).message}`);
+            }
           }} />
           <p className="palette-hint">Select several boxes to save them as your own pattern.</p>
           </>)}
@@ -1269,7 +1283,7 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
           {selectedBoxes.length > 1 ? (
             <SelectionPanel count={selectedBoxes.length} arrows={selectionArrows} questions={selectionQuestions} canSave={mode.patterns}
                             onDelete={() => void flow.deleteElements({ nodes: selectedBoxes.map((b) => ({ id: b.id })) })}
-                            onSave={(meta) => { const p = parsePattern(patternText(meta)); if (p) keepPattern(p); }}
+                            onSave={(meta) => keepPattern(patternText(meta), meta.title)}
                             onDownload={(meta) => save(patternText(meta), `${slug(meta.title)}.mmd`)} />
           ) : selectedBox ? (
             <BoxDetails box={selectedBox} shapes={mode.shapes} ontology={mode.ontology} datastore={mode.datastore} boxes={boxes}

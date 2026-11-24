@@ -37,6 +37,45 @@ The parity tests compare the TypeScript checks with JSON output of the Python CL
 `tests/golden/`. `npm run golden:fast` makes those files again (it needs the Python package
 installed in `web/.venv`, see `scripts/make-golden-fast.sh`).
 
+### Recovering failed saves
+
+Diagram autosaves use session storage; custom patterns use local storage. If a write
+fails (for example, because storage is full or disabled), the latest value stays in
+memory across section changes. A persistent warning appears in the editor and on
+the start page, with **Retry save** and **Download recovery copy** actions. Memory
+retention ends when the page reloads or the tab closes, so download before leaving.
+A download does not clear a save failure; only a successful browser write does.
+
+The recovery download captures pending autosave edits and includes all currently
+failed destinations: complete diagrams, all computation options/views and workshop
+notes, and the full custom-pattern collection. It does not run ontology checks.
+On the start page, use **Restore a recovery copy**, select the JSON file, review
+the selected filename and which sections/collection will be replaced, and choose
+**Restore this copy**. Selecting another file invalidates any earlier file read.
+Ordinary Mermaid exports remain available from the editor's Export menu.
+
+`src/canvas/persistence.ts` owns failed writes and subscriptions. `recovery.ts`
+uses a versioned envelope (`mermantics-recovery`), validates the complete
+file and permits only known diagram/pattern storage keys before restoring.
+`recoveryDiagram.ts` rejects parser warnings, malformed layout/workshop metadata,
+and duplicate metadata. It accepts empty diagrams and does not check ontology
+meaning. Custom-pattern IDs must be unique. Runtime checks for workshop/options
+and pattern data live beside their model definitions. Invalid files leave both
+stored and pending work untouched. If
+storage still fails during restore, the imported work remains in memory and the
+warning stays visible. The recovery file covers the destinations listed in it;
+it is not a backup of unrelated browser settings.
+
+New custom-pattern imports use the same validation as recovery, including the
+parser's YAML frontmatter handling. Older incompatible patterns retain their exact
+source as **Needs repair** items with **Download original** and Remove actions;
+they cannot be inserted into a diagram. Recovery copies containing these inert
+source items use format version 2; ordinary copies remain version 1, and both
+versions are supported. The restore preview identifies source-only items before
+confirmation. Sources use the existing custom-pattern collection, with no separate
+storage backend. Every recovery download is validated before it is offered.
+Errors identify the affected section, option/view, or custom pattern and the reason.
+
 ### Optional details-panel browser check
 
 `scripts/check-details-panel.mjs` checks actual Chromium layout, pointer and keyboard resizing,

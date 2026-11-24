@@ -12,7 +12,8 @@
  * notes (stories, questions, open points) belong to the whole workshop, not to one diagram.
  */
 
-import { emptyUseCase, type UseCase } from "./model.js";
+import { hasStrings, isRecord, isRecordList } from "./validation.js";
+import { emptyUseCase, isUseCase, type UseCase } from "./model.js";
 import { toMarkdown } from "./usecase.js";
 
 import aTerms from "../../options/a-pmdco-3-1-2/terms.mmd?raw";
@@ -155,12 +156,24 @@ export interface OptionsState {
   useCase: UseCase;
 }
 
+/** Strict storage shape; diagram syntax is checked separately by recovery. */
+export function isOptionsState(value: unknown): value is OptionsState {
+  if (!isRecord(value) || !Number.isInteger(value.version) || !isRecord(value.current) || !isUseCase(value.useCase)) return false;
+  if (!isRecordList(value.options, (o) => hasStrings(o, ["id", "letter", "title", "summary", "kinds", "gains", "costs", "why", "source"])
+    && !!o.id && typeof o.builtIn === "boolean" && isVerdict(o.verdict)
+    && isRecord(o.views) && hasStrings(o.views, VIEWS.map((v) => v.id)))) return false;
+  const options = value.options as DesignOption[];
+  const current = value.current;
+  return new Set(options.map((o) => o.id)).size === options.length
+    && options.some((o) => o.id === current.option) && isView(current.view);
+}
+
 export function freshState(): OptionsState {
   const options = builtInOptions();
   return { version: BUILT_IN_VERSION, options, current: { option: "e-task-model-solver", view: "dft" }, useCase: emptyUseCase() };
 }
 
-const isView = (v: unknown): v is ViewId => v === "terms" || v === "dft" || v === "fem";
+const isView = (v: unknown): v is ViewId => VIEWS.some((view) => view.id === v);
 const isVerdict = (v: unknown): v is Verdict => VERDICTS.some((x) => x.id === v);
 const str = (v: unknown) => (typeof v === "string" ? v : "");
 /** A stored string, or the fallback when the field is missing or not a string. */

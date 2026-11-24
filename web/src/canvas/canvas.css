@@ -567,3 +567,11 @@ button, input, select, textarea { font: inherit; color: inherit; }
   .toolbar-menu { position: static; }
   .toolbar-dropdown { top: 100%; left: 0; max-width: 100%; }
 }
+
+/* Save failures remain visible independently of canvas overlays and workshop mode. */
+.save-notice { flex: 0 0 auto; padding: 10px 16px; background: #fffbeb; color: #713f12;
+  border-bottom: 1px solid #fcd34d; font-size: 13px; max-height: 30vh; overflow: auto; }
+.save-notice button, .recovery-restore button { margin-top: 6px; padding: 6px 10px; cursor: pointer; }
+.save-notice small { display: block; margin-top: 5px; }
+.start > .save-notice { width: 100%; box-sizing: border-box; text-align: left; }
+.recovery-restore { margin-top: 20px; }

@@ -1,10 +1,19 @@
+import { useEffect, useRef, useState } from "react";
+import { SaveNotice } from "./SaveNotice.js";
+import { readRecovery, recoveryLabel, recoverySources, restoreRecovery } from "./recovery.js";
 import logo from "../../../assets/mermantics-logo.svg";
 import { MODES, type ModeId } from "./mode.js";
 
 /** The start page: pick a section. */
 export function Start({ onChoose }: { onChoose: (id: ModeId) => void }) {
+  const input = useRef<HTMLInputElement>(null);
+  const readGeneration = useRef(0);
+  useEffect(() => () => { readGeneration.current++; }, []);
+  const [backup, setBackup] = useState<{ text: string; name: string; labels: string[]; sources: string[] } | null>(null);
+  const [message, setMessage] = useState("");
   return (
     <div className="start">
+      <SaveNotice />
       <img className="start-logo" src={logo} alt="mermantics" />
       <section className="start-scope" aria-labelledby="start-scope-title">
         <h2 id="start-scope-title">What it is, and what it isn&apos;t</h2>
@@ -32,6 +41,39 @@ export function Start({ onChoose }: { onChoose: (id: ModeId) => void }) {
           );
         })}
       </div>
+      <section className="recovery-restore" aria-label="Restore saved work">
+        <button type="button" onClick={() => input.current?.click()}>Restore a recovery copy</button>
+        <input ref={input} type="file" accept=".json" hidden onChange={async (event) => {
+          const generation = ++readGeneration.current;
+          const file = event.target.files?.[0];
+          event.target.value = "";
+          setBackup(null);
+          setMessage("");
+          if (!file) return;
+          try {
+            const text = await file.text();
+            if (generation !== readGeneration.current) return;
+            const entries = readRecovery(text);
+            setBackup({ text, name: file.name, labels: entries.map(recoveryLabel), sources: recoverySources(entries) });
+          } catch (error) {
+            if (generation === readGeneration.current) setMessage((error as Error).message);
+          }
+        }} />
+        {backup && <div>
+          {backup.sources.length > 0 && <p>The following patterns will be kept as source files needing repair: {backup.sources.join(", ")}. Download their originals from the pattern list after restoring.</p>}
+          <p>Selected file: <strong>{backup.name}</strong></p>
+          <p>Restore {backup.labels.join(", ")}? This replaces the current work in those sections or the custom-pattern collection.</p>
+          <button type="button" onClick={() => {
+            try {
+              restoreRecovery(backup.text);
+              setBackup(null);
+              setMessage("Recovery copy restored. Open a section to continue. Any browser save failures are shown above.");
+            } catch (error) { setMessage((error as Error).message); }
+          }}>Restore this copy</button>{" "}
+          <button type="button" onClick={() => { readGeneration.current++; setBackup(null); }}>Cancel</button>
+        </div>}
+        {message && <p role="status">{message}</p>}
+      </section>
       <p className="start-foot">
         Each section saves a plain Mermaid file. The logo at the top left of the canvas brings you back here.
       </p>
