@@ -831,7 +831,7 @@ test.each(["classification", "layout"])("pattern %s failure leaves complete cont
   await insertFirstPattern();
   await act(async () => pending.reject(new Error("Pattern failed")));
   expect(container.textContent).toContain(stage === "layout"
-    ? "Could not insert the pattern: Pattern failed" : "Could not classify imported boxes: Pattern failed");
+    ? "Could not insert the pattern: Pattern failed" : "Could not classify boxes: Pattern failed");
   await act(async () => vi.advanceTimersByTime(801));
   const copies = stage === "layout" ? 1 : 2;
   if (stage === "layout") expect(storage.get(plain.storageKey)).toBe(before);
@@ -1006,7 +1006,7 @@ test("history belongs to the document on the canvas", async () => {
   expect(nodes()).toEqual([]);
 });
 
-test("a shape found after the class was undone is there when the class is redone", async () => {
+test("undo cancels obsolete classification and redo retries the pending class", async () => {
   mocks.check.mockResolvedValue({ result: { findings: [] } });
   await mount({ ...plain, ontology: true });
   await act(async () => mocks.flowProps.onNodesChange([{ type: "select", id: "A", selected: true }]));
@@ -1015,16 +1015,19 @@ test("a shape found after the class was undone is there when the class is redone
   const late = deferred<string[][]>();
   mocks.supers.mockImplementationOnce(() => late.promise);
   await act(async () => mocks.boxProps.onChange({ classId: "TEST_1", classLabel: "a process" }));
+  const signal = mocks.supers.mock.lastCall![1] as AbortSignal;
   await click("Undo"); // before the class has been looked up
+  expect(signal.aborted).toBe(true);
   await act(async () => late.resolve([["COB_0000035"]]));
   expect([box().classId, box().kind]).toEqual(["", "other"]);
   const lookups = mocks.supers.mock.calls.length;
+  mocks.supers.mockResolvedValueOnce([["COB_0000035"]]);
   await click("Redo");
   expect([box().classId, box().kind]).toEqual(["TEST_1", "process"]);
   await click("Undo");
   await click("Redo");
   expect(box().kind).toBe("process");
-  expect(mocks.supers.mock.calls.length).toBe(lookups); // the one answer was enough
+  expect(mocks.supers.mock.calls.length).toBe(lookups + 1); // Only the cancelled lookup is retried.
 });
 
 test("a shape found after later edits is in the earlier steps too", async () => {
@@ -1453,7 +1456,7 @@ for (const interrupted of ["offline", "still loading"]) {
     mocks.supers.mockResolvedValue([["COB_0000035"]]);
     mocks.check.mockResolvedValue({ result: { findings: [] } });
     await mount({ ...plain, ontology: true });
-    expect(mocks.supers).toHaveBeenCalledWith(["TST_0000001"]);
+    expect(mocks.supers).toHaveBeenCalledWith(["TST_0000001"], expect.any(AbortSignal));
     expect(nodes()[0]!.data.kind).toBe("process");
     await act(async () => vi.advanceTimersByTime(801));
     expect(storage.get(plain.storageKey)).toContain('"A":"process"');
@@ -1567,10 +1570,52 @@ for (const outcome of ["success", "failure"]) {
     } else {
       await act(async () => classification.reject(new Error("worker crashed")));
       for (const box of inserted) expect(nodes().find((b) => b.id === box.id)!.data.autoClassify).toBe(box.data.classId);
-      expect(container.textContent).toContain("Could not classify imported boxes: worker crashed");
+      expect(container.textContent).toContain("Could not classify boxes: worker crashed");
     }
     expect(container.textContent).not.toContain("Could not insert the pattern");
     await click("Undo");
     expect(nodes().map((b) => b.id)).toEqual(["A"]);
   });
 }
+
+for (const failure of ["ontology unavailable", "lookup failed"]) {
+  test(`manual class assignments persist and classify after recovery when ${failure}`, async () => {
+    mocks.check.mockResolvedValue({ result: { findings: [] } });
+    if (failure === "ontology unavailable") mocks.loadOntology.mockRejectedValueOnce(new Error("offline"));
+    await mount({ ...plain, ontology: true });
+    await act(async () => mocks.flowProps.onNodesChange([{ type: "select", id: "A", selected: true }]));
+    if (failure === "lookup failed") mocks.supers.mockRejectedValueOnce(new Error("worker failed"));
+    await act(async () => mocks.boxProps.onChange({ classId: "TST_0000001", classLabel: "chosen class" }));
+    expect(nodes()[0]!.data.autoClassify).toBe("TST_0000001");
+    expect(nodes()[0]!.data.kind).toBe("other");
+    if (failure === "ontology unavailable") expect(mocks.supers).not.toHaveBeenCalled();
+    else expect(container.textContent).toContain("Could not classify boxes: worker failed");
+    await act(async () => vi.advanceTimersByTime(801));
+    expect(fromMermaid(storage.get(plain.storageKey)!).unclassified).toEqual(["A"]);
+    mocks.supers.mockResolvedValue([["COB_0000035"]]);
+    await act(async () => publishOntology({ status: "ready", error: "", revision: 2 }));
+    expect(nodes()[0]!.data.kind).toBe("process");
+    expect(nodes()[0]!.data.autoClassify).toBeUndefined();
+    await click("Undo");
+    expect(nodes()[0]!.data.classId).toBe("");
+    await click("Redo");
+    expect(nodes()[0]!.data.kind).toBe("process");
+  });
+}
+
+test("an explicit shape cancels manual classification and prevents recovery from overwriting it", async () => {
+  mocks.check.mockResolvedValue({ result: { findings: [] } });
+  await mount({ ...plain, ontology: true });
+  await act(async () => mocks.flowProps.onNodesChange([{ type: "select", id: "A", selected: true }]));
+  const pending = deferred<string[][]>();
+  mocks.supers.mockReturnValueOnce(pending.promise);
+  await act(async () => mocks.boxProps.onChange({ classId: "TST_0000001" }));
+  const signal = mocks.supers.mock.lastCall![1] as AbortSignal;
+  await act(async () => mocks.boxProps.onChange({ kind: "other" }));
+  expect(signal.aborted).toBe(true);
+  expect(nodes()[0]!.data.autoClassify).toBeUndefined();
+  await act(async () => pending.resolve([["COB_0000035"]]));
+  await act(async () => publishOntology({ status: "ready", revision: 2 }));
+  expect(nodes()[0]!.data.kind).toBe("other");
+  expect(mocks.supers).toHaveBeenCalledTimes(1);
+});

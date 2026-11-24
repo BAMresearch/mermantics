@@ -215,3 +215,19 @@ test.each(["failed", "loading"] as const)("Overview displays identical %s messag
   expect(host.textContent!.split(message)).toHaveLength(2);
   expect(host.querySelector(".muted-inline")).toBeNull();
 });
+
+test("search changes and unmount cancel their obsolete requests", async () => {
+  mocks.search.mockImplementation(() => new Promise(() => {}));
+  await act(async () => root.render(createElement(TermSearch, { onPick: vi.fn(), placeholder: "Find" })));
+  await type("Material");
+  await act(async () => vi.advanceTimersByTime(151));
+  const old = mocks.search.mock.lastCall![3] as AbortSignal;
+  expect(old.aborted).toBe(false);
+  await type("Process");
+  expect(old.aborted).toBe(true);
+  await act(async () => vi.advanceTimersByTime(151));
+  const current = mocks.search.mock.lastCall![3] as AbortSignal;
+  expect(current.aborted).toBe(false);
+  await act(async () => root.render(null));
+  expect(current.aborted).toBe(true);
+});

@@ -5,7 +5,7 @@ import type { SearchResult, Term } from "../core/terms.js";
 import type { Checked, OntologyInfo, Request, Response, TreeNode } from "../worker/protocol.js";
 
 type Pending = { resolve: (r: Response) => void; reject: (e: Error) => void;
-  timer: ReturnType<typeof setTimeout> | null; request: Request; latest: boolean };
+  timer: ReturnType<typeof setTimeout> | null; request: Request; latest: boolean; dispose: () => void };
 type Body<T extends Request["type"]> = Omit<Extract<Request, { type: T }>, "id">;
 
 const pending = new Map<number, Pending>();
@@ -59,6 +59,7 @@ function failWorker(current: Worker, error: Error): void {
   current.onmessage = current.onerror = current.onmessageerror = null;
   current.terminate();
   for (const p of pending.values()) {
+    p.dispose();
     if (p.timer !== null) clearTimeout(p.timer);
     p.reject(error);
   }
@@ -88,6 +89,7 @@ function getWorker(): Worker {
     if (!p || msg.id !== activeId) return;
     pending.delete(msg.id);
     activeId = null;
+    p.dispose();
     if (p.timer !== null) clearTimeout(p.timer);
     if (msg.type === "error") p.reject(new Error(msg.message));
     else p.resolve(msg);
@@ -113,9 +115,10 @@ function dispatchNext(current: Worker): void {
   }
 }
 
-function ask<T extends Request["type"]>(body: Body<T>, latestRevision?: number): Promise<Response> {
+function ask<T extends Request["type"]>(body: Body<T>, latestRevision?: number, signal?: AbortSignal): Promise<Response> {
   const id = nextId++;
   return new Promise((resolve, reject) => {
+    if (signal?.aborted) { reject(cancelled()); return; }
     // Construct before registering: constructor errors must not leave pending entries.
     const current = getWorker();
     if (latestRevision !== undefined) {
@@ -126,11 +129,27 @@ function ask<T extends Request["type"]>(body: Body<T>, latestRevision?: number):
       for (const [queuedId, p] of pending) {
         if (p.latest && p.timer === null) {
           pending.delete(queuedId);
+          p.dispose();
           p.reject(new Error("Superseded by a newer diagram check"));
         }
       }
     }
-    pending.set(id, { resolve, reject, timer: null, request: { ...body, id } as unknown as Request, latest: latestRevision !== undefined });
+    const p: Pending = { resolve, reject, timer: null, request: { ...body, id } as unknown as Request,
+      latest: latestRevision !== undefined, dispose: () => {} };
+    pending.set(id, p);
+    if (signal) {
+      const abort = () => {
+        p.dispose();
+        p.reject(cancelled());
+        // Dispatched work cannot be interrupted without losing the worker. Keep its
+        // slot and watchdog until it replies, but release the cancelled consumer.
+        if (p.timer === null) pending.delete(id);
+        else { p.resolve = () => {}; p.reject = () => {}; }
+        dispatchNext(current);
+      };
+      p.dispose = () => signal.removeEventListener("abort", abort);
+      signal.addEventListener("abort", abort, { once: true });
+    }
     dispatchNext(current);
   });
 }
@@ -161,17 +180,39 @@ export function loadOntology(): Promise<OntologyInfo> {
   return loading;
 }
 
+function cancelled(): DOMException {
+  return new DOMException("The request was cancelled", "AbortError");
+}
+
+/** Stop waiting without cancelling the ontology load shared by other consumers. */
+function waitForOntology(loading: Promise<OntologyInfo>, signal?: AbortSignal): Promise<OntologyInfo> {
+  if (!signal) return loading;
+  return new Promise((resolve, reject) => {
+    const abort = () => { signal.removeEventListener("abort", abort); reject(cancelled()); };
+    if (signal.aborted) reject(cancelled());
+    else signal.addEventListener("abort", abort, { once: true });
+    loading.then((info) => {
+      signal.removeEventListener("abort", abort);
+      resolve(info);
+    }, (error: unknown) => {
+      signal.removeEventListener("abort", abort);
+      reject(error);
+    });
+  });
+}
+
 /** A replacement worker must finish loading before any ontology-dependent operation. */
-async function askLoaded<T extends Exclude<Request["type"], "load">>(body: Body<T>, latestRevision?: number): Promise<Response> {
+async function askLoaded<T extends Exclude<Request["type"], "load">>(body: Body<T>, latestRevision?: number, signal?: AbortSignal): Promise<Response> {
+  if (signal?.aborted) throw cancelled();
   let loading = loadOntology();
   for (;;) {
     try {
-      await loading;
+      await waitForOntology(loading, signal);
     } catch (error) {
       // Follow a replacement already started by another consumer; don't start retry loops.
-      if (!ontology || ontology === loading) throw error;
+      if (signal?.aborted || !ontology || ontology === loading) throw error;
     }
-    if (ontology === loading) return ask<T>(body, latestRevision);
+    if (ontology === loading) return ask<T>(body, latestRevision, signal);
     if (!ontology) throw new Error("Checker worker stopped; try again");
     loading = ontology;
   }
@@ -184,8 +225,8 @@ export async function check(text: string, { latest = false }: { latest?: boolean
   return r.checked;
 }
 
-export async function search(query: string, kinds: string[], limit = 25): Promise<SearchResult> {
-  const r = await askLoaded<"search">({ type: "search", query, kinds, limit });
+export async function search(query: string, kinds: string[], limit = 25, signal?: AbortSignal): Promise<SearchResult> {
+  const r = await askLoaded<"search">({ type: "search", query, kinds, limit }, undefined, signal);
   if (r.type !== "found") throw new Error("unexpected answer");
   return r.result;
 }
@@ -202,8 +243,8 @@ export async function relations(src: string[], dst: string[], only: string[] | n
   return r.relations;
 }
 
-export async function supers(ids: string[]): Promise<string[][]> {
-  const r = await askLoaded<"supers">({ type: "supers", ids });
+export async function supers(ids: string[], signal?: AbortSignal): Promise<string[][]> {
+  const r = await askLoaded<"supers">({ type: "supers", ids }, undefined, signal);
   if (r.type !== "supers") throw new Error("unexpected answer");
   return r.supers;
 }

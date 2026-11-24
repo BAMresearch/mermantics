@@ -327,3 +327,105 @@ test.each([0, -1, NaN, Infinity, 121_000, 3_600_001])("invalid time limit %s can
   expect(client.getOntologyState().timeoutMs).toBe(120_000);
   expect(FakeWorker.instances).toHaveLength(0);
 });
+
+test("obsolete queued searches and classification requests never reach the worker", async () => {
+  const worker = await loaded();
+  const active = client.check("long check");
+  await vi.advanceTimersByTimeAsync(0);
+  const searches = new AbortController();
+  const classification = new AbortController();
+  const oldSearch = client.search("old query", [], 12, searches.signal);
+  const oldClasses = client.supers(["OldClass"], classification.signal);
+  const cancelled = Promise.allSettled([oldSearch, oldClasses]);
+  await vi.advanceTimersByTimeAsync(0);
+  searches.abort(); classification.abort();
+  for (const result of await cancelled) {
+    expect(result.status).toBe("rejected");
+    if (result.status === "rejected") expect(result.reason.name).toBe("AbortError");
+  }
+  const current = client.search("current query", []);
+  await vi.advanceTimersByTimeAsync(0);
+  worker.reply({ type: "checked", id: worker.request().id, checked: {} as import("../src/worker/protocol.js").Checked });
+  await active;
+  expect(worker.request()).toMatchObject({ type: "search", query: "current query" });
+  expect(worker.postMessage).toHaveBeenCalledTimes(3); // load, check, current search
+  worker.reply({ type: "found", id: worker.request().id, result: { terms: [], total: 0 } });
+  await current;
+  expect(vi.getTimerCount()).toBe(0);
+});
+
+test("cancelling during ontology loading settles immediately without cancelling the shared load", async () => {
+  const controller = new AbortController();
+  const old = client.search("old", [], 12, controller.signal);
+  const rejected = expect(old).rejects.toMatchObject({ name: "AbortError" });
+  const loading = client.loadOntology();
+  controller.abort();
+  await rejected;
+  const worker = latest();
+  expect(worker.terminate).not.toHaveBeenCalled();
+  worker.reply({ type: "loaded", id: worker.request().id, ontology: info });
+  await loading;
+  expect(worker.postMessage).toHaveBeenCalledTimes(1);
+  expect(vi.getTimerCount()).toBe(0);
+});
+
+test("cancelling active work releases its caller but keeps serial dispatch until its response", async () => {
+  const worker = await loaded();
+  const controller = new AbortController();
+  const active = client.search("old", [], 12, controller.signal);
+  const rejected = expect(active).rejects.toMatchObject({ name: "AbortError" });
+  await vi.advanceTimersByTimeAsync(0);
+  const next = client.supers(["Next"]);
+  await vi.advanceTimersByTimeAsync(0);
+  controller.abort();
+  await rejected;
+  expect(worker.request().type).toBe("search");
+  expect(worker.postMessage).toHaveBeenCalledTimes(2);
+  expect(vi.getTimerCount()).toBe(1);
+  worker.reply({ type: "found", id: worker.request().id, result: { terms: [], total: 0 } });
+  expect(worker.request().type).toBe("supers");
+  worker.reply({ type: "supers", id: worker.request().id, supers: [[]] });
+  await next;
+  expect(worker.terminate).not.toHaveBeenCalled();
+  expect(vi.getTimerCount()).toBe(0);
+});
+
+test("a pre-cancelled request never starts the worker", async () => {
+  const controller = new AbortController();
+  controller.abort();
+  await expect(client.search("old", [], 12, controller.signal)).rejects.toMatchObject({ name: "AbortError" });
+  await expect(client.supers(["Old"], controller.signal)).rejects.toMatchObject({ name: "AbortError" });
+  expect(FakeWorker.instances).toHaveLength(0);
+});
+
+for (const outcome of ["success", "failure"]) {
+  test(`${outcome} removes cancellation listeners`, async () => {
+    const worker = await loaded();
+    const controller = new AbortController();
+    const remove = vi.spyOn(controller.signal, "removeEventListener");
+    const request = client.supers(["A"], controller.signal);
+    const result = Promise.allSettled([request]);
+    await vi.advanceTimersByTimeAsync(0);
+    if (outcome === "success") worker.reply({ type: "supers", id: worker.request().id, supers: [[]] });
+    else worker.onerror!(new ErrorEvent("error", { message: "crash" }));
+    await result;
+    expect(remove).toHaveBeenCalledWith("abort", expect.any(Function));
+    expect(vi.getTimerCount()).toBe(0);
+  });
+}
+
+test("a cancelled active operation still has a watchdog for callers queued behind it", async () => {
+  const worker = await loaded();
+  const controller = new AbortController();
+  const active = client.search("old", [], 12, controller.signal);
+  const cancelled = expect(active).rejects.toMatchObject({ name: "AbortError" });
+  await vi.advanceTimersByTimeAsync(0);
+  const waiting = client.lookup(["Next"]);
+  const timedOut = expect(waiting).rejects.toThrow("timed out during search");
+  controller.abort();
+  await cancelled;
+  await vi.advanceTimersByTimeAsync(120_000);
+  await timedOut;
+  expect(worker.terminate).toHaveBeenCalledOnce();
+  expect(vi.getTimerCount()).toBe(0);
+});

@@ -56,10 +56,10 @@ const edgeTypes: EdgeTypes = { floating: FloatingEdge };
 
 
 /** Shapes for imported boxes, from their classes' superclasses. */
-async function classify(boxes: Box[]): Promise<Box[]> {
+async function classify(boxes: Box[], signal?: AbortSignal): Promise<Box[]> {
   const open = boxes.filter((b) => b.data.kind === "other" && b.data.classId);
   if (!open.length) return boxes;
-  const all = await supers(open.map((b) => b.data.classId));
+  const all = await supers(open.map((b) => b.data.classId), signal);
   const kinds = new Map<string, ShapeKind>();
   open.forEach((b, i) => {
     const ancestors = new Set(all[i]);
@@ -493,16 +493,17 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
   const classificationKey = JSON.stringify(boxes.filter((b) => b.data.autoClassify)
     .map((b) => [b.id, b.data.autoClassify, b.data.classId, b.data.kind]));
 
-  // Enrich imported shapes after opening. Apply only to matching classes in the
+  // Resolve pending shapes for imported boxes, patterns and manually assigned classes. Apply only to matching classes in the
   // same document, preserving edits and amending history rather than adding a step.
   useEffect(() => {
-    if (!ready || !mode.ontology || ontologyState !== "ready") return;
+    if (!ready || !mode.ontology || ontologyState !== "ready" || loading.current !== null) return;
     let active = true;
     const document = work.current();
     const eligible = (b: Box) => !!b.data.autoClassify && b.data.autoClassify === b.data.classId && b.data.kind === "other";
     const snapshot = boxesRef.current.filter(eligible);
     if (!snapshot.length) return;
-    void classify(snapshot).then((classified) => {
+    const controller = new AbortController();
+    void classify(snapshot, controller.signal).then((classified) => {
       if (!active || !work.owns(document)) return;
       const candidates = new Map(boxesRef.current.filter(eligible).map((b) => [b.id, b.data.classId]));
       const shapes = new Map(classified.filter((b) => candidates.get(b.id) === b.data.classId).map((b) => [b.id, b.data]));
@@ -520,9 +521,9 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
       setBoxes(apply);
       history.amend((s) => snapshotOf(apply(s.boxes), s.arrows, s.uses, s.useCase));
     }).catch((error: Error) => {
-      if (active && work.owns(document)) setNotice(`Could not classify imported boxes: ${error.message}`);
+      if (active && work.owns(document)) setNotice(`Could not classify boxes: ${error.message}`);
     });
-    return () => { active = false; };
+    return () => { active = false; controller.abort(); };
   }, [ready, mode.ontology, mode.options, ontologyState, ontology.revision, checkRevision, classificationKey, history, setBoxes, work]);
 
   // ---- checking -------------------------------------------------------------------------
@@ -821,33 +822,18 @@ export function App({ mode, onHome }: { mode: Mode; onHome: () => void }) {
     });
   const nameOf = (id: string) => boxes.find((b) => b.id === id)?.data.name ?? id;
 
-  /**
-   * A box that is "something else" gets a shape once its class is known. This belongs to
-   * choosing the class, not a step of its own, and the answer can come after other edits or an
-   * undo: it is given to every step where the box has that class and no shape yet.
-   */
-  const shapeFromClass = useCallback((id: string, classId: string) => {
-    const document = work.current();
-    void supers([classId]).then(([anc]) => {
-      if (!work.owns(document)) return;
-      const hit = KIND_BY_ANCESTOR.find(([cid]) => (anc ?? []).includes(cid));
-      if (!hit) return;
-      const shaped = (bs: Box[]) => bs.map((b) => (b.id === id && b.data.classId === classId && b.data.kind === "other"
-        ? { ...b, data: { ...b.data, kind: hit[1] } } : b));
-      setBoxes(shaped);
-      history.amend((s) => snapshotOf(shaped(s.boxes), s.arrows, s.uses, s.useCase));
-    }).catch((error: Error) => {
-      if (work.owns(document)) setNotice(`Could not classify the box: ${error.message}`);
-    });
-  }, [history, setBoxes, work]);
-
+  /** Class assignments join the same persistent classification lifecycle as imports. */
   const patchBox = useCallback((id: string, patch: Partial<BoxData>) => {
-    if ("kind" in patch || "classId" in patch) {
-      patch = { ...patch, autoClassify: undefined };
-    }
-    setBoxes((bs) => bs.map((b) => (b.id === id ? { ...b, data: { ...b.data, ...patch } } : b)));
-    if (patch.classId && loading.current === null) shapeFromClass(id, patch.classId);
-  }, [setBoxes, shapeFromClass]);
+    setBoxes((bs) => bs.map((b) => {
+      if (b.id !== id) return b;
+      const data = { ...b.data, ...patch };
+      if ("kind" in patch) data.autoClassify = undefined; // An explicit shape wins.
+      else if ("classId" in patch) {
+        data.autoClassify = mode.ontology && data.kind === "other" && data.classId ? data.classId : undefined;
+      }
+      return { ...b, data };
+    }));
+  }, [mode.ontology, setBoxes]);
 
   const patchArrow = useCallback((id: string, patch: Partial<ArrowData>) => {
     setArrows((as) => as.map((a) => (a.id === id ? { ...a, data: { ...a.data!, ...patch } } : a)));

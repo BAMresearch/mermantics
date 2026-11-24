@@ -27,8 +27,9 @@ export function TermSearch({ onPick, placeholder, kinds = CLASS_KINDS }: {
       return;
     }
     let live = true;
+    const controller = new AbortController();
     const timer = setTimeout(() => {
-      search(query, kinds, 12).then((r) => {
+      search(query, kinds, 12, controller.signal).then((r) => {
         if (!live) return;
         setHits(r.terms.filter((t) => t.id));
         setTotal(r.total);
@@ -41,6 +42,7 @@ export function TermSearch({ onPick, placeholder, kinds = CLASS_KINDS }: {
     }, 150);
     return () => {
       live = false;
+      controller.abort();
       clearTimeout(timer);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
