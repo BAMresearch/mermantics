@@ -28,15 +28,17 @@ test.each([
   ["0", "\u0000"],
   ["35", "#"],
   ["00065", "A"],
+  ["0".repeat(5000) + "65", "A"],
+  ["0".repeat(5000), "\u0000"],
   ["55295", "\ud7ff"],
   ["57344", "\ue000"],
   ["128512", "\u{1f600}"],
   ["1114111", "\u{10ffff}"],
-])("numeric entity #%s; decodes to a valid code point", (code, expected) => {
+])("numeric entity decodes to a valid code point (%#)", (code, expected) => {
   expect(labels.segments(`#${code};`)).toEqual([expected]);
 });
 
-test.each(["1114112", "55296", "57343", "9".repeat(5000), "²"])(
+test.each(["1114112", "55296", "57343", "9".repeat(5000), "²", "٦٥", "６５"])(
   "invalid numeric entities remain literal (%#)", (code) => {
     const entity = `#${code};`;
     const raw = `<b>Example ${entity}</b><br>TST_0000001 process #35;`;
@@ -65,4 +67,23 @@ test("labelMatches: exact, case and continuation", () => {
   expect(labels.labelMatches(["is about"], ["is about, optional"])).toBe(true);
   expect(labels.labelMatches(["material"], ["material entity"])).toBe(false);
   expect(labels.labelMatches(["ab initio molecular dynamics simulation"], ["ab initio MD or"])).toBe(false);
+});
+
+
+test.each([
+  ["9".repeat(5000), "\ufffd"],
+  ["0".repeat(5000) + "65", "A"],
+  ["0".repeat(5000), "\ufffd"],
+  ["0".repeat(5000) + "128", "€"],
+  ["x" + "f".repeat(5000), "\ufffd"],
+])("HTML numeric entities handle long numbers (%#)", (code, expected) => {
+  for (const suffix of [";", ""]) {
+    const raw = `before &#${code}${suffix} after &amp; &lt;br&gt;`;
+    expect(labels.segments(raw)).toEqual([`before ${expected} after & <br>`]);
+  }
+});
+
+test("HTML entity normalisation does not decode twice", () => {
+  const raw = "&amp;#" + "9".repeat(5000) + ";";
+  expect(labels.segments(raw)).toEqual([raw.replace("&amp;", "&")]);
 });

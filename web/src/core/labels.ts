@@ -13,7 +13,7 @@ const CURIE_RE_G = new RegExp(CURIE_SOURCE, "gu");
 const BR_RE = new RegExp(`<br${S}*/?>`, "giu");
 const TAG_RE = /<[^>]+>/gu;
 // Mermaid's own entity codes, e.g. #quot; or #35;
-const MERMAID_ENTITY_RE = new RegExp(`#([${W_MEMBERS}]+);`, "gu");
+const MERMAID_ENTITY_RE = new RegExp(`(?<!&)#([${W_MEMBERS}]+);`, "gu");
 const MERMAID_NAMED: Record<string, string> = { quot: '"', amp: "&", lt: "<", gt: ">", nbsp: " " };
 
 // A written label may continue after the ontology label with one of these, e.g.
@@ -22,9 +22,10 @@ const LABEL_CONTINUATION = ",;(:";
 
 function mermaidEntity(match: string, code: string): string {
   if (/^[0-9]+$/.test(code)) {
-    const point = parseInt(code, 10);
+    const digits = code.replace(/^0+/, "") || "0";
+    if (digits.length > 7) return match;
+    const point = parseInt(digits, 10);
     // Preserve invalid entities, like unknown names; never emit lone surrogates.
-    // The upper bound also rejects Infinity from oversized integers.
     if (point > 0x10ffff || (point >= 0xd800 && point <= 0xdfff)) return match;
     return String.fromCodePoint(point);
   }

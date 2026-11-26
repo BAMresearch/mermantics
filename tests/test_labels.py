@@ -29,6 +29,8 @@ def test_segments_strip_tags_and_entities():
     ("0", "\x00"),
     ("35", "#"),
     ("00065", "A"),
+    ("0" * 5000 + "65", "A"),
+    ("0" * 5000, "\x00"),
     ("55295", "\ud7ff"),
     ("57344", "\ue000"),
     ("128512", "\U0001f600"),
@@ -38,7 +40,7 @@ def test_numeric_entities_decode_valid_code_points(code, expected):
     assert labels.segments(f"#{code};") == [expected]
 
 
-@pytest.mark.parametrize("code", ["1114112", "55296", "57343", "9" * 5000, "²"])
+@pytest.mark.parametrize("code", ["1114112", "55296", "57343", "9" * 5000, "²", "٦٥", "６５"])
 def test_invalid_numeric_entities_remain_literal(code):
     entity = f"#{code};"
     raw = f"<b>Example {entity}</b><br>TST_0000001 process #35;"
@@ -66,3 +68,21 @@ def test_label_matches_exact_case_and_continuation():
     assert labels.label_matches(["is about"], ["is about, optional"])
     assert not labels.label_matches(["material"], ["material entity"])
     assert not labels.label_matches(["ab initio molecular dynamics simulation"], ["ab initio MD or"])
+
+
+@pytest.mark.parametrize("suffix", [";", ""])
+@pytest.mark.parametrize("code, expected", [
+    ("9" * 5000, "\ufffd"),
+    ("0" * 5000 + "65", "A"),
+    ("0" * 5000, "\ufffd"),
+    ("0" * 5000 + "128", "€"),
+    ("x" + "f" * 5000, "\ufffd"),
+])
+def test_html_numeric_entities_handle_long_numbers(code, expected, suffix):
+    raw = f"before &#{code}{suffix} after &amp; &lt;br&gt;"
+    assert labels.segments(raw) == [f"before {expected} after & <br>"]
+
+
+def test_html_entity_normalisation_does_not_decode_twice():
+    raw = "&amp;#" + "9" * 5000 + ";"
+    assert labels.segments(raw) == [raw.replace("&amp;", "&")]
