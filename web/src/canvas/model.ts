@@ -249,7 +249,12 @@ export function toMermaid(boxes: Box[], arrows: Arrow[], useCase: UseCase = empt
     .filter(([c]) => used.has(c)).map(([, d]) => d)];
   out.push("", ...defs.map((c) => `    ${c}`), "");
   const pos: Record<string, [number, number]> = Object.create(null);
-  for (const b of boxes) pos[b.id] = [Math.round(b.position.x), Math.round(b.position.y)];
+  for (const b of boxes) {
+    const position = [Math.round(b.position.x), Math.round(b.position.y)];
+    // Editing and pattern placement can exceed the import bounds. Omit those
+    // positions so the exported document stays recoverable and requests layout.
+    if (isPosition(position)) pos[b.id] = position;
+  }
   out.push(LAYOUT_PREFIX + JSON.stringify(pos));
   // Notes and lists of options are known from their style class; the other kinds are kept here.
   const kinds: Record<string, ShapeKind> = Object.create(null);
