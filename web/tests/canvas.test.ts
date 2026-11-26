@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { beforeAll, describe, expect, test } from "vitest";
 
 import { fromMermaid, toMermaid } from "../src/canvas/model.js";
+import { MAX_POSITION_COORDINATE } from "../src/canvas/validation.js";
 import { coverage, toMarkdown } from "../src/canvas/usecase.js";
 import { checks, defaultConfig, labels, mermaid, relations, type Ontology } from "../src/core/index.js";
 import { DEFAULT_PREFIXES } from "../src/core/model.js";
@@ -41,6 +42,71 @@ test("box positions survive a round trip", () => {
   const back = fromMermaid(toMermaid(imported.boxes, imported.arrows));
   expect(back.positioned).toBe(true);
   expect(back.boxes.map((b) => b.position)).toEqual(imported.boxes.map((b) => b.position));
+});
+
+describe("imported layout metadata", () => {
+  const diagram = 'flowchart TB\nA["A"]\nB["B"]\nA --> B\n';
+
+  test.each([
+    "null", "[]", "42", '"text"', "true", "{broken",
+    ...["null", '"bad"', "{}", "[]", "[1]", "[1,2,3]", '["1",2]',
+      "[1,null]", "[true,2]", "[1e400,0]", "[0,-1e400]", "[1e308,0]", "[0,-1e308]",
+      `[${MAX_POSITION_COORDINATE + 1},0]`, `[0,${-MAX_POSITION_COORDINATE - 1}]`].map((p) => `{"A":${p}}`),
+  ])("discards malformed positions (%s)", (metadata) => {
+    const imported = fromMermaid(`${diagram}%% mermantics-layout ${metadata}`);
+    expect(imported.positioned).toBe(false);
+    expect(imported.boxes.map((box) => box.position)).toEqual([{ x: 0, y: 0 }, { x: 0, y: 0 }]);
+    expect(imported.arrows).toHaveLength(1);
+    expect(imported.warnings).toHaveLength(1);
+  });
+
+  test.each(['{"A":[-12.5,0],"B":["bad",{}]}', '{"A":[-12.5,0]}'])(
+    "keeps valid positions and requests layout for invalid or missing ones (%s)", (metadata) => {
+      const imported = fromMermaid(`${diagram}%% mermantics-layout ${metadata}`);
+      expect(imported.positioned).toBe(false);
+      expect(imported.boxes.map((box) => box.position)).toEqual([{ x: -12.5, y: 0 }, { x: 0, y: 0 }]);
+    },
+  );
+
+  test("accepts complete finite coordinate pairs", () => {
+    const imported = fromMermaid(`${diagram}%% mermantics-layout {"A":[-12.5,0],"B":[0,25.75]}`);
+    expect(imported.positioned).toBe(true);
+    expect(imported.warnings).toEqual([]);
+    expect(imported.boxes.map((box) => box.position)).toEqual([{ x: -12.5, y: 0 }, { x: 0, y: 25.75 }]);
+  });
+
+  test("does not mistake inherited properties for stored positions", () => {
+    const imported = fromMermaid('flowchart TB\nconstructor["A"]\ntoString["B"]\n%% mermantics-layout {}');
+    expect(imported.positioned).toBe(false);
+    expect(imported.boxes.map((box) => box.position)).toEqual([{ x: 0, y: 0 }, { x: 0, y: 0 }]);
+  });
+
+  test("a malformed later layout cannot reuse stale positions", () => {
+    const imported = fromMermaid(`${diagram}%% mermantics-layout {"A":[1,2],"B":[3,4]}\n%% mermantics-layout {broken`);
+    expect(imported.positioned).toBe(false);
+    expect(imported.boxes.every((box) => box.position.x === 0 && box.position.y === 0)).toBe(true);
+  });
+
+  test.each(["-notes", "Extra"])("ignores similarly named comments (%s)", (suffix) => {
+    const imported = fromMermaid(`${diagram}%% mermantics-layout {"A":[1,2],"B":[3,4]}\n%% mermantics-layout${suffix} not metadata`);
+    expect(imported.positioned).toBe(true);
+    expect(imported.warnings).toEqual([]);
+    expect(imported.boxes.map((box) => box.position)).toEqual([{ x: 1, y: 2 }, { x: 3, y: 4 }]);
+  });
+
+  test("accepts tab-separated metadata and the coordinate limits", () => {
+    const imported = fromMermaid(`flowchart TB\nA["A"]\n%% mermantics-layout\t{"A":[${-MAX_POSITION_COORDINATE},${MAX_POSITION_COORDINATE}]}`);
+    expect(imported.positioned).toBe(true);
+    expect(imported.warnings).toEqual([]);
+  });
+
+  test.each(["__proto__", "constructor", "toString"])("round trips metadata for special ID %s", (id) => {
+    const imported = fromMermaid(`flowchart TB\n${id}["A"]\n%% mermantics-layout {"${id}":[12,34]}\n%% mermantics-kinds {"${id}":"other"}\n%% mermantics-kind-names {"${id}":"Custom kind"}`);
+    const back = fromMermaid(toMermaid(imported.boxes, imported.arrows));
+    expect(back.positioned).toBe(true);
+    expect(back.warnings).toEqual([]);
+    expect(back.boxes[0]).toMatchObject({ id, position: { x: 12, y: 34 }, data: { kind: "other", kindName: "Custom kind" } });
+  });
 });
 
 test("box kinds survive a round trip, so process models keep their shapes", () => {

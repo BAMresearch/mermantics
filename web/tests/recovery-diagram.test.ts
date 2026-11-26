@@ -5,6 +5,60 @@ import { BUILT_IN, instantiate, patternFromSelection } from "../src/canvas/patte
 import { freshState, VIEWS, VERDICTS } from "../src/canvas/options.js";
 import { MODES } from "../src/canvas/mode.js";
 import { readRecovery, recoveryFile } from "../src/canvas/recovery.js";
+import { MAX_POSITION_COORDINATE } from "../src/canvas/validation.js";
+
+test("recovery applies the same coordinate bounds as ordinary import", () => {
+  const text = (x: number) => `flowchart TB\nA["A"]\n%% mermantics-layout {"A":[${x},0]}`;
+  for (const x of [MAX_POSITION_COORDINATE, -MAX_POSITION_COORDINATE]) {
+    expect(() => validateRecoveryDiagram(text(x))).not.toThrow();
+  }
+  for (const x of [MAX_POSITION_COORDINATE + 1, -MAX_POSITION_COORDINATE - 1, 1e308, -1e308]) {
+    expect(() => validateRecoveryDiagram(text(x))).toThrow("Invalid mermantics-layout metadata");
+  }
+});
+
+test("pattern placement at the coordinate limits exports a recoverable diagram", () => {
+  const limit = MAX_POSITION_COORDINATE;
+  const pattern = { ...BUILT_IN[0]!, text: `flowchart TB\nA["A"]\nB["B"]\nA --> B\n%% mermantics-layout {"A":[${-limit},0],"B":[${limit},0]}` };
+  const inserted = instantiate(pattern, { x: 0, y: 0 });
+  expect(inserted.positioned).toBe(true);
+  expect(inserted.boxes.map((box) => box.position.x)).toEqual([0, 2 * limit]);
+
+  const text = toMermaid(inserted.boxes, inserted.arrows);
+  expect(() => validateRecoveryDiagram(text)).not.toThrow();
+  const imported = fromMermaid(text);
+  expect(imported.positioned).toBe(false);
+  expect(imported.warnings).toEqual([]);
+  expect(imported.boxes).toMatchObject([
+    { id: "A", data: { name: "A", kind: "other", classId: "", lines: [] } },
+    { id: "B", data: { name: "B", kind: "other", classId: "", lines: [] } },
+  ]);
+  expect(imported.arrows).toEqual(fromMermaid(pattern.text).arrows);
+  expect(text).toContain('%% mermantics-layout {"A":[0,0]}');
+  // Serialization does not move the boxes in the current editor.
+  expect(inserted.boxes.map((box) => box.position.x)).toEqual([0, 2 * limit]);
+});
+
+test.each([MAX_POSITION_COORDINATE + 1, -MAX_POSITION_COORDINATE - 1, Infinity, -Infinity, NaN])(
+  "export omits unusable generated coordinates (%s)", (coordinate) => {
+    const { boxes, arrows } = fromMermaid('flowchart TB\nA["A"]\nB["B"]\nA --> B');
+    boxes[0]!.position = { x: 12, y: 34 };
+    boxes[1]!.position = { x: coordinate, y: coordinate };
+    const text = toMermaid(boxes, arrows);
+    expect(() => validateRecoveryDiagram(text)).not.toThrow();
+    expect(text).toContain('%% mermantics-layout {"A":[12,34]}');
+    expect(fromMermaid(text).positioned).toBe(false);
+  },
+);
+
+test("export retains rounded positions at the coordinate limits", () => {
+  const { boxes, arrows } = fromMermaid('flowchart TB\nA["A"]');
+  boxes[0]!.position = { x: MAX_POSITION_COORDINATE - 0.1, y: -MAX_POSITION_COORDINATE + 0.1 };
+  const text = toMermaid(boxes, arrows);
+  expect(() => validateRecoveryDiagram(text)).not.toThrow();
+  expect(fromMermaid(text).positioned).toBe(true);
+  expect(fromMermaid(text).boxes[0]!.position).toEqual({ x: MAX_POSITION_COORDINATE, y: -MAX_POSITION_COORDINATE });
+});
 
 const files = import.meta.glob<string>(["../examples/*.mmd", "../patterns/*.mmd", "../options/**/*.mmd"],
   { eager: true, query: "?raw", import: "default" });

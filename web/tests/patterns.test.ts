@@ -12,6 +12,14 @@ import { PMDCO_ENABLED, PMDCO_FILE, loadOntology } from "./helpers.js";
 /** Classes of a box as the canvas sees them, without an ontology: just the box's own class. */
 const ownClass = (boxes: Box[]) => (id: string) => new Set([boxes.find((b) => b.id === id)?.data.classId ?? ""]);
 
+test("extreme finite imported positions cannot overflow pattern placement", () => {
+  const pattern = { ...BUILT_IN[0]!, text: 'flowchart TB\nA["A"]\nB["B"]\n%% mermantics-layout {"A":[-1e308,0],"B":[1e308,0]}' };
+  const inserted = instantiate(pattern, { x: 100, y: 200 });
+  expect(inserted.positioned).toBe(false);
+  expect(inserted.boxes).toHaveLength(2);
+  expect(inserted.boxes.every((box) => Number.isFinite(box.position.x) && Number.isFinite(box.position.y))).toBe(true);
+});
+
 test("the built-in patterns read cleanly and say what they are for", () => {
   expect(BUILT_IN.map((p) => p.id)).toEqual(["pmdco-process-inputs-outputs", "pmdco-process-chain", "pmdco-measurement",
                                               "pmdco-role-in-process", "pmdco-property-with-value",
