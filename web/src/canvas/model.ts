@@ -248,18 +248,18 @@ export function toMermaid(boxes: Box[], arrows: Arrow[], useCase: UseCase = empt
   const defs = [...CLASS_DEFS, ...Object.entries({ ...DATASTORE_CLASS_DEFS, ...TERM_CLASS_DEFS })
     .filter(([c]) => used.has(c)).map(([, d]) => d)];
   out.push("", ...defs.map((c) => `    ${c}`), "");
-  const pos: Record<string, [number, number]> = {};
+  const pos: Record<string, [number, number]> = Object.create(null);
   for (const b of boxes) pos[b.id] = [Math.round(b.position.x), Math.round(b.position.y)];
   out.push(LAYOUT_PREFIX + JSON.stringify(pos));
   // Notes and lists of options are known from their style class; the other kinds are kept here.
-  const kinds: Record<string, ShapeKind> = {};
+  const kinds: Record<string, ShapeKind> = Object.create(null);
   for (const b of boxes) {
     const awaiting = b.data.kind === "other" && b.data.classId && b.data.autoClassify === b.data.classId;
     if (b.data.kind !== "note" && b.data.kind !== "vocab" && !awaiting) kinds[b.id] = b.data.kind;
   }
   if (Object.keys(kinds).length) out.push(KINDS_PREFIX + JSON.stringify(kinds));
   // The user's own kinds of thing for "something else" boxes (process modelling).
-  const kindNames: Record<string, string> = {};
+  const kindNames: Record<string, string> = Object.create(null);
   for (const b of boxes) if (b.data.kind === "other" && b.data.kindName?.trim()) kindNames[b.id] = b.data.kindName.trim();
   if (Object.keys(kindNames).length) out.push(KIND_NAMES_PREFIX + JSON.stringify(kindNames));
   if (!isEmptyUseCase(useCase)) {
@@ -377,7 +377,7 @@ export function fromMermaid(text: string): Imported {
         warnings.push("the names of your own kinds of thing could not be read");
       }
     }
-    if (t.startsWith(LAYOUT_PREFIX.trim())) {
+    if (/^%% mermantics-layout(?:\s|$)/.test(t)) {
       pos.clear();
       try {
         const raw: unknown = JSON.parse(t.slice(LAYOUT_PREFIX.trim().length));
@@ -387,7 +387,7 @@ export function fromMermaid(text: string): Imported {
           if (isPosition(position)) pos.set(id, position);
           else invalid = true;
         }
-        if (invalid) warnings.push("some stored box positions were invalid and were discarded; boxes without positions will be laid out again");
+        if (invalid) warnings.push("some stored box positions were invalid and were discarded; diagrams with missing positions are automatically laid out again");
       } catch {
         warnings.push("the stored box positions could not be read; the boxes were laid out again");
       }

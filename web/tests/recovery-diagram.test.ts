@@ -5,6 +5,17 @@ import { BUILT_IN, instantiate, patternFromSelection } from "../src/canvas/patte
 import { freshState, VIEWS, VERDICTS } from "../src/canvas/options.js";
 import { MODES } from "../src/canvas/mode.js";
 import { readRecovery, recoveryFile } from "../src/canvas/recovery.js";
+import { MAX_POSITION_COORDINATE } from "../src/canvas/validation.js";
+
+test("recovery applies the same coordinate bounds as ordinary import", () => {
+  const text = (x: number) => `flowchart TB\nA["A"]\n%% mermantics-layout {"A":[${x},0]}`;
+  for (const x of [MAX_POSITION_COORDINATE, -MAX_POSITION_COORDINATE]) {
+    expect(() => validateRecoveryDiagram(text(x))).not.toThrow();
+  }
+  for (const x of [MAX_POSITION_COORDINATE + 1, -MAX_POSITION_COORDINATE - 1, 1e308, -1e308]) {
+    expect(() => validateRecoveryDiagram(text(x))).toThrow("Invalid mermantics-layout metadata");
+  }
+});
 
 const files = import.meta.glob<string>(["../examples/*.mmd", "../patterns/*.mmd", "../options/**/*.mmd"],
   { eager: true, query: "?raw", import: "default" });
