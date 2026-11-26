@@ -26,7 +26,15 @@ _LABEL_CONTINUATION = ",;(:"
 def _mermaid_entity(match: re.Match) -> str:
     code = match.group(1)
     if code.isdigit():
-        return chr(int(code))
+        try:
+            point = int(code)
+        except ValueError:
+            # Includes oversized integers and digits int() cannot parse (e.g. ²).
+            return match.group(0)
+        # Preserve invalid entities, like unknown names; never emit lone surrogates.
+        if point > 0x10FFFF or 0xD800 <= point <= 0xDFFF:
+            return match.group(0)
+        return chr(point)
     return _MERMAID_NAMED.get(code, match.group(0))
 
 

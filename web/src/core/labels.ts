@@ -21,7 +21,13 @@ const MERMAID_NAMED: Record<string, string> = { quot: '"', amp: "&", lt: "<", gt
 const LABEL_CONTINUATION = ",;(:";
 
 function mermaidEntity(match: string, code: string): string {
-  if (/^[0-9]+$/.test(code)) return String.fromCodePoint(parseInt(code, 10));
+  if (/^[0-9]+$/.test(code)) {
+    const point = parseInt(code, 10);
+    // Preserve invalid entities, like unknown names; never emit lone surrogates.
+    // The upper bound also rejects Infinity from oversized integers.
+    if (point > 0x10ffff || (point >= 0xd800 && point <= 0xdfff)) return match;
+    return String.fromCodePoint(point);
+  }
   return Object.hasOwn(MERMAID_NAMED, code) ? MERMAID_NAMED[code]! : match;
 }
 
