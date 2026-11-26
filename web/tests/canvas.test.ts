@@ -43,6 +43,49 @@ test("box positions survive a round trip", () => {
   expect(back.boxes.map((b) => b.position)).toEqual(imported.boxes.map((b) => b.position));
 });
 
+describe("imported layout metadata", () => {
+  const diagram = 'flowchart TB\nA["A"]\nB["B"]\nA --> B\n';
+
+  test.each([
+    "null", "[]", "42", '"text"', "true", "{broken",
+    ...["null", '"bad"', "{}", "[]", "[1]", "[1,2,3]", '["1",2]',
+      "[1,null]", "[true,2]", "[1e400,0]", "[0,-1e400]"].map((p) => `{"A":${p}}`),
+  ])("discards malformed positions (%s)", (metadata) => {
+    const imported = fromMermaid(`${diagram}%% mermantics-layout ${metadata}`);
+    expect(imported.positioned).toBe(false);
+    expect(imported.boxes.map((box) => box.position)).toEqual([{ x: 0, y: 0 }, { x: 0, y: 0 }]);
+    expect(imported.arrows).toHaveLength(1);
+    expect(imported.warnings).toHaveLength(1);
+  });
+
+  test.each(['{"A":[-12.5,0],"B":["bad",{}]}', '{"A":[-12.5,0]}'])(
+    "keeps valid positions and requests layout for invalid or missing ones (%s)", (metadata) => {
+      const imported = fromMermaid(`${diagram}%% mermantics-layout ${metadata}`);
+      expect(imported.positioned).toBe(false);
+      expect(imported.boxes.map((box) => box.position)).toEqual([{ x: -12.5, y: 0 }, { x: 0, y: 0 }]);
+    },
+  );
+
+  test("accepts complete finite coordinate pairs", () => {
+    const imported = fromMermaid(`${diagram}%% mermantics-layout {"A":[-12.5,0],"B":[0,25.75]}`);
+    expect(imported.positioned).toBe(true);
+    expect(imported.warnings).toEqual([]);
+    expect(imported.boxes.map((box) => box.position)).toEqual([{ x: -12.5, y: 0 }, { x: 0, y: 25.75 }]);
+  });
+
+  test("does not mistake inherited properties for stored positions", () => {
+    const imported = fromMermaid('flowchart TB\nconstructor["A"]\ntoString["B"]\n%% mermantics-layout {}');
+    expect(imported.positioned).toBe(false);
+    expect(imported.boxes.map((box) => box.position)).toEqual([{ x: 0, y: 0 }, { x: 0, y: 0 }]);
+  });
+
+  test("a malformed later layout cannot reuse stale positions", () => {
+    const imported = fromMermaid(`${diagram}%% mermantics-layout {"A":[1,2],"B":[3,4]}\n%% mermantics-layout {broken`);
+    expect(imported.positioned).toBe(false);
+    expect(imported.boxes.every((box) => box.position.x === 0 && box.position.y === 0)).toBe(true);
+  });
+});
+
 test("box kinds survive a round trip, so process models keep their shapes", () => {
   const imported = fromMermaid(example("coffee-example.mmd"));
   expect(imported.warnings).toEqual([]);

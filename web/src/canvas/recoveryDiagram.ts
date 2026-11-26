@@ -2,7 +2,7 @@ import { stripFrontmatter } from "../core/mermaid.js";
 import { fromMermaid, isUseCase } from "./model.js";
 import { isShapeKind } from "./palette.js";
 import { isPatternMeta, isPatternUses } from "./patternValidation.js";
-import { isRecord } from "./validation.js";
+import { isPosition, isRecord } from "./validation.js";
 
 /**
  * Recovery replaces work, so tolerant import is insufficient. Check syntax and persisted
@@ -44,8 +44,7 @@ export function validateRecoveryDiagram(text: string): void {
     let valid = false;
     switch (key) {
       case "mermantics-layout":
-        valid = isRecord(value) && Object.values(value).every((p) => Array.isArray(p) && p.length === 2
-          && p.every((n) => typeof n === "number" && Number.isFinite(n)));
+        valid = isRecord(value) && Object.values(value).every(isPosition);
         break;
       case "mermantics-kinds":
         valid = isRecord(value) && Object.values(value).every((kind) => isShapeKind(kind));

@@ -1,6 +1,9 @@
 /** Small shape checks shared by the persisted data models. */
 export const isRecord = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === "object" && !Array.isArray(value);
+export const isPosition = (value: unknown): value is [number, number] =>
+  Array.isArray(value) && value.length === 2
+  && value.every((coordinate) => typeof coordinate === "number" && Number.isFinite(coordinate));
 export const hasStrings = (value: Record<string, unknown>, keys: readonly string[]): boolean =>
   keys.every((key) => typeof value[key] === "string");
 export const isStringArray = (value: unknown): value is string[] =>

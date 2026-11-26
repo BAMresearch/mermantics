@@ -9,7 +9,7 @@
  * their class (App.classify).
  */
 
-import { hasStrings, isRecord, isRecordList, isStringArray } from "./validation.js";
+import { hasStrings, isPosition, isRecord, isRecordList, isStringArray } from "./validation.js";
 
 import type { Edge as FlowEdge, Node as FlowNode } from "@xyflow/react";
 
@@ -340,7 +340,7 @@ function readArrow(raw: string): { name: string; curie: string; words: string; o
 export function fromMermaid(text: string): Imported {
   const diagram = mermaid.parse(text);
   const warnings = diagram.findings.map((f) => `${f.where ? `${f.where}: ` : ""}${f.message}`);
-  let pos: Record<string, [number, number]> = {};
+  const pos = new Map<string, [number, number]>();
   let kinds: Record<string, unknown> = {};
   let kindNames: Record<string, unknown> = {};
   let useCase = emptyUseCase();
@@ -378,8 +378,16 @@ export function fromMermaid(text: string): Imported {
       }
     }
     if (t.startsWith(LAYOUT_PREFIX.trim())) {
+      pos.clear();
       try {
-        pos = JSON.parse(t.slice(LAYOUT_PREFIX.trim().length));
+        const raw: unknown = JSON.parse(t.slice(LAYOUT_PREFIX.trim().length));
+        if (!isRecord(raw)) throw new Error("Invalid layout metadata");
+        let invalid = false;
+        for (const [id, position] of Object.entries(raw)) {
+          if (isPosition(position)) pos.set(id, position);
+          else invalid = true;
+        }
+        if (invalid) warnings.push("some stored box positions were invalid and were discarded; boxes without positions will be laid out again");
       } catch {
         warnings.push("the stored box positions could not be read; the boxes were laid out again");
       }
@@ -387,7 +395,7 @@ export function fromMermaid(text: string): Imported {
   }
   const boxes: Box[] = [];
   for (const node of diagram.nodes.values()) {
-    const p = pos[node.id];
+    const p = pos.get(node.id);
     const data = readBox(node.label, node.css, kinds[node.id]);
     const extra: Partial<BoxData> = {};
     if (data.kind === "other" && data.classId && !isShapeKind(kinds[node.id])) extra.autoClassify = data.classId;
@@ -425,5 +433,5 @@ export function fromMermaid(text: string): Imported {
   });
   const unclassified = boxes.filter((b) => b.data.kind === "other" && b.data.classId && !isShapeKind(kinds[b.id]))
     .map((b) => b.id);
-  return { boxes, arrows, unclassified, positioned: boxes.every((b) => pos[b.id] !== undefined), useCase, patternUses, warnings };
+  return { boxes, arrows, unclassified, positioned: boxes.every((b) => pos.has(b.id)), useCase, patternUses, warnings };
 }

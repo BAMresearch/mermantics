@@ -337,6 +337,25 @@ test("late layout failure cannot put a notice on a new document", async () => {
   expect(container.textContent).not.toContain("old failure");
 });
 
+test.each(["null", '{"A":["bad",{}]}', '{"A":[-10,20]}'])(
+  "import automatically lays out invalid or missing positions (%s)", async (metadata) => {
+    await mount();
+    mocks.layout.mockClear();
+    mocks.layout.mockImplementationOnce(async (boxes: Box[]) => boxes.map((box, i) => ({
+      ...box, position: { x: 100, y: 200 * (i + 1) },
+    })));
+    await act(async () => {
+      const input = container.querySelector<HTMLInputElement>('input[accept=".mmd,.md,.txt"]')!;
+      Object.defineProperty(input, "files", { value: [{ name: "positions.mmd", text: async () =>
+        `flowchart TB\nA["A"]\nB["B"]\nA --> B\n%% mermantics-layout ${metadata}` }] });
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(mocks.layout).toHaveBeenCalledTimes(1);
+    expect(nodes().map((box) => box.position)).toEqual([{ x: 100, y: 200 }, { x: 100, y: 400 }]);
+    expect(mocks.flowProps.edges).toHaveLength(1);
+  },
+);
+
 test("a file read started before New cannot replace it", async () => {
   await mount();
   const pending = deferred<string>();
