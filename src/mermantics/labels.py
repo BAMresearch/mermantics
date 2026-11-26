@@ -15,8 +15,9 @@ CURIE_RE = re.compile(r"\b([A-Z][A-Za-z]*)_(\d{5,9})\b")
 _BR_RE = re.compile(r"<br\s*/?>", re.IGNORECASE)
 _TAG_RE = re.compile(r"<[^>]+>")
 # Mermaid's own entity codes, e.g. #quot; or #35;
-_MERMAID_ENTITY_RE = re.compile(r"#(\w+);")
+_MERMAID_ENTITY_RE = re.compile(r"(?<!&)#(\w+);")
 _MERMAID_NAMED = {"quot": '"', "amp": "&", "lt": "<", "gt": ">", "nbsp": " "}
+_HTML_DECIMAL_ENTITY_RE = re.compile(r"&#([0-9]+);?")
 
 # A written label may continue after the ontology label with one of these, e.g.
 # "is about, optional" still counts as "is about".
@@ -25,9 +26,25 @@ _LABEL_CONTINUATION = ",;(:"
 
 def _mermaid_entity(match: re.Match) -> str:
     code = match.group(1)
-    if code.isdigit():
-        return chr(int(code))
+    if code.isascii() and code.isdigit():
+        digits = code.lstrip("0") or "0"
+        if len(digits) > 7:
+            return match.group(0)
+        point = int(digits)
+        # Preserve invalid entities, like unknown names; never emit lone surrogates.
+        if point > 0x10FFFF or 0xD800 <= point <= 0xDFFF:
+            return match.group(0)
+        return chr(point)
     return _MERMAID_NAMED.get(code, match.group(0))
+
+
+def _normalise_html_decimal_entity(match: re.Match) -> str:
+    # Bound int() input without changing HTML's replacement/control-code rules.
+    # Keep this encoded so html.unescape() still performs exactly one decode.
+    digits = match.group(1).lstrip("0") or "0"
+    if len(digits) > 7:
+        digits = "1114112"  # Out of range: html.unescape replaces it with U+FFFD.
+    return f"&#{digits};"
 
 
 def segments(raw: str) -> list[str]:
@@ -35,7 +52,7 @@ def segments(raw: str) -> list[str]:
     text = _MERMAID_ENTITY_RE.sub(_mermaid_entity, raw)
     text = _BR_RE.sub("\n", text)
     text = _TAG_RE.sub("", text)
-    text = html.unescape(text)
+    text = html.unescape(_HTML_DECIMAL_ENTITY_RE.sub(_normalise_html_decimal_entity, text))
     return [part.strip() for part in text.split("\n")]
 
 
